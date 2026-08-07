@@ -21,7 +21,11 @@ import {
 import type { RawPositionSample } from "../../mapping-core/src/index.ts";
 
 class NodeSqliteDatabase implements AsyncSqliteDatabase {
-  constructor(private readonly database: DatabaseSync) {}
+  private readonly database: DatabaseSync;
+
+  constructor(database: DatabaseSync) {
+    this.database = database;
+  }
 
   async execAsync(source: string): Promise<void> {
     this.database.exec(source);
@@ -42,15 +46,21 @@ class NodeSqliteDatabase implements AsyncSqliteDatabase {
     source: string,
     ...params: readonly SqliteBindValue[]
   ): Promise<T | null> {
-    const row = this.database.prepare(source).get(...params) as T | undefined;
-    return row ?? null;
+    const row = this.database.prepare(source).get(...params) as
+      | Record<string, unknown>
+      | undefined;
+    return row === undefined ? null : ({ ...row } as T);
   }
 
   async getAllAsync<T>(
     source: string,
     ...params: readonly SqliteBindValue[]
   ): Promise<readonly T[]> {
-    return this.database.prepare(source).all(...params) as T[];
+    const rows = this.database.prepare(source).all(...params) as Record<
+      string,
+      unknown
+    >[];
+    return rows.map((row) => ({ ...row }) as T);
   }
 
   async withExclusiveTransactionAsync(
