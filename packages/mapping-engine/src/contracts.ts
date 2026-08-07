@@ -8,7 +8,7 @@ import type {
   ReplayExplorationInput,
 } from "@exploration-map/mapping-core";
 
-export const MAPPING_ENGINE_API_VERSION = "2" as const;
+export const MAPPING_ENGINE_API_VERSION = "3" as const;
 
 export interface CreatePersonalMapCommand {
   readonly name: string;
@@ -135,17 +135,13 @@ export interface LoadedExploration {
 }
 
 /**
- * Persistence port for canonical records.
+ * Transaction-scoped canonical writer.
  *
- * Implementations persist raw observations and confirmed markers, and rebuild
- * replay input. A cached derived snapshot must never become authoritative.
- * Methods that return a boolean or list report what was actually persisted so
- * duplicate callbacks can remain idempotent and do not publish duplicate map
- * events.
+ * The callback supplied to `runInTransaction` receives this writer so a real
+ * SQLite implementation can execute every statement on the transaction object
+ * rather than relying on ambient mutable transaction state.
  */
-export interface MappingRepositoryPort {
-  runInTransaction<T>(operation: () => Promise<T>): Promise<T>;
-
+export interface MappingRepositoryWriter {
   createPersonalMap(record: StoredPersonalMap): Promise<void>;
 
   createExploration(record: StoredExploration): Promise<void>;
@@ -160,6 +156,21 @@ export interface MappingRepositoryPort {
   appendMarker(explorationId: string, marker: MapMarker): Promise<boolean>;
 
   completeExploration(explorationId: string, endedAtMs: number): Promise<void>;
+}
+
+/**
+ * Persistence port for canonical records.
+ *
+ * Implementations persist raw observations and confirmed markers, and rebuild
+ * replay input. A cached derived snapshot must never become authoritative.
+ * Methods that return a boolean or list report what was actually persisted so
+ * duplicate callbacks can remain idempotent and do not publish duplicate map
+ * events.
+ */
+export interface MappingRepositoryPort {
+  runInTransaction<T>(
+    operation: (writer: MappingRepositoryWriter) => Promise<T>,
+  ): Promise<T>;
 
   loadExploration(
     personalMapId: string,
