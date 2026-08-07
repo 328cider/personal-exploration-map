@@ -7,6 +7,8 @@ import type {
   RawPositionSample,
 } from "@exploration-map/mapping-core";
 
+export const MAPPING_ENGINE_API_VERSION = "1" as const;
+
 export interface CreatePersonalMapCommand {
   readonly name: string;
   readonly createdAtMs: number;
