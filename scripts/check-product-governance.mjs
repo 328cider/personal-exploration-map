@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
 const root = process.cwd();
@@ -72,6 +72,39 @@ for (const [relativePath, fragments] of requiredFragments) {
   for (const fragment of fragments) {
     if (!content.includes(fragment)) {
       failures.push(`Missing required governance anchor in ${relativePath}: ${fragment}`);
+    }
+  }
+}
+
+const adrDirectory = resolve(root, "docs/adr");
+if (!existsSync(adrDirectory)) {
+  failures.push("Missing ADR directory: docs/adr");
+} else {
+  const numbers = new Map();
+  for (const file of readdirSync(adrDirectory).filter((name) =>
+    /^\d{4}-.+\.md$/u.test(name),
+  )) {
+    const filenameNumber = file.slice(0, 4);
+    const existing = numbers.get(filenameNumber) ?? [];
+    existing.push(file);
+    numbers.set(filenameNumber, existing);
+
+    const content = readFileSync(resolve(adrDirectory, file), "utf8");
+    const headingMatch = content.match(/^# ADR (\d{4}):/u);
+    if (headingMatch === null) {
+      failures.push(`ADR is missing a numbered H1 heading: docs/adr/${file}`);
+    } else if (headingMatch[1] !== filenameNumber) {
+      failures.push(
+        `ADR filename and heading numbers differ: docs/adr/${file} uses ADR ${headingMatch[1]}.`,
+      );
+    }
+  }
+
+  for (const [number, files] of numbers) {
+    if (files.length > 1) {
+      failures.push(
+        `Duplicate ADR number ${number}: ${files.map((file) => `docs/adr/${file}`).join(", ")}`,
+      );
     }
   }
 }

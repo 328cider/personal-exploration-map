@@ -1,8 +1,9 @@
-# ADR 0010: PersonalMapと初回探索を補償可能な1ユースケースとして作成する
+# ADR 0011: PersonalMapと初回探索を補償可能な1ユースケースとして作成する
 
 - Status: Accepted
 - Date: 2026-08-07
 - Related issue: #17
+- Renumbered: 2026-08-07（既存のoperational diagnostics ADR 0010との重複を解消）
 
 ## Context
 
