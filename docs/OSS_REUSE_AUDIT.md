@@ -29,8 +29,8 @@ OS API、DB、描画、標準アルゴリズム、座標変換、交換形式ま
 | Background GNSS | Expo Location / TaskManager | **Adopt** | OS権限、foreground service、callbackをplatformへ任せる。OpenTracks等から試験観点を学ぶ |
 | Local persistence | Expo SQLite + generic SQLite adapter | **Adopt** | DB engineやORMを自作しない。raw replayとtransaction境界だけ製品固有 |
 | PersonalMap domain | mapping-core / mapping-engine | **Build** | map truth、session境界、偽接続禁止、game write禁止は製品固有 |
-| Blank-map rendering | React Native View-per-segment | **Adopt react-native-svg next** | 現実装はreferenceのみ。Polyline/Path/marker、zoom/panへ進む前にSVGへ移す |
-| High-load rendering | 未導入 | **Benchmark React Native Skia only if needed** | SVGが実測閾値を満たさない場合だけ導入する |
+| Blank-map rendering | `react-native-svg@15.15.4` | **Conditional Adopt** | Expo SDK 57互換版をmobile rendererだけに固定。automated geometry/CPU checksは合格、Android実機visual gateは未完了 |
+| High-load rendering | 未導入 | **Benchmark React Native Skia only if needed** | SVGが実端末の実測閾値を満たさない場合だけ導入する |
 | Optional basemap | 未導入 | **Defer / evaluate MapLibre later** | 白紙地図が正本。basemapは任意補助レイヤーでありM0必須ではない |
 | Track simplification | internal Ramer–Douglas–Peucker | **Build temporarily, benchmark simplify-js** | dependency-free coreとmetadata保持を優先。性能・edge caseで必要ならBSD-2-Clause実装へ置換 |
 | Geographic distance | internal haversine | **Build within explicit local envelope** | 小さなPersonalMapには十分。global/high-precision要件が出たらGeographicLibを採用 |
@@ -44,25 +44,48 @@ OS API、DB、描画、標準アルゴリズム、座標変換、交換形式ま
 
 ## Rendering
 
-### react-native-svg — Adopt
+### react-native-svg 15.15.4 — Conditional Adopt
 
 採用理由:
 
-- Expoが公式SDKとして統合方法を提供している
-- blank local coordinate mapを`Path` / `Polyline` / `Circle`で表現できる
+- Expo SDK 57が互換版として案内するexact versionを使用できる
+- blank local coordinate mapを`Path` / `Circle` / `Line`で表現できる
 - sessionごとのpathを分け、未観測区間を接続しない構造が自然
-- current View-per-segmentより、要素数・transform・zoom/panの責務が明確
-- MIT系の許容的ライセンスで、game/rendering layerに閉じ込められる
+- View-per-segmentより、point数ではなくstyle run数に描画nodeを集約できる
+- confidence変化をread-onlyなstroke splitとして表現できる
+- MITライセンスで、mobile rendering layerに閉じ込められる
+- root lockfileでexact resolutionを再現できる
 
-導入条件:
+実装境界:
 
-1. Issue #2でExpo dependencyとlockfileを再現可能にする
-2. current canvasと同一fixtureを描画する
-3. confidence、start/end、marker、multiple segmentsを維持する
-4. rendererがmap truthやaccepted/rejectedを変更しない
-5. 1k / 5k / 10k pointsで操作性を計測する
+- dependencyは`apps/mobile`だけに置く
+- `mapping-core`、`mapping-engine`、`experience-sdk`、`sqlite-adapter`へ依存を漏らさない
+- pure geometry moduleはReact Native / Expo / SVGへ依存しない
+- rendererはMapSnapshot / PersonalMapSnapshotを読み取るだけでcanonical mutationを呼ばない
+- ExplorationSessionごとに独立したsource segmentを維持する
 
-current `TrackCanvas`はM0のreference implementationとしてのみ維持し、機能を増やし続けない。
+自動検証:
+
+- exact version / dependency boundary guard: passed
+- `npm ci`: passed
+- mobile TypeScript: passed
+- session separation / confidence / marker / empty-state tests: 4 passed
+- CPU geometry/path benchmark:
+  - 1,000 points / 1 session / 10 markers: p95 7.847 ms
+  - 5,000 points / 20 sessions / 50 markers: p95 4.545 ms
+  - 10,000 points / 100 sessions / 100 markers: p95 15.953 ms
+
+上記はUbuntu runner上のCPU geometry/path constructionであり、Android native drawing frame rateを保証しない。詳細は [`experiments/003-svg-renderer.md`](experiments/003-svg-renderer.md) を参照する。
+
+残る採用gate:
+
+1. Android development APKでnative linking / launchが成功する
+2. multi-session、start/end、marker、low-confidence strokeを実画面で確認する
+3. 1k / 5k / 10k fixtureで明らかなjankやmemory問題がない
+4. session間に線が描かれない
+5. Android glyph / font renderingが許容できる
+
+current View-per-segment実装は置換し、二重rendererを製品経路に残さない。比較fixtureとpure geometry testsを回帰防止として保持する。
 
 ### React Native Skia — Benchmark only
 
@@ -70,9 +93,10 @@ SVGが次のいずれかで不足した場合だけ比較する。
 
 - 5,000 accepted points、20 segments、100 markersでpan/zoomが目視で不安定
 - target端末でinteraction中に継続的なframe dropが発生
-- uncertainty bandや大量overlayがSVG DOM相当の要素数で重い
+- uncertainty bandや大量overlayがSVG node数で重い
+- low-end target端末でmemoryが許容範囲を超える
 
-「高性能そう」という理由だけでは導入しない。Skia導入はnative build、API surface、テストコストを増やす。
+「高性能そう」という理由だけでは導入しない。Skia導入はnative build、API surface、テストコストを増やす。比較を始める場合も、同じPersonalMap fixture、segment semantics、confidence semanticsで測る。
 
 ### MapLibre — Optional basemap only
 
@@ -197,19 +221,19 @@ PDR判断は [`experiments/002-pocket-pdr.md`](experiments/002-pocket-pdr.md) �
 
 ## License policy
 
-| Candidate | Expected license / status | Product use rule |
+| Candidate | Exact version / status | Product use rule |
 |---|---|---|
-| Expo Location / TaskManager / SQLite | Expo ecosystem permissive OSS | Adopt through official package |
-| react-native-svg | MIT | Adopt after lockfile / Expo compatibility validation |
-| React Native Skia | permissive; verify pinned release | Benchmark only; record exact version/license before install |
-| MapLibre React Native | permissive; verify pinned release | Optional basemap only |
-| simplify-js | BSD-2-Clause | Benchmark; direct adoption allowed after version review |
-| Turf | MIT | Use only when GeoJSON pipeline justifies it |
-| Proj4js | MIT | Adopt only for explicit CRS transformation requirement |
-| GeographicLib | MIT/X11-style; verify JS package | Adopt only when precision envelope requires it |
-| OpenTracks | Apache-2.0 | Behavior/reference or isolated reuse with notice review |
-| GPSLogger | GPL-family | No code inclusion in proprietary/private product path without explicit legal decision |
-| RoNIN | GPL-3.0 | Offline benchmark/reference only by default |
+| Expo Location / TaskManager / SQLite | Expo SDK 57 compatible set | Adopt through official packages and root lockfile |
+| react-native-svg | **15.15.4 / MIT** | Conditional Adopt in `apps/mobile` only; Android visual gate pending |
+| React Native Skia | not installed; exact release/license to verify | Benchmark only after SVG device failure |
+| MapLibre React Native | not installed; exact release/license to verify | Optional basemap only |
+| simplify-js | candidate / BSD-2-Clause | Benchmark; direct adoption allowed after exact-version review |
+| Turf | candidate / MIT | Use only when GeoJSON pipeline justifies it |
+| Proj4js | candidate / MIT | Adopt only for explicit CRS transformation requirement |
+| GeographicLib | candidate / MIT/X11-style; verify JS package | Adopt only when precision envelope requires it |
+| OpenTracks | reference / Apache-2.0 | Behavior/reference or isolated reuse with notice review |
+| GPSLogger | reference / GPL-family | No code inclusion in product path without explicit legal decision |
+| RoNIN | benchmark / GPL-3.0 | Offline benchmark/reference only by default |
 | Path Guide / TLIO research code | verify repository-specific license | No product inclusion until license is explicit |
 
 「GitHubに公開されている」は再利用許可を意味しない。採用時にはexact repository、version/tag、license file、NOTICE義務、transitive dependenciesを記録する。
@@ -219,7 +243,9 @@ PDR判断は [`experiments/002-pocket-pdr.md`](experiments/002-pocket-pdr.md) �
 次の時点でこの監査を更新する。
 
 - 新しいrenderer / sensor / DB / geodesy dependencyを追加する前
-- Issue #2でlockfileを作成する時
+- lockfileまたはExpo SDKを更新する時
+- SVG rendererのAndroid実機gate完了時
+- Skia benchmark開始前
 - PDR spike開始前
 - GPX / GeoJSON export実装前
 - second app / game appが実際に同じpackageを使う時
