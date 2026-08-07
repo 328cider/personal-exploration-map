@@ -12,6 +12,7 @@ on:
       - "scripts/prepare-field-test-sources.mjs"
       - "scripts/check-tracking-stop-policy.mjs"
       - "scripts/android-emulator-smoke.py"
+      - "scripts/android-emulator-interaction-smoke.py"
       - "apps/mobile/**"
       - "packages/**"
       - "package.json"
@@ -106,7 +107,7 @@ jobs:
     name: Android emulator user-flow gate
     needs: field-test-apk
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 38
     env:
       APK_PATH: artifacts/field-test/personal-exploration-map-field-test.apk
       EVIDENCE_DIR: artifacts/emulator-e2e
@@ -153,10 +154,12 @@ jobs:
             -no-window -gpu swiftshader_indirect -no-snapshot -noaudio
             -no-boot-anim -camera-back none -camera-front none
           disable-animations: true
-          script: >-
-            python3 scripts/android-emulator-smoke.py
-            --apk "$APK_PATH"
-            --artifacts "$EVIDENCE_DIR"
+          script: |
+            python3 scripts/android-emulator-smoke.py \
+              --apk "$APK_PATH" \
+              --artifacts "$EVIDENCE_DIR"
+            python3 scripts/android-emulator-interaction-smoke.py \
+              --artifacts "$EVIDENCE_DIR"
       - name: Upload emulator screenshots, UI hierarchy and logs
         if: always()
         uses: actions/upload-artifact@v4
