@@ -12,14 +12,16 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "test": "npm run test:core && npm run test:engine && npm run test:experience",
+    "test": "npm run test:core && npm run test:engine && npm run test:experience && npm run test:sqlite",
     "test:core": "npm run test --workspace @exploration-map/mapping-core",
     "test:engine": "npm run test --workspace @exploration-map/mapping-engine",
     "test:experience": "npm run test --workspace @exploration-map/experience-sdk",
-    "typecheck": "npm run typecheck:core && npm run typecheck:engine && npm run typecheck:experience",
+    "test:sqlite": "npm run test --workspace @exploration-map/sqlite-adapter",
+    "typecheck": "npm run typecheck:core && npm run typecheck:engine && npm run typecheck:experience && npm run typecheck:sqlite",
     "typecheck:core": "npm run typecheck --workspace @exploration-map/mapping-core",
     "typecheck:engine": "npm run typecheck --workspace @exploration-map/mapping-engine",
     "typecheck:experience": "npm run typecheck --workspace @exploration-map/experience-sdk",
+    "typecheck:sqlite": "npm run typecheck --workspace @exploration-map/sqlite-adapter",
     "typecheck:mobile": "npm run typecheck --workspace @exploration-map/mobile",
     "check:governance": "node scripts/check-product-governance.mjs",
     "check:architecture": "node scripts/check-architecture-boundaries.mjs",

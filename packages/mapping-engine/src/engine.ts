@@ -133,9 +133,9 @@ export function createMappingEngine(
       updatedAtMs: command.createdAtMs,
     };
 
-    await options.repository.runInTransaction(async () => {
-      await options.repository.createPersonalMap(record);
-    });
+    await options.repository.runInTransaction((writer) =>
+      writer.createPersonalMap(record),
+    );
 
     return { personalMapId };
   }
@@ -178,9 +178,9 @@ export function createMappingEngine(
         : { localFrameLabel: command.localFrameLabel }),
     };
 
-    await options.repository.runInTransaction(async () => {
-      await options.repository.createExploration(record);
-    });
+    await options.repository.runInTransaction((writer) =>
+      writer.createExploration(record),
+    );
 
     try {
       await provider.start({
@@ -189,9 +189,9 @@ export function createMappingEngine(
       });
     } catch (startError) {
       try {
-        await options.repository.runInTransaction(async () => {
-          await options.repository.deleteExploration(explorationId);
-        });
+        await options.repository.runInTransaction((writer) =>
+          writer.deleteExploration(explorationId),
+        );
       } catch (cleanupError) {
         throw new AggregateError(
           [startError, cleanupError],
@@ -232,11 +232,8 @@ export function createMappingEngine(
     );
     let session = replayExploration(loaded.replay);
 
-    const persisted = await options.repository.runInTransaction(() =>
-      options.repository.appendPositionSamples(
-        command.explorationId,
-        command.samples,
-      ),
+    const persisted = await options.repository.runInTransaction((writer) =>
+      writer.appendPositionSamples(command.explorationId, command.samples),
     );
 
     const events: MappingEvent[] = [];
@@ -297,8 +294,8 @@ export function createMappingEngine(
     }
     const marker = markerFromEvent(event);
 
-    const inserted = await options.repository.runInTransaction(() =>
-      options.repository.appendMarker(command.explorationId, marker),
+    const inserted = await options.repository.runInTransaction((writer) =>
+      writer.appendMarker(command.explorationId, marker),
     );
     if (inserted) {
       publish(command.personalMapId, mutation.events);
@@ -335,12 +332,9 @@ export function createMappingEngine(
       replayExploration(loaded.replay),
       command.endedAtMs,
     );
-    await options.repository.runInTransaction(async () => {
-      await options.repository.completeExploration(
-        command.explorationId,
-        command.endedAtMs,
-      );
-    });
+    await options.repository.runInTransaction((writer) =>
+      writer.completeExploration(command.explorationId, command.endedAtMs),
+    );
     publish(command.personalMapId, completed.events);
 
     const map = await getPersonalMap({ personalMapId: command.personalMapId });

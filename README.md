@@ -58,6 +58,7 @@
 apps/mobile/                  Reference explorer app（Expo / React Native）
 packages/mapping-core/        地図の真実と純粋なdomain kernel
 packages/mapping-engine/      Appが呼ぶheadless command / query facade
+packages/sqlite-adapter/      Raw evidenceを保存するlocal-first repository adapter
 packages/experience-sdk/      Game向けread-only snapshot / event境界
 docs/                         製品、UX、設計、検証計画、ADR
 scripts/                      ガバナンスと依存方向の検査
@@ -69,10 +70,10 @@ scripts/                      ガバナンスと依存方向の検査
 Explorer / future game apps
         │ commands / queries
         ▼
-Headless mapping-engine       ← 地図への唯一の書き込み窓口
+Headless mapping-engine       ← canonical mapの制御された書き込み境界
         │
         ├── mapping-core      ← raw evidence / session / PersonalMap / uncertainty
-        ├── repository port   ← SQLite等のadapterが実装
+        ├── repository port   ← sqlite-adapter等が実装
         └── tracking port     ← GNSS / PDR等のadapterが実装
 
 Read-only PersonalMap snapshot / MappingEvent
@@ -83,13 +84,28 @@ Read-only PersonalMap snapshot / MappingEvent
 - 生の観測値は失わず保存します。
 - 表示経路や探索領域は再生成可能な派生物です。
 - 推定した壁や部屋を事実として扱いません。
-- ゲームは地図を直接変更せず、別stateとoverlayを生成します。
+- UI、renderer、game、experienceはcanonical mapを直接変更しません。
+- ゲームは地図を読み、別stateとoverlayを生成します。
 - ゲームから地図修正を提案する場合、ユーザー確認後にengine commandへ変換します。
 - 「複数アプリで使いそう」だけを理由にcoreへ入れません。
 
+## 保存モデル
+
+```text
+PersonalMap
+  ├─ ExplorationSession 1
+  │    ├─ raw position samples
+  │    └─ confirmed markers
+  └─ ExplorationSession 2
+       ├─ raw position samples
+       └─ confirmed markers
+```
+
+DBにはraw observationsと確認済みmarkerを保存し、PersonalMap snapshotはreplayして再生成します。旧DBの`Exploration = 地図1枚`データは、同じIDのPersonalMapへ無損失で昇格させます。
+
 ## ローカル検証
 
-Node.js 22.13以上が必要です。mapping packagesのテストは外部依存なしで動きます。
+Node.js 22.13以上が必要です。mapping packagesとSQLite adapterのテストはmobile native buildなしで動きます。
 
 ```bash
 node scripts/check-product-governance.mjs
@@ -110,7 +126,10 @@ npm run mobile:android
 - 製品憲章、競合判断、UX原則、アーキテクチャ、機能配置規則を文書化
 - 位置ソースに依存しないmapping-coreを実装
 - ExplorationSessionと、複数sessionから育つPersonalMap aggregateを分離
-- headless mapping-engineのpublic command / query contractを定義
+- canonical commandを実行するheadless mapping-engineを実装
+- repository transaction完了後だけread-only MappingEventを公開
+- DB v1からPersonalMap / ExplorationSessionを分離したv2への移行を実装
+- 実SQLiteでraw保持、foreign-key、rollback、multi-session replayを検証
 - game contractをmapping-coreからread-only experience-sdkへ分離
 - 一回の軌跡を即時に地図化する処理、異常ジャンプ除外、投影、簡略化を実装
 - バックグラウンドGNSS、SQLite保存、クイックマーカー、白紙地図レビューのモバイル縦切りを実装

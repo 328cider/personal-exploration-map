@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@exploration-map/mapping-core": "*",
+    "@exploration-map/mapping-engine": "*",
+    "@exploration-map/sqlite-adapter": "*",
     "expo": "~57.0.0",
     "expo-dev-client": "~57.0.7",
     "expo-location": "~57.0.8",
