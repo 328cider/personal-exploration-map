@@ -15,11 +15,21 @@ test("applications use explicit commands instead of mutable core sessions", asyn
   const engine: MappingEngine = {
     async createPersonalMap(command) {
       calls.push(`create-map:${command.name}`);
-      return { personalMapId: command.requestedId ?? "map-1" };
+      return { personalMapId: command.requestedId ?? "map-only" };
+    },
+    async createPersonalMapWithFirstExploration(command) {
+      calls.push(
+        `create-first:${command.personalMap.name}:${command.exploration.name}`,
+      );
+      return {
+        personalMapId: command.personalMap.requestedId ?? "map-1",
+        explorationId:
+          command.exploration.requestedId ?? "session-1",
+      };
     },
     async startExploration(command) {
       calls.push(`start:${command.personalMapId}`);
-      return { explorationId: command.requestedId ?? "session-1" };
+      return { explorationId: command.requestedId ?? "session-2" };
     },
     async ingestPositionSamples(command) {
       calls.push(`ingest:${command.samples.length}`);
@@ -48,23 +58,24 @@ test("applications use explicit commands instead of mutable core sessions", asyn
     },
   };
 
-  const created = await engine.createPersonalMap({
-    name: "My map",
-    createdAtMs: 1_000,
-  });
-  const started = await engine.startExploration({
-    personalMapId: created.personalMapId,
-    name: "First exploration",
-    startedAtMs: 2_000,
-    trackingProviderId: "gnss",
+  const started = await engine.createPersonalMapWithFirstExploration({
+    personalMap: {
+      name: "My map",
+      createdAtMs: 1_000,
+    },
+    exploration: {
+      name: "First exploration",
+      startedAtMs: 2_000,
+      trackingProviderId: "gnss",
+    },
   });
   await engine.ingestPositionSamples({
-    personalMapId: created.personalMapId,
+    personalMapId: started.personalMapId,
     explorationId: started.explorationId,
     samples: [],
   });
   await engine.addMarker({
-    personalMapId: created.personalMapId,
+    personalMapId: started.personalMapId,
     explorationId: started.explorationId,
     marker: {
       recordedAtMs: 3_000,
@@ -73,15 +84,14 @@ test("applications use explicit commands instead of mutable core sessions", asyn
     },
   });
   await engine.endExploration({
-    personalMapId: created.personalMapId,
+    personalMapId: started.personalMapId,
     explorationId: started.explorationId,
     endedAtMs: 4_000,
   });
 
-  assert.equal(MAPPING_ENGINE_API_VERSION, "4");
+  assert.equal(MAPPING_ENGINE_API_VERSION, "5");
   assert.deepEqual(calls, [
-    "create-map:My map",
-    "start:map-1",
+    "create-first:My map:First exploration",
     "ingest:0",
     "marker:Found it",
     "end:session-1",
