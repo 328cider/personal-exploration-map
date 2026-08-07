@@ -8,7 +8,7 @@ import type {
   ReplayExplorationInput,
 } from "@exploration-map/mapping-core";
 
-export const MAPPING_ENGINE_API_VERSION = "4" as const;
+export const MAPPING_ENGINE_API_VERSION = "5" as const;
 
 export interface CreatePersonalMapCommand {
   readonly name: string;
@@ -30,6 +30,19 @@ export interface StartExplorationCommand {
    */
   readonly localFrameLabel?: string;
   readonly requestedId?: string;
+}
+
+/**
+ * Creates a new PersonalMap and its first ExplorationSession as one canonical
+ * use case before starting the external tracking provider.
+ *
+ * This command is intentionally distinct from user-initiated map deletion. If
+ * provider start fails, the engine may automatically remove only the new,
+ * single, still-unobserved map/session pair created by this command.
+ */
+export interface CreatePersonalMapWithFirstExplorationCommand {
+  readonly personalMap: CreatePersonalMapCommand;
+  readonly exploration: Omit<StartExplorationCommand, "personalMapId">;
 }
 
 export interface IngestPositionSamplesCommand {
@@ -96,6 +109,13 @@ export interface MappingEngine {
     command: CreatePersonalMapCommand,
   ): Promise<{ readonly personalMapId: string }>;
 
+  createPersonalMapWithFirstExploration(
+    command: CreatePersonalMapWithFirstExplorationCommand,
+  ): Promise<{
+    readonly personalMapId: string;
+    readonly explorationId: string;
+  }>;
+
   startExploration(
     command: StartExplorationCommand,
   ): Promise<{ readonly explorationId: string }>;
@@ -144,16 +164,21 @@ export interface LoadedExploration {
 /**
  * Transaction-scoped canonical writer.
  *
- * The callback supplied to `runInTransaction` receives this writer so a real
- * SQLite implementation can execute every statement on the transaction object
- * rather than relying on ambient mutable transaction state.
+ * Compensation deletes are conditional. A provider failure may remove only
+ * records that still contain no raw observations or confirmed markers; any
+ * evidence that arrived before failure is preserved for explicit recovery.
  */
 export interface MappingRepositoryWriter {
   createPersonalMap(record: StoredPersonalMap): Promise<void>;
 
   createExploration(record: StoredExploration): Promise<void>;
 
-  deleteExploration(explorationId: string): Promise<void>;
+  deleteExplorationIfUnobserved(explorationId: string): Promise<boolean>;
+
+  deletePersonalMapIfOnlyUnobservedExploration(
+    personalMapId: string,
+    explorationId: string,
+  ): Promise<boolean>;
 
   appendPositionSamples(
     explorationId: string,
