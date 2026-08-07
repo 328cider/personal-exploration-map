@@ -1,31 +1,76 @@
 # AGENTS.md
 
-このリポジトリは「受動的な個人探索マッピング」を実装する。開発時は次を優先する。
+このリポジトリは「受動的な個人探索マッピング」を実装する。
+
+## Required reading order
+
+実装・設計・Issue分解を始める前に、次の順序で読む。
+
+1. `PRODUCT_CONSTITUTION.md` — 変更してはいけない製品目的と境界
+2. `CURRENT_DIRECTION.md` — 現在のマイルストーンと短期優先順位
+3. 関連するAccepted ADRs
+4. `docs/PRODUCT.md`、`docs/UX_PRINCIPLES.md`、`docs/ARCHITECTURE.md`
+5. 対象Issue、関連PR、実験文書
+
+`CURRENT_DIRECTION.md`、Issue、PR、実装が憲章と矛盾する場合は、下位文書を優先してはならない。実装都合で憲章を暗黙に変更せず、専用IssueとADRで明示する。
 
 ## Product invariants
+
+`PRODUCT_CONSTITUTION.md` が正本である。特に次を毎回確認する。
 
 1. 一度の探索で地図ができる。複数回通過を登録条件にしない。
 2. 通常利用では、探索中にスマホを見続けたりカメラを構えたりさせない。
 3. 場所の種類をプロダクト定義にしない。山、街、建物、会場などは例でしかない。
 4. 生の位置・センサー観測は証拠として保持し、フィルタ済み地図は派生物にする。
 5. 精度や接続に不確実性がある場合はUIで隠さない。
-6. ゲーム、実績、Fog、ストーリーは交換可能な拡張。mapping-coreから参照しない。
-7. 既存地図やクラウドは必須依存にしない。
+6. 個人地図は複数の探索セッションから育て、未観測区間を偽接続しない。
+7. ゲーム、実績、Fog、ストーリーは交換可能な拡張。mapping-coreの真実を書き換えない。
+8. 既存地図やクラウドは必須依存にしない。
+9. 独自価値のない部品はOSS・標準・プラットフォームを先に調査する。
+10. 位置履歴は高感度データとしてlocal-firstを既定にする。
+
+## Before implementation
+
+IssueまたはPRに次を残す。該当しない場合も理由を書く。
+
+- 解くユーザー問題
+- Passive-first UXへの影響と追加操作時間
+- 変更する地図レイヤー: raw evidence / derived map / manual correction / inference / game overlay
+- Build / Adopt / Benchmark判断と確認した既存アプリ・OSS・標準・研究
+- ゲームなしでマッピング機能が成立するか
+- 位置履歴、共有、安全への影響
+- 成功条件、失敗条件、停止またはロールバック条件
+- 憲章への適合、または憲章変更が必要か
 
 ## Engineering rules
 
-- 現在のスコープは `CURRENT_DIRECTION.md` を正本とする。
+- 現在のスコープは、憲章の範囲内で `CURRENT_DIRECTION.md` を正本とする。
 - 新しい位置推定方式は `TrackingProvider` 境界の内側に実装する。
 - マッピング規則は可能な限り `packages/mapping-core` の純粋TypeScriptへ置き、端末APIから分離する。
 - 推定結果をrawテーブルへ上書きしない。
 - UI操作を増やす変更には、`docs/UX_PRINCIPLES.md` の中断コスト確認を書く。
 - 実験的精度の機能は既定で有効にせず、計測方法と停止条件を先に文書化する。
 - 大きなフレームワーク、認証、バックエンドを「将来使うかもしれない」だけで追加しない。
-- テストは重要な変換・品質判定を中心に必要十分に保つ。
+- 標準アルゴリズムや一般部品を自作する場合は、既存OSSを採用しない理由とライセンス判断を記録する。
+- テストは重要な変換・品質判定・アーキテクチャ境界を中心に必要十分に保つ。
+
+## Constitution changes
+
+`PRODUCT_CONSTITUTION.md` の変更は通常の機能変更ではない。次が揃うまで変更しない。
+
+- リポジトリ所有者の明示承認
+- 専用Issue
+- Build / Buy再評価
+- 新規ADR
+- データ、UX、ゲーム境界、プライバシーへの移行影響
+- 関連テンプレートとガードレールの同時更新
+
+変更が承認されていない場合は、憲章を実装へ合わせず、実装を憲章へ合わせる。
 
 ## Required checks
 
 ```bash
+node scripts/check-product-governance.mjs
 npm test
 npm run typecheck:core
 ```
