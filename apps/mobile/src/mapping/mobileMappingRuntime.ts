@@ -173,7 +173,18 @@ export async function continuePersonalMapExploration(
 ): Promise<StartedExploration> {
   await assertNoActiveExploration();
 
-  const { explorationId } = await getMobileMappingEngine().startExploration({
+  const engine = getMobileMappingEngine();
+  const existingMap = await engine.getPersonalMap({ personalMapId });
+  if (existingMap === null) {
+    throw new Error("続きを記録する個人地図が見つかりませんでした。");
+  }
+  if (existingMap.frame.kind === "local") {
+    throw new Error(
+      "この地図はGPSなしのローカル座標で作られています。明示的な接続方法が用意されるまで、GNSS探索を同じ地図へ追加できません。",
+    );
+  }
+
+  const { explorationId } = await engine.startExploration({
     personalMapId,
     name: explorationName,
     startedAtMs: Date.now(),
