@@ -78,7 +78,7 @@ test("applications use explicit commands instead of mutable core sessions", asyn
     endedAtMs: 4_000,
   });
 
-  assert.equal(MAPPING_ENGINE_API_VERSION, "3");
+  assert.equal(MAPPING_ENGINE_API_VERSION, "4");
   assert.deepEqual(calls, [
     "create-map:My map",
     "start:map-1",
