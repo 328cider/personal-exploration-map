@@ -1,0 +1,14 @@
+.git
+.github
+**/node_modules
+**/.expo
+**/android
+**/ios
+**/build
+**/.gradle
+**/.cache
+*.apk
+*.aab
+*.log
+.DS_Store
+Thumbs.db
