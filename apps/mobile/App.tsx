@@ -401,6 +401,9 @@ export default function App() {
       {screen.kind === "permissions" ? (
         <PermissionScreen
           loading={busy}
+          targetMapName={
+            screen.target.kind === "continue" ? screen.target.mapName : null
+          }
           onBack={backFromPermissions}
           onStartBackground={() => void beginExploration("background")}
           onStartForeground={() => void beginExploration("foreground")}
