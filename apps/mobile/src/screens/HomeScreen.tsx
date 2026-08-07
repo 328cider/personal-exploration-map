@@ -5,24 +5,26 @@ import {
   Text,
   View,
 } from "react-native";
+import type { PersonalMapListItem } from "@exploration-map/mapping-engine";
 
-import type { ExplorationSummary } from "../storage/explorationRepository";
+import { AppButton } from "../components/AppButton";
 import { palette, spacing } from "../theme";
 import { formatDateTime } from "../utils/format";
-import { AppButton } from "../components/AppButton";
 
 interface HomeScreenProps {
-  readonly explorations: readonly ExplorationSummary[];
+  readonly personalMaps: readonly PersonalMapListItem[];
+  readonly activePersonalMapId: string | null;
   readonly loading: boolean;
-  readonly onStart: () => void;
-  readonly onOpen: (id: string) => void;
+  readonly onStartNew: () => void;
+  readonly onOpen: (personalMapId: string) => void;
   readonly onCreateDemo: () => void;
 }
 
 export function HomeScreen({
-  explorations,
+  personalMaps,
+  activePersonalMapId,
   loading,
-  onStart,
+  onStartNew,
   onOpen,
   onCreateDemo,
 }: HomeScreenProps) {
@@ -35,10 +37,14 @@ export function HomeScreen({
         <Text style={styles.eyebrow}>PERSONAL EXPLORATION MAP</Text>
         <Text style={styles.title}>歩いたぶんだけ、{"\n"}自分の地図になる。</Text>
         <Text style={styles.description}>
-          探索を始めたらスマホはポケットへ。必要な時だけ発見を残し、終わった時に自分が知った空間を見返します。
+          探索を始めたらスマホはポケットへ。必要な時だけ発見を残し、同じ地図へ少しずつ知った空間を足していきます。
         </Text>
-        <AppButton loading={loading} onPress={onStart} style={styles.startButton}>
-          探索を始める
+        <AppButton
+          loading={loading}
+          onPress={onStartNew}
+          style={styles.startButton}
+        >
+          新しい地図を探索する
         </AppButton>
         <View style={styles.privacyNote}>
           <Text style={styles.privacyIcon}>◎</Text>
@@ -50,10 +56,10 @@ export function HomeScreen({
 
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>自分の地図</Text>
-        <Text style={styles.sectionMeta}>{explorations.length}件</Text>
+        <Text style={styles.sectionMeta}>{personalMaps.length}件</Text>
       </View>
 
-      {explorations.length === 0 ? (
+      {personalMaps.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyGlyph}>⌁</Text>
           <Text style={styles.emptyTitle}>まだ地図はありません</Text>
@@ -68,40 +74,46 @@ export function HomeScreen({
         </View>
       ) : (
         <View style={styles.list}>
-          {explorations.map((exploration) => (
-            <Pressable
-              key={exploration.id}
-              accessibilityRole="button"
-              onPress={() => onOpen(exploration.id)}
-              style={({ pressed }: { pressed: boolean }) => [
-                styles.card,
-                pressed && styles.cardPressed,
-              ]}
-            >
-              <View style={styles.cardMapPreview}>
-                <View style={styles.previewLineOne} />
-                <View style={styles.previewLineTwo} />
-                <View style={styles.previewDot} />
-              </View>
-              <View style={styles.cardBody}>
-                <View style={styles.cardTitleRow}>
-                  <Text numberOfLines={1} style={styles.cardTitle}>
-                    {exploration.name}
-                  </Text>
-                  {exploration.status === "recording" ? (
-                    <View style={styles.recordingBadge}>
-                      <Text style={styles.recordingBadgeText}>記録中</Text>
-                    </View>
-                  ) : null}
+          {personalMaps.map((personalMap) => {
+            const recording = personalMap.id === activePersonalMapId;
+            return (
+              <Pressable
+                key={personalMap.id}
+                accessibilityRole="button"
+                onPress={() => onOpen(personalMap.id)}
+                style={({ pressed }: { pressed: boolean }) => [
+                  styles.card,
+                  pressed && styles.cardPressed,
+                ]}
+              >
+                <View style={styles.cardMapPreview}>
+                  <View style={styles.previewLineOne} />
+                  <View style={styles.previewLineTwo} />
+                  <View style={styles.previewDot} />
                 </View>
-                <Text style={styles.cardMeta}>
-                  {formatDateTime(exploration.startedAtMs)} ・ {exploration.rawSampleCount}
-                  点 ・ 発見{exploration.markerCount}
-                </Text>
-              </View>
-              <Text style={styles.chevron}>›</Text>
-            </Pressable>
-          ))}
+                <View style={styles.cardBody}>
+                  <View style={styles.cardTitleRow}>
+                    <Text numberOfLines={1} style={styles.cardTitle}>
+                      {personalMap.name}
+                    </Text>
+                    {recording ? (
+                      <View style={styles.recordingBadge}>
+                        <Text style={styles.recordingBadgeText}>記録中</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <Text style={styles.cardMeta}>
+                    {formatDateTime(personalMap.updatedAtMs)} ・ 探索
+                    {personalMap.explorationCount}回
+                  </Text>
+                  <Text style={styles.cardHint}>
+                    {recording ? "タップして記録画面へ" : "タップして地図を見る"}
+                  </Text>
+                </View>
+                <Text style={styles.chevron}>›</Text>
+              </Pressable>
+            );
+          })}
           {__DEV__ ? (
             <AppButton onPress={onCreateDemo} variant="ghost">
               デモ地図を追加
@@ -213,7 +225,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   card: {
-    minHeight: 94,
+    minHeight: 104,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: palette.border,
@@ -227,7 +239,7 @@ const styles = StyleSheet.create({
   },
   cardMapPreview: {
     width: 78,
-    height: 72,
+    height: 78,
     borderRadius: 15,
     backgroundColor: palette.primarySoft,
     overflow: "hidden",
@@ -239,7 +251,7 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: palette.primary,
     left: 8,
-    top: 35,
+    top: 38,
     transform: [{ rotateZ: "20deg" }],
   },
   previewLineTwo: {
@@ -249,7 +261,7 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: palette.primary,
     left: 39,
-    top: 25,
+    top: 28,
     transform: [{ rotateZ: "-55deg" }],
   },
   previewDot: {
@@ -259,7 +271,7 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: palette.marker,
     left: 56,
-    top: 18,
+    top: 21,
   },
   cardBody: {
     flex: 1,
@@ -282,6 +294,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     marginTop: spacing.xs,
+  },
+  cardHint: {
+    color: palette.primary,
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: "700",
+    marginTop: 2,
   },
   recordingBadge: {
     borderRadius: 999,
