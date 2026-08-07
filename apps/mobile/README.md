@@ -68,6 +68,18 @@ Development Reviewでは、raw observationsをmapping-coreでreplayして次を�
 - app background / foreground / recovery
 - marker入力時間
 
+`座標なし集計を共有`はReact Native標準のshare sheetを明示操作で開きます。共有テキストに含めるのはaggregate metricsとrelative lifecycle offsetだけです。
+
+含めないもの:
+
+- 緯度経度、local coordinates
+- PersonalMap / ExplorationSession id
+- map name、marker text
+- map image
+- absolute start / end time
+
+共有先と最終内容はOS UIで確認します。この機能は位置履歴exportではなく、Issue #3 / #4のexperiment recordを揃えるためのdevelopment-only補助です。
+
 operational diagnosticsはmap truthではありません。診断保存失敗でraw位置記録を失敗させず、routeや接続を診断eventから生成しません。
 
 実機runは [`../../docs/experiments/templates/background-gnss-run.md`](../../docs/experiments/templates/background-gnss-run.md) に記録します。

@@ -1,6 +1,6 @@
 # Background GNSS Run
 
-> Copy this file for each real-device run. Do not paste raw coordinates or screenshots containing identifiable places into a public Issue.
+> Copy this file for each real-device run. Do not paste raw coordinates, map/session ids, map names, marker text, or screenshots containing identifiable places into a public Issue. Fields that identify local records may be kept only in the private working copy.
 
 ## Identity
 
@@ -9,8 +9,8 @@
 - Tester:
 - Git commit:
 - APK / build artifact:
-- PersonalMap id:
-- ExplorationSession id:
+- PersonalMap id (private working copy only):
+- ExplorationSession id (private working copy only):
 
 ## Device
 
@@ -63,9 +63,25 @@ Battery is recorded manually in M0 to avoid adding a platform dependency before 
 - Session recovered:
 - OS / OEM intervention observed:
 
+## Coordinate-free diagnostic summary
+
+In a development build, open PersonalMap Review and press `座標なし集計を共有`.
+
+The generated text intentionally excludes coordinates, map names, marker text, record ids, images, and absolute timestamps. Review the OS share sheet before sending it.
+
+- [ ] Generated from the app
+- [ ] Reviewed before sharing
+- [ ] No identifying information added manually
+
+Paste the aggregate text below when useful:
+
+```text
+
+```
+
 ## In-app diagnostic report
 
-Copy values from the development diagnostics section in PersonalMap Review.
+The shared aggregate can fill most values below. Keep the explicit checklist because battery, permissions, route recognizability, and user observation are not inferred from app diagnostics.
 
 ### Samples and quality
 
@@ -93,7 +109,7 @@ Copy values from the development diagnostics section in PersonalMap Review.
 - App foreground transition:
 - Session recovery:
 - Provider stop requested / stopped:
-- Last error and time:
+- Last error and relative offset:
 
 ### Interruption cost
 

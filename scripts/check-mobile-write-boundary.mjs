@@ -78,7 +78,19 @@ const requiredAnchors = new Map([
   ],
   [
     "apps/mobile/src/components/TrackingDiagnosticsPanel.tsx",
-    ["受動記録の計測", "sample gap", "callback batches"],
+    [
+      "受動記録の計測",
+      "sample gap",
+      "callback batches",
+      "座標なし集計を共有",
+      "Share.share",
+      "formatTrackingDiagnosticsSummary",
+      "aggregate_only_no_coordinates",
+    ],
+  ],
+  [
+    "apps/mobile/src/screens/ReviewScreen.tsx",
+    ["__DEV__ ? <TrackingDiagnosticsPanel"],
   ],
   [
     "apps/mobile/src/tracking/backgroundLocationTask.ts",
