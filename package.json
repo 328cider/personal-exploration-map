@@ -1,0 +1,26 @@
+{
+  "name": "personal-exploration-map",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A passive-first personal mapping app where explored space becomes the user's own map.",
+  "license": "UNLICENSED",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "test": "npm run test --workspace @exploration-map/mapping-core",
+    "typecheck:core": "npm run typecheck --workspace @exploration-map/mapping-core",
+    "typecheck:mobile": "npm run typecheck --workspace @exploration-map/mobile",
+    "check": "npm run typecheck:core && npm test",
+    "mobile:start": "npm run start --workspace @exploration-map/mobile",
+    "mobile:android": "npm run android --workspace @exploration-map/mobile",
+    "mobile:ios": "npm run ios --workspace @exploration-map/mobile"
+  },
+  "devDependencies": {
+    "typescript": "5.8.3"
+  }
+}
