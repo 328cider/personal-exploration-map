@@ -23,6 +23,17 @@ Android実端末
 
 エミュレータ合格は実端末成立を証明しない。ただし、エミュレータ不合格のAPKを実地試験可能とは扱わない。
 
+## Build / Adopt
+
+エミュレータのSDK導入、AVD作成、hardware acceleration、boot待ち、終了処理は製品固有価値ではないため、自作しない。
+
+- **Adopt:** `ReactiveCircus/android-emulator-runner@v2.37.0`
+- License: Apache-2.0
+- 担当: emulator provisioning / boot / teardown
+- 本リポジトリで自作する範囲: PersonalMap固有の黒箱ユーザーシナリオとassertion
+
+この境界により、CIの低レベルなAVD lifecycleを再発明せず、ユーザーへ渡すAPKの動作意味だけをリポジトリ側で固定する。
+
 ## 自動シナリオ
 
 `devex-field-test` workflowの`Android emulator user-flow gate`は、同じworkflowで作成したField-test APKを使用して次を実行する。
@@ -48,7 +59,7 @@ Android実端末
 - UI Automator hierarchy XML
 - logcat
 - activity / package / location / notification dumpsys
-- emulator起動ログ
+- harness version metadata
 - assertion結果JSON
 - 失敗時の例外
 
@@ -63,6 +74,7 @@ Android実端末
 - rendererはread-onlyのまま
 - live previewを確認するためにbackground中のpollingを追加しない
 - UI文言変更でtestが失敗した場合、単にselectorを緩めず、ユーザー導線の意味が維持されているか確認する
+- emulator provisioningの独自shell実装を増やさず、採用Actionの設定へ寄せる
 
 ## 実地試験へ進む条件
 
@@ -73,6 +85,7 @@ Android実端末
 - `Android emulator user-flow gate`: success
 - product governance / architecture / mobile write boundary: success
 - 既知のP0 UI blockerがopenではない
+- emulator artifactの主要画面を目視レビュー済み
 
 実端末では、エミュレータで代替できない以下だけを優先して検証する。
 
