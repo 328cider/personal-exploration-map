@@ -229,6 +229,27 @@ async function touchPersonalMap(
   );
 }
 
+async function recomputePersonalMapUpdatedAt(
+  database: AsyncSqliteExecutor,
+  personalMapId: string,
+): Promise<void> {
+  await database.runAsync(
+    `UPDATE personal_maps
+     SET updated_at = MAX(
+       created_at,
+       COALESCE(
+         (SELECT MAX(updated_at)
+          FROM explorations
+          WHERE personal_map_id = ?),
+         created_at
+       )
+     )
+     WHERE id = ?`,
+    personalMapId,
+    personalMapId,
+  );
+}
+
 async function touchExplorationAndMap(
   database: AsyncSqliteExecutor,
   explorationId: string,
@@ -328,27 +349,60 @@ function createWriter(database: AsyncSqliteExecutor): MappingRepositoryWriter {
       );
     },
 
-    async deleteExploration(explorationId) {
+    async deleteExplorationIfUnobserved(explorationId) {
       const personalMapId = await requirePersonalMapId(database, explorationId);
-      await database.runAsync(
-        "DELETE FROM explorations WHERE id = ?",
+      const result = await database.runAsync(
+        `DELETE FROM explorations
+         WHERE id = ?
+           AND status = 'recording'
+           AND NOT EXISTS (
+             SELECT 1 FROM position_samples WHERE exploration_id = ?
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM markers WHERE exploration_id = ?
+           )`,
+        explorationId,
+        explorationId,
         explorationId,
       );
-      await database.runAsync(
-        `UPDATE personal_maps
-         SET updated_at = MAX(
-           created_at,
-           COALESCE(
-             (SELECT MAX(updated_at)
-              FROM explorations
-              WHERE personal_map_id = ?),
-             created_at
+      if (result.changes === 0) {
+        return false;
+      }
+      await recomputePersonalMapUpdatedAt(database, personalMapId);
+      return true;
+    },
+
+    async deletePersonalMapIfOnlyUnobservedExploration(
+      personalMapId,
+      explorationId,
+    ) {
+      const result = await database.runAsync(
+        `DELETE FROM personal_maps
+         WHERE id = ?
+           AND EXISTS (
+             SELECT 1
+             FROM explorations e
+             WHERE e.id = ?
+               AND e.personal_map_id = personal_maps.id
+               AND e.status = 'recording'
            )
-         )
-         WHERE id = ?`,
+           AND 1 = (
+             SELECT COUNT(*)
+             FROM explorations e
+             WHERE e.personal_map_id = personal_maps.id
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM position_samples WHERE exploration_id = ?
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM markers WHERE exploration_id = ?
+           )`,
         personalMapId,
-        personalMapId,
+        explorationId,
+        explorationId,
+        explorationId,
       );
+      return result.changes > 0;
     },
 
     async appendPositionSamples(explorationId, samples) {
