@@ -1,0 +1,54 @@
+name: personal-exploration-map-dev
+
+x-node-service: &node-service
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.dev
+  working_dir: /workspace
+  init: true
+  volumes:
+    - .:/workspace
+    - node_modules:/workspace/node_modules
+    - npm_cache:/root/.npm
+    - expo_state:/workspace/apps/mobile/.expo
+  environment:
+    EXPO_NO_TELEMETRY: "1"
+    CHOKIDAR_USEPOLLING: "1"
+    WATCHPACK_POLLING: "true"
+
+services:
+  check:
+    <<: *node-service
+    command:
+      - bash
+      - -lc
+      - npm ci --no-audit --no-fund && CI=1 npm run mobile:check
+
+  shell:
+    <<: *node-service
+    stdin_open: true
+    tty: true
+    command:
+      - bash
+
+  metro:
+    <<: *node-service
+    stdin_open: true
+    tty: true
+    ports:
+      - "8081:8081"
+    environment:
+      EXPO_NO_TELEMETRY: "1"
+      CHOKIDAR_USEPOLLING: "1"
+      WATCHPACK_POLLING: "true"
+      EXPO_DEVTOOLS_LISTEN_ADDRESS: "0.0.0.0"
+      REACT_NATIVE_PACKAGER_HOSTNAME: "${REACT_NATIVE_PACKAGER_HOSTNAME:-host.docker.internal}"
+    command:
+      - bash
+      - -lc
+      - npm ci --no-audit --no-fund && cd apps/mobile && npx expo start --dev-client --host lan --port 8081
+
+volumes:
+  node_modules:
+  npm_cache:
+  expo_state:
