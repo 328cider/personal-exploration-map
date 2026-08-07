@@ -1,5 +1,4 @@
 export * from "./events.ts";
-export * from "./extensions.ts";
 export * from "./geo.ts";
 export * from "./model.ts";
 export * from "./personal-map.ts";

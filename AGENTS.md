@@ -10,7 +10,8 @@
 2. `CURRENT_DIRECTION.md` — 現在のマイルストーンと短期優先順位
 3. 関連するAccepted ADRs
 4. `docs/PRODUCT.md`、`docs/UX_PRINCIPLES.md`、`docs/ARCHITECTURE.md`
-5. 対象Issue、関連PR、実験文書
+5. `docs/FEATURE_PLACEMENT.md` — core / engine / adapter / renderer / gameの配置規則
+6. 対象Issue、関連PR、実験文書
 
 `CURRENT_DIRECTION.md`、Issue、PR、実装が憲章と矛盾する場合は、下位文書を優先してはならない。実装都合で憲章を暗黙に変更せず、専用IssueとADRで明示する。
 
@@ -36,23 +37,59 @@ IssueまたはPRに次を残す。該当しない場合も理由を書く。
 - 解くユーザー問題
 - Passive-first UXへの影響と追加操作時間
 - 変更する地図レイヤー: raw evidence / derived map / manual correction / inference / game overlay
+- 責務分割: core / engine / adapter / renderer / experience-game
 - Build / Adopt / Benchmark判断と確認した既存アプリ・OSS・標準・研究
 - ゲームなしでマッピング機能が成立するか
 - 位置履歴、共有、安全への影響
 - 成功条件、失敗条件、停止またはロールバック条件
 - 憲章への適合、または憲章変更が必要か
 
+「複数画面や複数アプリから使いそう」だけを理由にcoreへ入れない。機能名ではなく、地図の真実に対する権限で分割する。1つの機能が複数層へ分かれてよい。
+
+## Layer ownership
+
+### `packages/mapping-core`
+
+- raw evidence、ExplorationSession、PersonalMap、quality、frame、segment、marker、uncertainty、domain event
+- 純粋TypeScriptのみ
+- React、Expo、SQLite、renderer、game stateを参照しない
+
+### `packages/mapping-engine`
+
+- appが使うheadless command / query facade
+- map / exploration lifecycle、transaction、repository / tracking port、event publication
+- 地図への唯一の書き込み窓口
+- mutable sessionやcore mutationをapp / gameへ公開しない
+
+### Platform adapters
+
+- OS、sensor、DB、file、network
+- 観測と保存を担うが、map truthや報酬を決めない
+
+### Renderer
+
+- read-only snapshotの表示
+- 編集候補は作れても、確定はengine command経由
+
+### Experience / game
+
+- read-only snapshotとeventから別管理のstate、overlay、cueを生成
+- raw、accepted / rejected、基本track、marker evidenceを直接変更しない
+- 地図修正はユーザー確認後にappがengine commandへ変換する
+
 ## Engineering rules
 
 - 現在のスコープは、憲章の範囲内で `CURRENT_DIRECTION.md` を正本とする。
 - 新しい位置推定方式は `TrackingProvider` 境界の内側に実装する。
-- マッピング規則は可能な限り `packages/mapping-core` の純粋TypeScriptへ置き、端末APIから分離する。
+- 地図の真実と不変条件は `packages/mapping-core` の純粋TypeScriptへ置く。
+- 複数のcore操作と永続化を伴うユーザー操作は `mapping-engine` のcommand / queryにする。
+- future `apps/game-*` はcore mutationを直接importせず、engineとexperience-sdkを使う。
 - 推定結果をrawテーブルへ上書きしない。
 - UI操作を増やす変更には、`docs/UX_PRINCIPLES.md` の中断コスト確認を書く。
 - 実験的精度の機能は既定で有効にせず、計測方法と停止条件を先に文書化する。
-- 大きなフレームワーク、認証、バックエンドを「将来使うかもしれない」だけで追加しない。
+- 大きなフレームワーク、認証、バックエンド、plugin systemを「将来使うかもしれない」だけで追加しない。
 - 標準アルゴリズムや一般部品を自作する場合は、既存OSSを採用しない理由とライセンス判断を記録する。
-- テストは重要な変換・品質判定・アーキテクチャ境界を中心に必要十分に保つ。
+- テストは重要な変換・品質判定・application transaction・アーキテクチャ境界を中心に必要十分に保つ。
 
 ## Constitution changes
 
@@ -71,8 +108,9 @@ IssueまたはPRに次を残す。該当しない場合も理由を書く。
 
 ```bash
 node scripts/check-product-governance.mjs
+node scripts/check-architecture-boundaries.mjs
 npm test
-npm run typecheck:core
+npm run typecheck
 ```
 
 モバイル変更は可能な範囲でAndroid実機の以下も記録する。

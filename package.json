@@ -12,10 +12,18 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "test": "npm run test --workspace @exploration-map/mapping-core",
+    "test": "npm run test:core && npm run test:engine && npm run test:experience",
+    "test:core": "npm run test --workspace @exploration-map/mapping-core",
+    "test:engine": "npm run test --workspace @exploration-map/mapping-engine",
+    "test:experience": "npm run test --workspace @exploration-map/experience-sdk",
+    "typecheck": "npm run typecheck:core && npm run typecheck:engine && npm run typecheck:experience",
     "typecheck:core": "npm run typecheck --workspace @exploration-map/mapping-core",
+    "typecheck:engine": "npm run typecheck --workspace @exploration-map/mapping-engine",
+    "typecheck:experience": "npm run typecheck --workspace @exploration-map/experience-sdk",
     "typecheck:mobile": "npm run typecheck --workspace @exploration-map/mobile",
-    "check": "npm run typecheck:core && npm test",
+    "check:governance": "node scripts/check-product-governance.mjs",
+    "check:architecture": "node scripts/check-architecture-boundaries.mjs",
+    "check": "npm run check:governance && npm run check:architecture && npm run typecheck && npm test",
     "mobile:start": "npm run start --workspace @exploration-map/mobile",
     "mobile:android": "npm run android --workspace @exploration-map/mobile",
     "mobile:ios": "npm run ios --workspace @exploration-map/mobile"

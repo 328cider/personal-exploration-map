@@ -13,7 +13,9 @@
 1. [`PRODUCT_CONSTITUTION.md`](PRODUCT_CONSTITUTION.md) — 恒久的な製品目的、地図の真実、受動UX、ゲーム境界、OSS再利用方針
 2. [`CURRENT_DIRECTION.md`](CURRENT_DIRECTION.md) — 現在のマイルストーンと短期優先順位
 3. [`docs/adr/`](docs/adr/) — 長期設計判断
-4. [`AGENTS.md`](AGENTS.md) — 開発者・エージェントの実行手順
+4. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — packageと依存方向
+5. [`docs/FEATURE_PLACEMENT.md`](docs/FEATURE_PLACEMENT.md) — 新機能をcore / engine / adapter / renderer / gameへ分ける規則
+6. [`AGENTS.md`](AGENTS.md) — 開発者・エージェントの実行手順
 
 短期方針、Issue、PR、実装は製品憲章を暗黙に上書きできません。憲章変更には、所有者承認、専用Issue、Build / Buy再評価、新規ADR、移行影響評価が必要です。
 
@@ -46,47 +48,57 @@
 3. 移動がバックグラウンドで記録される
 4. 必要なときだけ `発見を記録` する
 5. `探索を終了` すると、既存地図を使わない自分の経路地図が表示される
-6. 次回も同じ探索地図を開ける
+6. 次回、同じPersonalMapの続きを探索する
 
-屋内の高精度自動マッピングは、製品完成を前提にせず、独立した技術検証にします。初回の実装はバックグラウンドGNSSを使える場所で縦切りを完成させ、GPSなしのポケット内測位は Go / No-Go 判定を経て追加します。
+屋内の高精度自動マッピングは、製品完成を前提にせず、独立した技術検証にします。初回の実装はバックグラウンドGNSSを使える場所で縦切りを完成させ、GPSなしのポケット内測位は Go / Narrow / Stop 判定を経て追加します。
 
 ## リポジトリ構成
 
 ```text
-apps/mobile/                 React Native / Expo モバイルアプリ
-packages/mapping-core/       位置情報に依存しないマッピング中核
-  src/                       生データ、品質判定、投影、簡略化、イベント
-  test/                      外部依存なしのNodeテスト
-docs/                        製品、UX、設計、検証計画、ADR
+apps/mobile/                  Reference explorer app（Expo / React Native）
+packages/mapping-core/        地図の真実と純粋なdomain kernel
+packages/mapping-engine/      Appが呼ぶheadless command / query facade
+packages/experience-sdk/      Game向けread-only snapshot / event境界
+docs/                         製品、UX、設計、検証計画、ADR
+scripts/                      ガバナンスと依存方向の検査
 ```
 
 ## 設計上の境界
 
 ```text
-位置プロバイダー        マッピング・コア              表示 / 拡張
-GNSS ─────────┐       ┌─────────────────┐       ┌─────────────┐
-PDR  ─────────┼──────▶│ raw evidence     │──────▶│ blank map UI │
-手動アンカー ──┘       │ derived track    │       ├─────────────┤
-                        │ markers / events  │──────▶│ game plugin │
-                        └─────────────────┘       └─────────────┘
+Explorer / future game apps
+        │ commands / queries
+        ▼
+Headless mapping-engine       ← 地図への唯一の書き込み窓口
+        │
+        ├── mapping-core      ← raw evidence / session / PersonalMap / uncertainty
+        ├── repository port   ← SQLite等のadapterが実装
+        └── tracking port     ← GNSS / PDR等のadapterが実装
+
+Read-only PersonalMap snapshot / MappingEvent
+        ├── renderer
+        └── experience-sdk / game state / overlay
 ```
 
 - 生の観測値は失わず保存します。
 - 表示経路や探索領域は再生成可能な派生物です。
 - 推定した壁や部屋を事実として扱いません。
-- ゲーム拡張は読み取り専用スナップショットとイベントを受け取り、オーバーレイだけを返します。
+- ゲームは地図を直接変更せず、別stateとoverlayを生成します。
+- ゲームから地図修正を提案する場合、ユーザー確認後にengine commandへ変換します。
+- 「複数アプリで使いそう」だけを理由にcoreへ入れません。
 
 ## ローカル検証
 
-Node.js 22.13以上が必要です。マッピング・コアのテストは外部依存なしで動きます。
+Node.js 22.13以上が必要です。mapping packagesのテストは外部依存なしで動きます。
 
 ```bash
 node scripts/check-product-governance.mjs
+node scripts/check-architecture-boundaries.mjs
 npm test
-npm run typecheck:core
+npm run typecheck
 ```
 
-モバイルアプリは依存関係をインストールして開発ビルドを作ります。Expo Goではバックグラウンド位置記録を十分に検証できません。
+モバイルアプリは依存関係をインストールしてdevelopment buildを作ります。Expo Goではバックグラウンド位置記録を十分に検証できません。
 
 ```bash
 npm install
@@ -95,10 +107,13 @@ npm run mobile:android
 
 ## 現在の到達点
 
-- 製品定義、競合判断、UX原則、アーキテクチャ、ロードマップを文書化
-- 位置ソースに依存しないマッピング・コアを実装
+- 製品憲章、競合判断、UX原則、アーキテクチャ、機能配置規則を文書化
+- 位置ソースに依存しないmapping-coreを実装
+- ExplorationSessionと、複数sessionから育つPersonalMap aggregateを分離
+- headless mapping-engineのpublic command / query contractを定義
+- game contractをmapping-coreからread-only experience-sdkへ分離
 - 一回の軌跡を即時に地図化する処理、異常ジャンプ除外、投影、簡略化を実装
 - バックグラウンドGNSS、SQLite保存、クイックマーカー、白紙地図レビューのモバイル縦切りを実装
-- 屋内PDRはスタブではなく、検証前提のポートとして分離
+- 屋内PDRは検証前提のportとして分離
 
 次の作業は [CURRENT_DIRECTION.md](CURRENT_DIRECTION.md) に集約します。ただし、恒久的な境界は [PRODUCT_CONSTITUTION.md](PRODUCT_CONSTITUTION.md) が優先します。

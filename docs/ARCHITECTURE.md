@@ -2,141 +2,268 @@
 
 ## 方針
 
-位置推定、地図の真実、表示、ゲーム体験を分離する。最も不確実な屋内PDRが失敗しても、プロダクト全体を書き直さない構造にする。
+位置推定、地図の真実、application transaction、保存、表示、ゲーム体験を分離する。最も不確実な屋内PDRが失敗した場合や、将来ゲームアプリを増やした場合でも、PersonalMapの正本とraw evidenceを作り直さない構造にする。
+
+機能配置の詳細な判断基準は [`FEATURE_PLACEMENT.md`](FEATURE_PLACEMENT.md)、恒久判断は [ADR 0006](adr/0006-headless-mapping-engine-and-experience-boundary.md) を参照する。
+
+## Layer model
 
 ```mermaid
 flowchart LR
-  subgraph Providers[Position providers]
-    GNSS[Background GNSS]
-    PDR[Pocket PDR experimental]
-    Manual[Manual anchor]
-    Replay[Recorded replay]
+  subgraph Apps[Application shells]
+    Explorer[Reference explorer app]
+    Game[Future game apps]
+  end
+
+  subgraph Experience[Read-only experience]
+    GameRules[Experience / game modules]
+    Renderer[Map renderer]
+  end
+
+  subgraph Engine[Headless mapping engine]
+    Commands[Commands]
+    Queries[Queries]
+    Transactions[Use cases / transactions]
+    Ports[Repository and tracking ports]
   end
 
   subgraph Core[Mapping core]
     Raw[Immutable raw observations]
-    Filter[Quality assessment]
-    Frame[Coordinate frame / projection]
-    Track[Derived session track]
-    Aggregate[Personal map aggregate]
-    Events[Mapping events]
+    Session[ExplorationSession]
+    Filter[Quality / uncertainty]
+    Frame[Coordinate frames]
+    Aggregate[PersonalMap aggregate]
+    Events[Domain events]
   end
 
-  subgraph Product[Product layer]
-    Store[(SQLite)]
-    Map[Blank personal map]
-    Marker[Quick markers]
-    Extension[Optional extensions]
+  subgraph Adapters[Platform adapters]
+    GNSS[Expo GNSS]
+    PDR[Pocket PDR experimental]
+    SQLite[(SQLite)]
+    Files[GPX / GeoJSON files]
   end
 
-  GNSS --> Raw
-  PDR --> Raw
-  Manual --> Raw
-  Replay --> Raw
-  Raw --> Store
-  Raw --> Filter --> Frame --> Track --> Aggregate --> Map
-  Marker --> Store
-  Track --> Events --> Extension
+  Explorer --> Commands
+  Explorer --> Queries
+  Game --> Commands
+  Game --> Queries
+  Commands --> Transactions
+  Queries --> Transactions
+  Transactions --> Core
+  Transactions --> Ports
+  GNSS --> Ports
+  PDR --> Ports
+  SQLite --> Ports
+  Files --> Ports
+  Queries --> Renderer
+  Events --> GameRules
+  Aggregate --> Renderer
+  Aggregate --> GameRules
+  GameRules --> Game
+  Renderer --> Explorer
+  Renderer --> Game
 ```
+
+## Dependency direction
+
+```text
+apps ───────────────▶ mapping-engine ─────────▶ mapping-core
+  │                         ▲
+  │                         │ implements ports
+  ├──▶ renderer         platform adapters
+  │
+  └──▶ experience-sdk / game modules
+```
+
+- `mapping-core` は外側のpackageへ依存しない。
+- `mapping-engine` はrendererやgameへ依存しない。
+- rendererとexperienceはread-only snapshotを扱う。
+- future `apps/game-*` はcore mutationを直接importしない。
+- platform adapterは観測・保存を担当し、map truthや報酬を決めない。
+
+## Package responsibilities
+
+### `packages/mapping-core`
+
+純粋TypeScriptのdomain kernel。
+
+- raw observations
+- accepted / rejectedと理由
+- ExplorationSession
+- PersonalMap aggregate
+- coordinate framesと明示anchor
+- segment、gap、marker、uncertainty
+- replay可能なderived map
+- MappingEvent
+
+禁止する依存:
+
+- React / React Native / Expo
+- SQLite / filesystem / network
+- permission / notification
+- renderer
+- experience、game state、実績、クエスト
+
+### `packages/mapping-engine`
+
+explorer appとgame appが呼ぶheadless application facade。地図への唯一の書き込み窓口とする。
+
+```ts
+interface MappingEngine {
+  createPersonalMap(command: CreatePersonalMapCommand): Promise<{ personalMapId: string }>;
+  startExploration(command: StartExplorationCommand): Promise<{ explorationId: string }>;
+  ingestPositionSamples(command: IngestPositionSamplesCommand): Promise<IngestPositionSamplesResult>;
+  addMarker(command: AddMarkerCommand): Promise<void>;
+  endExploration(command: EndExplorationCommand): Promise<{ map: PersonalMapSnapshot }>;
+  getPersonalMap(query: GetPersonalMapQuery): Promise<PersonalMapSnapshot | null>;
+  listPersonalMaps(): Promise<readonly PersonalMapListItem[]>;
+  subscribe(listener: MappingEngineListener): () => void;
+}
+```
+
+engineはmutableなExplorationSessionやcore mutation関数をappへ渡さない。commandごとにinvariant、persistence、event publicationを一貫させる。
+
+現在はpublic contractとportを定義し、Issue #1のSQLite・UI移行で実装を接続する。
+
+### Platform adapters
+
+- Expo Location / TaskManager
+- SQLite repository
+- future PDR sensor collector
+- manual / replay provider
+- GPX / GeoJSON writer
+- optional sync
+
+adapterはengine portを実装する。raw evidenceを取得・保存するが、accepted / rejected、segment接続、game rewardを決めない。
+
+### Renderer
+
+PersonalMap snapshotを描画するread-only層。
+
+- blank local map
+- multiple track segments
+- markers
+- uncertainty / gaps
+- zoom / pan
+- optional basemap
+- theme / animation
+
+編集UIは候補を作れるが、確定時はengine commandへ変換する。現在の`TrackCanvas`はreference implementationであり、描画OSSの採否はIssue #7で決める。
+
+### `packages/experience-sdk`
+
+PersonalMap snapshotとMappingEventを受け取り、別管理のexperience state、overlay、presentation cueだけを返す。
+
+```ts
+interface MappingExperience<State> {
+  id: string;
+  version: string;
+  createInitialState(): State;
+  onMappingEvent(input: {
+    event: Readonly<MappingEvent>;
+    map: Readonly<PersonalMapSnapshot>;
+    state: Readonly<State>;
+  }): {
+    state: State;
+    overlays: readonly DerivedOverlay[];
+    cues?: readonly ExperienceCue[];
+  };
+}
+```
+
+experienceにはmap command channelを与えない。ゲーム起点の地図修正は、候補表示とユーザー確認を経てapp shellがengine commandへ変換する。
+
+### `apps/mobile`
+
+最初のreference explorer shell。
+
+- permission rationale
+- start / pocket / quick marker / end UX
+- mapping-engineのcommand/query呼び出し
+- rendererと任意experienceのcomposition
+
+既存コードはcoreとSQLiteを直接組み合わせているため、Issue #1の永続化変更と同時にengine facadeへ段階的に移行する。
+
+将来のgame appはまず同一monorepoの`apps/game-*`として追加する。二つ目の実利用者ができるまで、remote plugin loaderやnpm公開を先行実装しない。
 
 ## Canonical data
 
 ### Raw observations
 
-端末から得たサンプルをそのまま保持する。
+端末から得たサンプルを証拠として保持する。
 
 - timestamp
 - source: gnss / pdr / manual / simulation
 - coordinate: geographic / local
 - accuracy and confidence
 - heading, speed, altitude when available
-- acceptance and rejection reason are derived metadata
 
-異常値を削除しない。フィルタ規則を改善した時に再処理できるようにする。
+異常値を削除しない。accepted / rejectedと理由は再生成可能な判定として保持する。
 
-### Exploration session
+### ExplorationSession
 
-1回の記録開始から終了までを表す観測単位である。
+1回の記録開始から終了までを表す観測単位。
 
-- raw observationsとその時系列
-- accepted / rejected判定
-- 1セッション内のderived track
-- セッション中に残したmarkers
-- 開始・終了時刻とtracking provider
+- raw observationsと時系列
+- accepted / rejected
+- session-derived track
+- session markers
+- tracking provider
+- start / end
 
-### Derived personal map
+### PersonalMap
 
-長期的に育つユーザーの地図であり、1件以上の探索セッションを集約する。
+1件以上のExplorationSessionから育つ長期的な個人地図。
 
-- セッション境界を保持したlocal 2D track segments
-- segments内のgaps
-- 全体のbounds、距離、時間
-- 共通frameへ変換したmarkers
-- optional explored corridor / topology
+- session境界を維持したtrack segments
+- gaps
+- common frameへ変換したmarkers
+- bounds、distance、duration
+- optional coverage / topology
 
-セッション間を、実際に移動した証拠がない直線で接続しない。派生地図は所属セッションのraw observationsから再構築できる。
+セッション間を、移動証拠なしに直線で接続しない。PersonalMapは所属sessionのraw observationsから再生成できる。
 
 ## Coordinate frames
 
-マップ表示は常にローカルメートル座標へ正規化する。
+表示はローカルメートル座標へ正規化する。
 
-- 単一GNSS探索: 最初の受理済み座標を原点に投影
-- 複数GNSS探索: 地理座標を介して個人地図の共通原点へ再投影
-- GPSなし探索: 開始地点を `(0, 0)` とする
-- 複数local探索: 同じ明示的frameまたはanchor transformがある場合だけ統合
-- hybrid: 明示的なanchor transformでフレームを接続
+- single GNSS session: 最初のaccepted座標を原点に投影
+- multiple GNSS sessions: geographic positionを介してPersonalMapの共通原点へ再投影
+- GPS-denied session: startを`(0, 0)`とする
+- multiple local sessions: 同じ明示frameまたはanchor transformがある場合だけ統合
+- hybrid: 明示anchorでframeを接続
 
-これにより、既存地図や緯度経度がなくても同じレンダラーを使用できる。
-
-## PositionProvider port
-
-端末APIは次の責務だけを持つ。
-
-```ts
-interface TrackingProvider {
-  id: string;
-  coordinateKind: "geographic" | "local";
-  start(mode: "background" | "foreground"): Promise<void>;
-  stop(): Promise<void>;
-  status(): Promise<TrackingRuntimeStatus>;
-}
-```
-
-providerは地図を描かない。位置サンプルを記録するだけにする。
+地理座標とlocal座標を推測だけで統合しない。
 
 ## Background task and persistence
 
-バックグラウンドタスクはReact UI状態に依存しない。
+バックグラウンド処理はReact UI stateに依存しない。
 
 ```text
-OS location callback
-  → active exploration idをSQLiteから取得
-  → raw sampleを追加
-  → UI復帰時にセッションの全サンプルをmapping-coreへreplay
-  → 同じ個人地図のセッションをsegmentとして集約
-  → derived personal mapを描画
+OS callback
+  → active explorationをrepositoryから解決
+  → raw sampleを追記
+  → engineがcore replayを実行
+  → PersonalMap snapshotとeventsを公開
+  → app復帰時にqueryして描画
 ```
 
-クラッシュやプロセス再生成に強くし、UIとバックグラウンド処理の二重状態を避ける。
+SQLiteはraw recordsを正本として保存する。derived snapshotをcacheする場合も再生成可能にする。
 
-## Extension boundary
+## Game-initiated corrections
 
-ゲームやテーマは `MappingExtension` として扱う。
+ゲームが「ここは入口では？」などを提示する場合、直接core evidenceへ追加しない。
 
-```ts
-interface MappingExtension {
-  id: string;
-  onEvent(event: MappingEvent, map: Readonly<MapSnapshot>): DerivedOverlay[];
-}
+```text
+game inference / quest suggestion
+  → optional overlay
+  → user confirmation
+  → app shell converts to engine command
+  → core evidence + event
 ```
 
-禁止事項:
-
-- raw samplesを変更する
-- accepted / rejected判定をゲーム都合で変える
-- コアの探索地図を実績状態に依存させる
-- ゲーム拡張が存在しないと記録できない設計
+これにより、ゲーム演出とユーザーが確認した地図証拠を区別する。
 
 ## Privacy and data ownership
 
-MVPはlocal-firstとし、アカウントやクラウドを要求しない。位置履歴は高感度データなので、同期を追加する場合は暗号化、明示的な送信、削除、エクスポートを先に設計する。
+MVPはlocal-firstとし、アカウントやクラウドを要求しない。game stateもcanonical location historyと分離する。同期、共有、ランキング、分析を追加する前に、明示的送信、削除、export、保持期間、暗号化、漏えい影響を設計する。

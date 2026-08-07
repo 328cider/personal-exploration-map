@@ -7,9 +7,15 @@ on:
       - "AGENTS.md"
       - "CURRENT_DIRECTION.md"
       - "docs/**"
+      - "packages/mapping-core/**"
+      - "packages/mapping-engine/**"
+      - "packages/experience-sdk/**"
+      - "apps/game-*/**"
+      - "package.json"
       - ".github/ISSUE_TEMPLATE/**"
       - ".github/pull_request_template.md"
       - "scripts/check-product-governance.mjs"
+      - "scripts/check-architecture-boundaries.mjs"
       - ".github/workflows/product-governance.yml"
   push:
     branches: [main]
@@ -18,9 +24,15 @@ on:
       - "AGENTS.md"
       - "CURRENT_DIRECTION.md"
       - "docs/**"
+      - "packages/mapping-core/**"
+      - "packages/mapping-engine/**"
+      - "packages/experience-sdk/**"
+      - "apps/game-*/**"
+      - "package.json"
       - ".github/ISSUE_TEMPLATE/**"
       - ".github/pull_request_template.md"
       - "scripts/check-product-governance.mjs"
+      - "scripts/check-architecture-boundaries.mjs"
       - ".github/workflows/product-governance.yml"
 
 permissions:
@@ -47,3 +59,6 @@ jobs:
 
       - name: Check product governance
         run: node scripts/check-product-governance.mjs
+
+      - name: Check architecture boundaries
+        run: node scripts/check-architecture-boundaries.mjs
