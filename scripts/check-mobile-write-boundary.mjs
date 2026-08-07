@@ -57,6 +57,7 @@ const requiredAnchors = new Map([
     [
       "createMappingEngine",
       "sqliteMappingRepository",
+      "createPersonalMapWithFirstExploration",
       "ingestPositionSamples",
       "startExploration",
       "addMarker",
@@ -131,6 +132,17 @@ for (const forbidden of [
   }
 }
 
+const mobileRuntime = requireFile(
+  "apps/mobile/src/mapping/mobileMappingRuntime.ts",
+)
+  ? read("apps/mobile/src/mapping/mobileMappingRuntime.ts")
+  : "";
+if (!mobileRuntime.includes("createPersonalMapWithFirstExploration")) {
+  failures.push(
+    "New mobile maps must use the engine first-exploration use case so provider failures cannot leave empty PersonalMaps.",
+  );
+}
+
 const backgroundTask = requireFile(
   "apps/mobile/src/tracking/backgroundLocationTask.ts",
 )
@@ -161,6 +173,8 @@ const canonicalSqlPatterns = [
   /INSERT\s+(?:OR\s+IGNORE\s+)?INTO\s+position_samples/iu,
   /INSERT\s+(?:OR\s+IGNORE\s+)?INTO\s+markers/iu,
   /UPDATE\s+explorations\s+SET\s+status/iu,
+  /DELETE\s+FROM\s+personal_maps/iu,
+  /DELETE\s+FROM\s+explorations/iu,
 ];
 for (const file of collectSourceFiles("apps/mobile/src")) {
   const content = read(file);
