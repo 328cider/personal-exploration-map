@@ -1,0 +1,33 @@
+name: renderer-lockfile
+
+on:
+  push:
+    branches: [agent/svg-renderer]
+    paths:
+      - "apps/mobile/package.json"
+      - ".github/workflows/renderer-lockfile.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: Resolve the Expo-compatible SVG dependency
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Verify the generated lockfile with npm ci
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify the resolved renderer version
+        run: npm ls react-native-svg --workspace @exploration-map/mobile --depth=0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: renderer-package-lock
+          path: package-lock.json
+          if-no-files-found: error
+          retention-days: 1
