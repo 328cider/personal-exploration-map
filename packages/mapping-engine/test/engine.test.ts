@@ -10,6 +10,7 @@ import {
   type PersonalMapListItem,
   type StoredExploration,
   type StoredPersonalMap,
+  type TrackingCoordinateKind,
   type TrackingProviderPort,
   type TrackingRuntimeStatus,
 } from "../src/index.ts";
@@ -212,11 +213,15 @@ class InMemoryRepository
 }
 
 class FakeTrackingProvider implements TrackingProviderPort {
-  readonly id = "gnss";
   readonly starts: string[] = [];
   readonly stops: string[] = [];
   failStart = false;
   private runningExplorationId: string | null = null;
+
+  constructor(
+    readonly id = "gnss",
+    readonly coordinateKind: TrackingCoordinateKind = "geographic",
+  ) {}
 
   async start(input: {
     readonly personalMapId: string;
@@ -267,6 +272,21 @@ function geographicSample(
     position: { kind: "geographic", latitude, longitude },
     horizontalAccuracyMeters: 5,
     confidence: 0.95,
+  };
+}
+
+function localSample(
+  id: string,
+  recordedAtMs: number,
+  xMeters: number,
+  yMeters: number,
+): RawPositionSample {
+  return {
+    id,
+    recordedAtMs,
+    source: "simulation",
+    position: { kind: "local", xMeters, yMeters },
+    confidence: 1,
   };
 }
 
@@ -406,4 +426,155 @@ test("a provider start failure compensates the persisted exploration record", as
   assert.deepEqual(events, []);
   const map = await engine.getPersonalMap({ personalMapId });
   assert.equal(map?.stats.explorationCount, 0);
+});
+
+test("provider declarations reject invalid local-frame arguments before side effects", async () => {
+  const repository = new InMemoryRepository();
+  const geographic = new FakeTrackingProvider("gnss", "geographic");
+  const local = new FakeTrackingProvider("pdr", "local");
+  const engine = createMappingEngine({
+    repository,
+    trackingProviders: [geographic, local],
+    idFactory: deterministicIdFactory(),
+  });
+  const { personalMapId } = await engine.createPersonalMap({
+    name: "Empty map",
+    createdAtMs: 1_000,
+  });
+
+  await assert.rejects(
+    engine.startExploration({
+      personalMapId,
+      name: "Local without frame",
+      startedAtMs: 2_000,
+      trackingProviderId: local.id,
+    }),
+    /requires a non-blank localFrameLabel/u,
+  );
+  await assert.rejects(
+    engine.startExploration({
+      personalMapId,
+      name: "Geographic with local frame",
+      startedAtMs: 3_000,
+      trackingProviderId: geographic.id,
+      localFrameLabel: "not-allowed",
+    }),
+    /must not receive a localFrameLabel/u,
+  );
+
+  assert.equal(repository.explorations.size, 0);
+  assert.deepEqual(geographic.starts, []);
+  assert.deepEqual(local.starts, []);
+});
+
+test("the engine prevents geographic and local PersonalMap frames from being mixed", async () => {
+  const repository = new InMemoryRepository();
+  const geographic = new FakeTrackingProvider("gnss", "geographic");
+  const local = new FakeTrackingProvider("pdr", "local");
+  const engine = createMappingEngine({
+    repository,
+    trackingProviders: [geographic, local],
+    idFactory: deterministicIdFactory(),
+  });
+
+  const { personalMapId: geographicMapId } = await engine.createPersonalMap({
+    name: "Geographic map",
+    createdAtMs: 1_000,
+  });
+  const geographicExploration = await engine.startExploration({
+    personalMapId: geographicMapId,
+    name: "GNSS walk",
+    startedAtMs: 2_000,
+    trackingProviderId: geographic.id,
+  });
+  await engine.ingestPositionSamples({
+    personalMapId: geographicMapId,
+    explorationId: geographicExploration.explorationId,
+    samples: [geographicSample("geo-1", 2_500, 35, 139)],
+  });
+  await engine.endExploration({
+    personalMapId: geographicMapId,
+    explorationId: geographicExploration.explorationId,
+    endedAtMs: 3_000,
+  });
+
+  const explorationCountBeforeLocalRejection = repository.explorations.size;
+  await assert.rejects(
+    engine.startExploration({
+      personalMapId: geographicMapId,
+      name: "Unanchored local continuation",
+      startedAtMs: 4_000,
+      trackingProviderId: local.id,
+      localFrameLabel: "building-a",
+    }),
+    /cannot extend geographic PersonalMap/u,
+  );
+  assert.equal(
+    repository.explorations.size,
+    explorationCountBeforeLocalRejection,
+  );
+  assert.deepEqual(local.starts, []);
+
+  const { personalMapId: localMapId } = await engine.createPersonalMap({
+    name: "Local map",
+    createdAtMs: 5_000,
+  });
+  const localExploration = await engine.startExploration({
+    personalMapId: localMapId,
+    name: "PDR walk",
+    startedAtMs: 6_000,
+    trackingProviderId: local.id,
+    localFrameLabel: "building-a",
+  });
+  await engine.ingestPositionSamples({
+    personalMapId: localMapId,
+    explorationId: localExploration.explorationId,
+    samples: [localSample("local-1", 6_500, 0, 0)],
+  });
+  await engine.endExploration({
+    personalMapId: localMapId,
+    explorationId: localExploration.explorationId,
+    endedAtMs: 7_000,
+  });
+
+  const geographicStartsBeforeRejection = geographic.starts.length;
+  const explorationCountBeforeGeographicRejection = repository.explorations.size;
+  await assert.rejects(
+    engine.startExploration({
+      personalMapId: localMapId,
+      name: "Unanchored GNSS continuation",
+      startedAtMs: 8_000,
+      trackingProviderId: geographic.id,
+    }),
+    /cannot extend local PersonalMap/u,
+  );
+  assert.equal(geographic.starts.length, geographicStartsBeforeRejection);
+  assert.equal(
+    repository.explorations.size,
+    explorationCountBeforeGeographicRejection,
+  );
+
+  await assert.rejects(
+    engine.startExploration({
+      personalMapId: localMapId,
+      name: "Wrong local frame",
+      startedAtMs: 9_000,
+      trackingProviderId: local.id,
+      localFrameLabel: "building-b",
+    }),
+    /does not match PersonalMap frame building-a/u,
+  );
+
+  const matching = await engine.startExploration({
+    personalMapId: localMapId,
+    name: "Matching local continuation",
+    startedAtMs: 10_000,
+    trackingProviderId: local.id,
+    localFrameLabel: " building-a ",
+  });
+  assert.equal(
+    repository.explorations.get(matching.explorationId)?.record.localFrameLabel,
+    "building-a",
+  );
+  assert.equal(local.starts.length, 2);
 });
