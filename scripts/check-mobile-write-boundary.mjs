@@ -54,6 +54,7 @@ const requiredAnchors = new Map([
     [
       "createMappingEngine",
       "sqliteMappingRepository",
+      "createPersonalMapWithFirstExploration",
       "ingestPositionSamples",
       "startExploration",
       "addMarker",
@@ -101,6 +102,21 @@ for (const forbidden of [
   }
 }
 
+const mobileRuntime = requireFile(
+  "apps/mobile/src/mapping/mobileMappingRuntime.ts",
+)
+  ? read("apps/mobile/src/mapping/mobileMappingRuntime.ts")
+  : "";
+if (
+  /startNewPersonalMapExploration[\s\S]*?createPersonalMap\s*\(/u.test(
+    mobileRuntime,
+  )
+) {
+  failures.push(
+    "New-map flow must use createPersonalMapWithFirstExploration rather than separate create/start commands.",
+  );
+}
+
 const backgroundTask = requireFile(
   "apps/mobile/src/tracking/backgroundLocationTask.ts",
 )
@@ -117,7 +133,7 @@ const readRepository = requireFile(
 )
   ? read("apps/mobile/src/storage/explorationRepository.ts")
   : "";
-for (const token of [".runAsync(", ".execAsync(", "withExclusiveTransactionAsync"] ) {
+for (const token of [".runAsync(", ".execAsync(", "withExclusiveTransactionAsync"]) {
   if (readRepository.includes(token)) {
     failures.push(
       `Read-only explorationRepository contains a write-capable SQLite call: ${token}`,
