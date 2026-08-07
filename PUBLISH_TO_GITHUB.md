@@ -2,10 +2,16 @@
 
 このディレクトリはローカルGitリポジトリとして初期化・コミット済みである。
 
-GitHub CLIを認証したPCで、リポジトリ直下から次を実行する。
+GitHub CLIを認証したWindows PCで、リポジトリ直下から用意済みスクリプトを実行する。
 
 ```powershell
 gh auth login
+.\scripts\publish-github.ps1
+```
+
+スクリプトを使わない場合:
+
+```powershell
 gh repo create 328cider/personal-exploration-map --private --source . --remote origin --push
 ```
 
