@@ -56,6 +56,8 @@ GPL-family codeはproduct pathへコピー・リンクせず、公開仕様、�
 
 場所カテゴリは製品モードにしない。試験条件の説明としてのみ記録する。
 
+各runは [`templates/background-gnss-run.md`](templates/background-gnss-run.md) を複製して記録する。正確な住所や識別可能な地図画像をpublic Issueへ貼らない。
+
 ## Sampling matrix
 
 最初から唯一のsampling設定を正解とみなさない。
@@ -69,16 +71,45 @@ GPL-family codeはproduct pathへコピー・リンクせず、公開仕様、�
 
 各設定で、欠落・経路認識性・batteryを比較する。最適化でraw callbackを捨てず、platform callbackとrepository persistenceの両時刻を診断できるようにする。
 
+## Implemented instrumentation
+
+実機run前に、次を端末内へ保存・再集計できるようにする。
+
+### Canonical evidence
+
+- raw `position_samples`
+- confirmed markers
+- ExplorationSession start / end / tracking provider
+- mapping-core replayによるaccepted / rejectedと理由
+
+### Non-canonical operational evidence
+
+`tracking_diagnostic_events`へ、地図の正本とは別に保存する。
+
+- provider start requested / started / failed
+- provider stop requested / stopped / failed
+- foreground / background callback received
+- persisted / duplicate / accepted / rejected callback counts
+- callback failureとmessage
+- AppState foreground / background transition
+- process restart後のsession recovery
+- marker input completed / cancelledと中断時間
+
+診断eventが保存できなくても、raw位置の保存やtrackingを失敗させない。Reviewの開発用診断画面はraw observationsをmapping-coreでreplayして採否を再計算し、診断eventはdeliveryとlifecycleの説明にだけ使う。
+
+電池残量はM0ではrun templateへ開始・終了時に手動記録する。sampling behaviorが分かる前に新しいbattery dependencyを導入しない。
+
 ## Metrics
 
 ### Recording continuity
 
-- callback gapの最大・p50・p95・p99
-- 30秒 / 60秒 / 120秒超のgap数
+- sample gapの最大・p50・p95
+- 30秒 / 60秒 / 120秒以上のgap数
 - raw callback batch size
-- OS callback数とpersisted unique sample数
+- callback受信数とpersisted unique sample数
 - duplicate callback数
-- recording stateとplatform runtimeの不一致時間
+- recording stateとplatform runtimeの不一致
+- p99等の追加統計はraw timestampからoffline再計算可能
 
 ### Map quality
 
@@ -163,3 +194,5 @@ GPL-family codeはproduct pathへコピー・リンクせず、公開仕様、�
 - derived map screenshot
 - user observation
 - Go / Narrow / Stopへの影響
+
+実測値はrun templateへ記録し、Issue #3には個人位置を含まない要約と判断だけをコメントする。
