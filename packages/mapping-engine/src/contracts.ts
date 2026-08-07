@@ -8,7 +8,7 @@ import type {
   ReplayExplorationInput,
 } from "@exploration-map/mapping-core";
 
-export const MAPPING_ENGINE_API_VERSION = "3" as const;
+export const MAPPING_ENGINE_API_VERSION = "4" as const;
 
 export interface CreatePersonalMapCommand {
   readonly name: string;
@@ -21,6 +21,13 @@ export interface StartExplorationCommand {
   readonly name: string;
   readonly startedAtMs: number;
   readonly trackingProviderId: string;
+  /**
+   * Stable identity of a local coordinate frame.
+   *
+   * Required for local providers and forbidden for geographic providers. Two
+   * local explorations may share a PersonalMap only when this label matches,
+   * until an explicit anchor-transform model is introduced.
+   */
   readonly localFrameLabel?: string;
   readonly requestedId?: string;
 }
@@ -190,12 +197,19 @@ export interface TrackingRuntimeStatus {
   readonly explorationId: string | null;
 }
 
+export type TrackingCoordinateKind = "geographic" | "local";
+
 /**
  * Platform boundary for GNSS, PDR, replay, or manual tracking providers.
  * A provider supplies observations; it never decides map truth or draws UI.
+ *
+ * `coordinateKind` is declarative capability metadata used by the engine before
+ * any repository write or platform side effect. It is not a request by the
+ * provider to reinterpret observations.
  */
 export interface TrackingProviderPort {
   readonly id: string;
+  readonly coordinateKind: TrackingCoordinateKind;
 
   start(input: {
     readonly personalMapId: string;
