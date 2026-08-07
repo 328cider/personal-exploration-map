@@ -6,7 +6,7 @@
 
 ## 現在のマイルストーン
 
-**M0: Passive Mapping Vertical Slice — 計測可能なAndroid実機検証**
+**M0: Passive Mapping Vertical Slice — Android実機での成立性判定**
 
 次の体験を、バックグラウンドGNSSが利用できるAndroid実機で成立させる。
 
@@ -27,12 +27,13 @@
 - `PRODUCT_CONSTITUTION.md`を恒久的な正本として運用
 - Issue / PRテンプレート、AGENTS、CIでPassive-first UX、map truth、canonical write、OSS再利用、game境界を確認
 - `CURRENT_DIRECTION.md`は憲章を上書きできない短期文書として分離
+- ADR番号の重複とfilename / H1不一致をproduct-governance CIで拒否
 
 ### Mapping architecture
 
 - `mapping-core`: raw evidence、quality、frame、ExplorationSession、PersonalMap aggregate
 - `mapping-engine`: canonical command / queryを実行するheadless application boundary
-- `sqlite-adapter`: DB v1をPersonalMap / ExplorationSessionへ無損失移行し、raw evidenceからreplay
+- `sqlite-adapter`: PersonalMap / ExplorationSessionを保存し、raw evidenceからreplay
 - platform adapters: foreground / background GNSSをengineへ接続
 - renderer: PersonalMapSnapshotをread-only表示
 - `experience-sdk`: game state、overlay、cueだけを生成するread-only境界
@@ -53,19 +54,35 @@
 - PersonalMapとのframe互換性を、DB writeとprovider startより前にmapping-engineで検査
 - geographic / local、異なるlocal frameを暗黙混在させない
 - mobile側の確認はUX補助、engine側が最終防衛線
+- 新規PersonalMapと初回ExplorationSessionを1 use caseで作成
+- 初回provider開始失敗時は、唯一の空sessionである場合だけprovisional PersonalMapを補償削除
+- raw evidenceまたは別sessionが存在する場合は自動削除しない
 
-### Build / OSS reuse
+### Reproducible Android build
 
-- Expo SDK 57のlockfile、Expo Doctor、mobile typecheck、Android development APK buildをIssue #2で再現可能にした
+- Node `22.23.2`を`.nvmrc`へ固定
+- npm `10.9.8`と`package-lock.json`を正本化
+- Expo SDK 57が要求するReact Native `0.86.2`へ整合
+- 通常CIは`npm ci`でcommitted dependency graphを再現
+- `expo install --check`、Expo Doctor、mobile TypeScriptが成功
+- Expo Android prebuildが成功
+- GitHub ActionsでGradle `:app:assembleDebug`とdebug APK artifact生成が成功
+- Windows / Android SDK / adb / install / Metro / smoke test手順を`docs/ANDROID_DEVELOPMENT.md`へ記録
+- 重いnative buildはmanual workflowに限定し、通常PRのActions消費を抑制
+
+build成功は、screen-off callback、電池、権限、OEM差を証明しない。実機挙動はIssue #3で別に判定する。
+
+### OSS reuse
+
 - 部品別のBuild / Adopt / Benchmarkとlicenseを`docs/OSS_REUSE_AUDIT.md`へ記録
 - 局所投影の推奨範囲と反日付変更線処理をテスト化
 - renderer、簡略化、export、PDRは既存OSS・標準を比較してから実装
 
 ### Tracking diagnostics
 
-PR #27でIssue #3の計測基盤をmainへ反映済み。
+Issue #3の計測基盤はmainへ反映済み。
 
-- DB v3の`tracking_diagnostic_events`
+- DBの`tracking_diagnostic_events`
 - provider start / stop requested / success / failure
 - foreground / background callback received / persisted / failed
 - callback batch size、duplicate、accepted / rejected counts
@@ -82,10 +99,13 @@ diagnostic eventはcanonical map truthではない。best-effort queueで保存�
 
 build・計測コード・静的検査は成立しているが、次は実端末で未検証。
 
+- development APKの実端末installと起動
 - foreground / background権限の実際の導線
+- foreground-service notification
 - 画面OFF・ポケット内で30〜60分記録が続くこと
 - OS・端末メーカーによる停止、復帰、通知挙動
 - 欠落率、位置精度、異常ジャンプ、電池消費
+- provider開始失敗後に空PersonalMapが残らないこと
 - 発見入力が探索を中断しすぎないこと
 - 白紙のPersonalMapが通常のGPSログ以上の価値を持つこと
 
@@ -93,14 +113,15 @@ build・計測コード・静的検査は成立しているが、次は実端末
 
 ## 次の順序
 
-1. **Issue #3**: development APKで30〜60分のforeground / background比較を行う
-2. **Issue #3**: notification復帰、process recreation、permission変更、battery saver、OEM差を追加測定する
-3. **Issue #17**: 初回tracking開始失敗時に空PersonalMapを残さないcanonical compensationを実装する
-4. **Issue #4**: 10件の実探索でPassive-first UXと「育つ白紙地図」の価値をGo / Narrow / Stop判定する
-5. **Issue #19**: `react-native-svg` rendererを実機評価・移行する
-6. **Issue #20 / #22**: 簡略化OSS比較とGPX / GeoJSON / lossless bundleを実装する
-7. M0の価値を確認した後、**Issue #5**でポケット内PDRをGo / Narrow / Stop判定する
-8. PDR判定後にGPSなし探索とanchor transformの製品統合範囲を決める
+1. **Issue #3 / smoke**: debug APKをAndroid端末へinstallし、起動、権限、notification、数分のscreen-off記録、marker、終了、再起動を確認
+2. **Issue #3 / baseline**: 30分以上のforeground・画面ON runを記録
+3. **Issue #3 / core test**: 同等ルートでbackground・画面OFF・ポケットrunを記録し、gap、accuracy、accepted/rejected、batteryを比較
+4. **Issue #3 / resilience**: notification復帰、process recreation、permission変更、battery saver、recents dismissal、OEM差を追加測定
+5. **Issue #4**: 10件の実探索でPassive-first UXと「育つ白紙地図」の価値をGo / Narrow / Stop判定
+6. **Issue #19**: `react-native-svg` rendererを実機評価・移行
+7. **Issue #20 / #22**: 簡略化OSS比較とGPX / GeoJSON / lossless bundleを実装
+8. M0の価値を確認した後、**Issue #5**でポケット内PDRをGo / Narrow / Stop判定
+9. PDR判定後にGPSなし探索とanchor transformの製品統合範囲を決める
 
 ## 今はやらないこと
 

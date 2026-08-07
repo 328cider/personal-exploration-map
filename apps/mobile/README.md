@@ -14,30 +14,64 @@ Expo / React NativeによるM0縦切りであり、headless mapping capability�
 
 - map truthとaccepted / rejected規則
 - PersonalMap / ExplorationSessionのdomain invariant
+- canonical storage transaction
 - game progression、実績、Fogのルール
 - GNSS / PDRのアルゴリズムそのもの
 
-現状の縦切りにはSQLite repositoryとmapping-coreを直接組み合わせる箇所があります。Issue #1のPersonalMap永続化と同時に`mapping-engine` facadeへ段階的に移行します。将来のgame appは同じengineを呼びますが、core mutationを直接組み立てません。
+foreground UIとbackground TaskManager callbackは、どちらも`mobileMappingRuntime`から同じ`mapping-engine` commandへ位置観測を渡します。UIやbackground taskがcanonical mapping tablesへ直接書き込むことは禁止し、CIで検査しています。
 
-## 開発ビルド
+## Development build
 
-バックグラウンド位置記録はExpo Goではなくdevelopment buildで検証します。
+バックグラウンド位置記録はExpo Goではなく、app固有のdevelopment buildで検証します。repository rootで実行します。
 
 ```bash
-npm install
+npm ci
+npm run mobile:check
 npm run mobile:android
 ```
 
-Android実機では、位置権限、継続通知、画面OFF、アプリ復帰、OSによる停止を必ず確認してください。
+Windows、Android SDK、USB端末、GitHub Actions APKの詳細は [`../../docs/ANDROID_DEVELOPMENT.md`](../../docs/ANDROID_DEVELOPMENT.md) を参照してください。
 
-## 画面フロー
+Android実機では、次をbuild成功と分けて確認します。
+
+- foreground / background位置権限
+- foreground-service notification
+- 画面OFF・ポケット内のcallback継続
+- notificationからの復帰
+- process recreation後のsession recovery
+- OEM battery restriction
+- raw / accepted / rejected、gap、accuracy、battery
+
+## Screen flow
 
 ```text
-Home → Permission rationale → Recording → Quick marker → Review
+PersonalMap Home
+  → Permission rationale
+  → Recording
+  → Optional quick marker
+  → End
+  → PersonalMap Review + development diagnostics
+  → Continue the same PersonalMap
 ```
 
-記録中画面にライブ地図を常設していません。現実空間への注意を奪わず、必要な時だけマーカー操作を行うためです。
+記録中画面にライブ地図を常設していません。現実空間への注意を奪わず、必要な時だけmarker操作を行うためです。
 
-## GPSなし空間
+## Diagnostics
 
-`src/tracking/pdrPort.ts` は将来の技術検証用の境界だけを定義しています。精度を未検証のPDRを製品機能として偽装する実装はありません。
+Development Reviewでは、raw observationsをmapping-coreでreplayして次を表示します。
+
+- accepted / rejectedと理由
+- horizontal accuracy
+- sample gaps
+- callback received / persisted / duplicate / failed
+- provider lifecycle
+- app background / foreground / recovery
+- marker入力時間
+
+operational diagnosticsはmap truthではありません。診断保存失敗でraw位置記録を失敗させず、routeや接続を診断eventから生成しません。
+
+実機runは [`../../docs/experiments/templates/background-gnss-run.md`](../../docs/experiments/templates/background-gnss-run.md) に記録します。
+
+## GPS-denied spaces
+
+`src/tracking/pdrPort.ts`は将来の技術検証用の境界だけを定義しています。精度を未検証のPDRを製品機能として偽装する実装はありません。M0のGNSS価値を確認してから、既存研究baselineとGo / Narrow / Stop比較を行います。
