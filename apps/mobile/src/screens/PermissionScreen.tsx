@@ -1,4 +1,13 @@
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Alert,
+  Linking,
+  PermissionsAndroid,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 import { AppButton } from "../components/AppButton";
 import { palette, spacing } from "../theme";
@@ -11,6 +20,46 @@ interface PermissionScreenProps {
   readonly onBack: () => void;
 }
 
+async function ensureRecordingNotificationPermission(): Promise<boolean> {
+  if (Platform.OS !== "android") {
+    return true;
+  }
+
+  const androidVersion =
+    typeof Platform.Version === "number"
+      ? Platform.Version
+      : Number.parseInt(String(Platform.Version), 10);
+  if (!Number.isFinite(androidVersion) || androidVersion < 33) {
+    return true;
+  }
+
+  const permission = PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS;
+  if (await PermissionsAndroid.check(permission)) {
+    return true;
+  }
+
+  const result = await PermissionsAndroid.request(permission, {
+    title: "記録中の通知を表示します",
+    message:
+      "画面を消している間も探索が記録中だと確認できるよう、継続通知を表示します。",
+    buttonPositive: "許可",
+    buttonNegative: "今は許可しない",
+  });
+  if (result === PermissionsAndroid.RESULTS.GRANTED) {
+    return true;
+  }
+
+  Alert.alert(
+    "記録中の通知が必要です",
+    "ポケット記録では、記録が続いていることを確認できる通知を表示します。設定で通知を許可するか、画面を開いたままの簡易記録を使用してください。",
+    [
+      { text: "閉じる", style: "cancel" },
+      { text: "設定を開く", onPress: () => void Linking.openSettings() },
+    ],
+  );
+  return false;
+}
+
 export function PermissionScreen({
   loading,
   targetMapName,
@@ -18,6 +67,13 @@ export function PermissionScreen({
   onStartForeground,
   onBack,
 }: PermissionScreenProps) {
+  async function startPocketRecording() {
+    if (!(await ensureRecordingNotificationPermission())) {
+      return;
+    }
+    onStartBackground();
+  }
+
   return (
     <View style={styles.screen}>
       <ScrollView
@@ -92,9 +148,12 @@ export function PermissionScreen({
       </ScrollView>
 
       <View style={styles.primaryFooter}>
-        <AppButton loading={loading} onPress={onStartBackground}>
+        <AppButton loading={loading} onPress={() => void startPocketRecording()}>
           ポケット記録を許可して開始
         </AppButton>
+        <Text style={styles.notificationNote}>
+          記録中は、画面OFFでも状態を確認できる継続通知を表示します。
+        </Text>
       </View>
     </View>
   );
@@ -238,5 +297,12 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: palette.border,
     backgroundColor: palette.background,
+  },
+  notificationNote: {
+    color: palette.mutedInk,
+    fontSize: 10,
+    lineHeight: 15,
+    textAlign: "center",
+    marginTop: spacing.xs,
   },
 });
