@@ -6,6 +6,7 @@ import {
   type LoadedExploration,
   type MappingEntityKind,
   type MappingRepositoryPort,
+  type MappingRepositoryWriter,
   type PersonalMapListItem,
   type StoredExploration,
   type StoredPersonalMap,
@@ -25,11 +26,15 @@ interface StoredExplorationData {
   markers: MapMarker[];
 }
 
-class InMemoryRepository implements MappingRepositoryPort {
+class InMemoryRepository
+  implements MappingRepositoryPort, MappingRepositoryWriter
+{
   readonly maps = new Map<string, StoredPersonalMap>();
   readonly explorations = new Map<string, StoredExplorationData>();
 
-  async runInTransaction<T>(operation: () => Promise<T>): Promise<T> {
+  async runInTransaction<T>(
+    operation: (writer: MappingRepositoryWriter) => Promise<T>,
+  ): Promise<T> {
     const mapsBefore = new Map(
       [...this.maps].map(([id, record]) => [id, { ...record }]),
     );
@@ -45,7 +50,7 @@ class InMemoryRepository implements MappingRepositoryPort {
     );
 
     try {
-      return await operation();
+      return await operation(this);
     } catch (error) {
       this.maps.clear();
       for (const [id, record] of mapsBefore) {
