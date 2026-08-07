@@ -57,9 +57,9 @@ const requiredAnchors = new Map([
     [
       "地図の事実",
       "mapping-engine",
-      "Platform adapters",
-      "Renderer",
-      "Experience / game",
+      "adapter",
+      "renderer",
+      "experience/game",
       "decision tree",
       "再利用されそう",
     ],
@@ -171,17 +171,16 @@ for (const packagePath of [
 }
 
 for (const file of collectSourceFiles("packages/experience-sdk/src")) {
-  const lines = read(file).split(/\r?\n/u);
-  lines.forEach((line, index) => {
-    if (
-      line.includes("@exploration-map/mapping-core") &&
-      !line.trimStart().startsWith("import type")
-    ) {
-      failures.push(
-        `experience-sdk may import mapping-core only as types: ${file}:${index + 1}`,
-      );
-    }
-  });
+  const content = read(file);
+  const withoutTypeImports = content.replace(
+    /import\s+type[\s\S]*?from\s+["'][^"']+["'];?/gu,
+    "",
+  );
+  if (withoutTypeImports.includes("@exploration-map/mapping-core")) {
+    failures.push(
+      `experience-sdk may import mapping-core only as types: ${file}`,
+    );
+  }
 }
 
 const appsDirectory = resolve(root, "apps");
