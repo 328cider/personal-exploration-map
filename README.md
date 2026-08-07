@@ -41,16 +41,18 @@
 
 ## 開発中の最小プロダクト
 
-最初の縦切りは次の体験です。
+現在の縦切りは次の体験です。
 
-1. `探索を始める` を1回押す
+1. `新しい地図を探索する`を押す
 2. スマホをポケットにしまう
 3. 移動がバックグラウンドで記録される
-4. 必要なときだけ `発見を記録` する
-5. `探索を終了` すると、既存地図を使わない自分の経路地図が表示される
-6. 次回、同じPersonalMapの続きを探索する
+4. 必要なときだけ`発見を記録`する
+5. `探索を終了`すると、PersonalMapへ1つのExplorationSessionとして追加される
+6. Homeでは日付別ログではなくPersonalMapを一覧する
+7. Reviewでは複数sessionを偽接続せず別segmentとして表示する
+8. `この地図の続きを探索`から同じPersonalMapを育てる
 
-屋内の高精度自動マッピングは、製品完成を前提にせず、独立した技術検証にします。初回の実装はバックグラウンドGNSSを使える場所で縦切りを完成させ、GPSなしのポケット内測位は Go / Narrow / Stop 判定を経て追加します。
+屋内の高精度自動マッピングは、製品完成を前提にせず、独立した技術検証にします。最初にバックグラウンドGNSSを使える環境で価値を検証し、GPSなしのポケット内測位はGo / Narrow / Stop判定を経て追加します。
 
 ## リポジトリ構成
 
@@ -103,23 +105,52 @@ PersonalMap
 
 DBにはraw observationsと確認済みmarkerを保存し、PersonalMap snapshotはreplayして再生成します。旧DBの`Exploration = 地図1枚`データは、同じIDのPersonalMapへ無損失で昇格させます。
 
-## ローカル検証
+## 再現可能なローカル検証
 
-Node.js 22.13以上が必要です。mapping packagesとSQLite adapterのテストはmobile native buildなしで動きます。
+Node.jsは`.nvmrc`、dependency graphは`package-lock.json`を正本にします。repository rootで実行します。
 
 ```bash
-node scripts/check-product-governance.mjs
-node scripts/check-architecture-boundaries.mjs
-npm test
-npm run typecheck
+npm ci
+npm run check
+npm run typecheck:mobile
+npm run check:expo
 ```
 
-モバイルアプリは依存関係をインストールしてdevelopment buildを作ります。Expo Goではバックグラウンド位置記録を十分に検証できません。
+全体をまとめて確認する場合:
 
 ```bash
-npm install
+npm run mobile:check
+```
+
+通常のsetupでは`npm install`へ置き換えず、dependency変更を意図するPRだけがmanifestとlockfileを同時に更新します。
+
+## Android development build
+
+バックグラウンド位置記録はExpo Goではなく、app固有のdevelopment buildで検証します。
+
+```bash
+npm ci
+npm run mobile:check
 npm run mobile:android
 ```
+
+Windows、Android Studio、USB debugging、GitHub Actionsのdebug APK、Issue #3の実機runについては [`docs/ANDROID_DEVELOPMENT.md`](docs/ANDROID_DEVELOPMENT.md) を参照してください。
+
+GitHub Actionsの`android-development-build`は、committed lockfileからExpo prebuildとGradle `assembleDebug`を行い、debug APKを短期間のartifactとして保存します。build成功は、画面OFF・電池・OEM差まで保証しないため、実端末の判定は別途行います。
+
+## Tracking diagnostics
+
+Development buildのPersonalMap Reviewには、受動記録を判断するための端末内診断を表示します。
+
+- raw / accepted / rejectedと理由
+- horizontal accuracy
+- sample gaps
+- callback received / persisted / duplicate / failed
+- provider start / stop
+- app background / foreground / recovery
+- marker入力時間
+
+診断eventはmap truthではありません。採否と経路はraw observationsから再計算し、診断保存失敗でraw位置記録を止めません。実機runは [`docs/experiments/templates/background-gnss-run.md`](docs/experiments/templates/background-gnss-run.md) に記録します。
 
 ## 現在の到達点
 
@@ -127,12 +158,16 @@ npm run mobile:android
 - 位置ソースに依存しないmapping-coreを実装
 - ExplorationSessionと、複数sessionから育つPersonalMap aggregateを分離
 - canonical commandを実行するheadless mapping-engineを実装
+- 初回provider開始失敗時に、evidenceのないprovisional PersonalMapだけを安全に補償削除
 - repository transaction完了後だけread-only MappingEventを公開
-- DB v1からPersonalMap / ExplorationSessionを分離したv2への移行を実装
+- DB v1からPersonalMap / ExplorationSessionを分離したschemaへ無損失移行
 - 実SQLiteでraw保持、foreign-key、rollback、multi-session replayを検証
+- foreground / background / marker / end / demoのmobile writeをmapping-engineへ統一
+- HomeとReviewをPersonalMap-firstへ変更
+- 複数sessionを偽接続せず別segmentとして描画
+- frame互換性をprovider開始前にmapping-engineで強制
 - game contractをmapping-coreからread-only experience-sdkへ分離
-- 一回の軌跡を即時に地図化する処理、異常ジャンプ除外、投影、簡略化を実装
-- バックグラウンドGNSS、SQLite保存、クイックマーカー、白紙地図レビューのモバイル縦切りを実装
+- background GNSSの端末内diagnosticsとrun templateを実装
 - 屋内PDRは検証前提のportとして分離
 
 次の作業は [CURRENT_DIRECTION.md](CURRENT_DIRECTION.md) に集約します。ただし、恒久的な境界は [PRODUCT_CONSTITUTION.md](PRODUCT_CONSTITUTION.md) が優先します。
