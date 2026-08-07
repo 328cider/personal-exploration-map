@@ -17,7 +17,8 @@ flowchart LR
     Raw[Immutable raw observations]
     Filter[Quality assessment]
     Frame[Coordinate frame / projection]
-    Track[Derived track]
+    Track[Derived session track]
+    Aggregate[Personal map aggregate]
     Events[Mapping events]
   end
 
@@ -33,7 +34,7 @@ flowchart LR
   Manual --> Raw
   Replay --> Raw
   Raw --> Store
-  Raw --> Filter --> Frame --> Track --> Map
+  Raw --> Filter --> Frame --> Track --> Aggregate --> Map
   Marker --> Store
   Track --> Events --> Extension
 ```
@@ -53,23 +54,37 @@ flowchart LR
 
 異常値を削除しない。フィルタ規則を改善した時に再処理できるようにする。
 
+### Exploration session
+
+1回の記録開始から終了までを表す観測単位である。
+
+- raw observationsとその時系列
+- accepted / rejected判定
+- 1セッション内のderived track
+- セッション中に残したmarkers
+- 開始・終了時刻とtracking provider
+
 ### Derived personal map
 
-- local 2D track
-- track segments and gaps
-- bounds and distance
-- markers
+長期的に育つユーザーの地図であり、1件以上の探索セッションを集約する。
+
+- セッション境界を保持したlocal 2D track segments
+- segments内のgaps
+- 全体のbounds、距離、時間
+- 共通frameへ変換したmarkers
 - optional explored corridor / topology
 
-派生地図はraw observationsから再構築できる。
+セッション間を、実際に移動した証拠がない直線で接続しない。派生地図は所属セッションのraw observationsから再構築できる。
 
 ## Coordinate frames
 
 マップ表示は常にローカルメートル座標へ正規化する。
 
-- GNSS探索: 最初の受理済み座標を原点に投影
+- 単一GNSS探索: 最初の受理済み座標を原点に投影
+- 複数GNSS探索: 地理座標を介して個人地図の共通原点へ再投影
 - GPSなし探索: 開始地点を `(0, 0)` とする
-- 将来のhybrid: 明示的なanchor transformでフレームを接続
+- 複数local探索: 同じ明示的frameまたはanchor transformがある場合だけ統合
+- hybrid: 明示的なanchor transformでフレームを接続
 
 これにより、既存地図や緯度経度がなくても同じレンダラーを使用できる。
 
@@ -97,8 +112,9 @@ providerは地図を描かない。位置サンプルを記録するだけにす
 OS location callback
   → active exploration idをSQLiteから取得
   → raw sampleを追加
-  → UI復帰時に全サンプルをmapping-coreへreplay
-  → derived trackを描画
+  → UI復帰時にセッションの全サンプルをmapping-coreへreplay
+  → 同じ個人地図のセッションをsegmentとして集約
+  → derived personal mapを描画
 ```
 
 クラッシュやプロセス再生成に強くし、UIとバックグラウンド処理の二重状態を避ける。
