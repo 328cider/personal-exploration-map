@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$Repository = "328cider/personal-exploration-map",
     [ValidateSet("private", "public")]
