@@ -53,6 +53,7 @@ function idFactory(kind: MappingEntityKind): string {
 
 const simulationProvider: TrackingProviderPort = {
   id: SIMULATION_PROVIDER_ID,
+  coordinateKind: "local",
   async start() {
     // Demo and deterministic replay observations are explicitly ingested by
     // the caller; no OS tracking runtime is started.
