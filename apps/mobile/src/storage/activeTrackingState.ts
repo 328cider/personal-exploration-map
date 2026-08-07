@@ -11,6 +11,7 @@ export interface ActiveTrackingContext {
 }
 
 interface ExplorationContextRow {
+  readonly id: string;
   readonly personal_map_id: string;
   readonly tracking_provider_id: string;
 }
@@ -61,6 +62,36 @@ export async function setActiveTrackingContext(
   });
 }
 
+async function loadRecordingContext(
+  preferredExplorationId: string | null,
+): Promise<ActiveTrackingContext | null> {
+  const database = await getDatabase();
+  const row =
+    preferredExplorationId === null
+      ? await database.getFirstAsync<ExplorationContextRow>(
+          `SELECT id, personal_map_id, tracking_provider_id
+           FROM explorations
+           WHERE status = 'recording'
+           ORDER BY started_at DESC, id DESC
+           LIMIT 1`,
+        )
+      : await database.getFirstAsync<ExplorationContextRow>(
+          `SELECT id, personal_map_id, tracking_provider_id
+           FROM explorations
+           WHERE id = ? AND status = 'recording'`,
+          preferredExplorationId,
+        );
+
+  if (row === null) {
+    return null;
+  }
+  return {
+    personalMapId: row.personal_map_id,
+    explorationId: row.id,
+    providerId: row.tracking_provider_id,
+  };
+}
+
 export async function getActiveTrackingContext(): Promise<ActiveTrackingContext | null> {
   const [serialized, legacyExplorationId] = await Promise.all([
     getStateValue(ACTIVE_CONTEXT_KEY),
@@ -79,29 +110,26 @@ export async function getActiveTrackingContext(): Promise<ActiveTrackingContext 
     }
   }
 
-  const explorationId =
+  const preferredExplorationId =
     serializedContext?.explorationId ?? legacyExplorationId;
-  if (explorationId === null) {
-    return null;
+  const durable = await loadRecordingContext(preferredExplorationId);
+  if (durable === null) {
+    // A missing app_state can occur if the process dies after the canonical
+    // session transaction but before a platform provider stores its context.
+    // Recover the newest recording session rather than starting a second one.
+    const fallback =
+      preferredExplorationId === null
+        ? await loadRecordingContext(null)
+        : null;
+    if (fallback === null) {
+      if (serialized !== null || legacyExplorationId !== null) {
+        await clearActiveTrackingContext();
+      }
+      return null;
+    }
+    await setActiveTrackingContext(fallback);
+    return fallback;
   }
-
-  const database = await getDatabase();
-  const row = await database.getFirstAsync<ExplorationContextRow>(
-    `SELECT personal_map_id, tracking_provider_id
-     FROM explorations
-     WHERE id = ? AND status = 'recording'`,
-    explorationId,
-  );
-  if (row === null) {
-    await clearActiveTrackingContext(explorationId);
-    return null;
-  }
-
-  const durable: ActiveTrackingContext = {
-    personalMapId: row.personal_map_id,
-    explorationId,
-    providerId: row.tracking_provider_id,
-  };
 
   if (
     serializedContext?.personalMapId !== durable.personalMapId ||
@@ -119,9 +147,17 @@ export async function clearActiveTrackingContext(
   const database = await getDatabase();
   await database.withExclusiveTransactionAsync(async (transaction) => {
     if (expectedExplorationId !== undefined) {
-      const current = await transaction.getFirstAsync<{
-        readonly value: string | null;
-      }>("SELECT value FROM app_state WHERE key = ?", ACTIVE_CONTEXT_KEY);
+      const [current, legacy] = await Promise.all([
+        transaction.getFirstAsync<{ readonly value: string | null }>(
+          "SELECT value FROM app_state WHERE key = ?",
+          ACTIVE_CONTEXT_KEY,
+        ),
+        transaction.getFirstAsync<{ readonly value: string | null }>(
+          "SELECT value FROM app_state WHERE key = ?",
+          LEGACY_ACTIVE_EXPLORATION_KEY,
+        ),
+      ]);
+
       if (current?.value !== null && current?.value !== undefined) {
         try {
           const parsed: unknown = JSON.parse(current.value);
@@ -134,6 +170,12 @@ export async function clearActiveTrackingContext(
         } catch {
           // Invalid state should be cleared rather than preserved.
         }
+      } else if (
+        legacy?.value !== null &&
+        legacy?.value !== undefined &&
+        legacy.value !== expectedExplorationId
+      ) {
+        return;
       }
     }
 
