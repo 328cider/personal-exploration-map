@@ -143,6 +143,7 @@ jobs:
             --device "pixel"
       - name: Start headless Android emulator
         run: |
+          set -euo pipefail
           mkdir -p "$EVIDENCE_DIR"
           nohup "$ANDROID_HOME/emulator/emulator" \
             -avd "$AVD_NAME" \
@@ -155,14 +156,32 @@ jobs:
             -camera-back none \
             -camera-front none \
             > "$EVIDENCE_DIR/emulator.log" 2>&1 &
-          echo $! > "$EVIDENCE_DIR/emulator.pid"
+          emulator_pid=$!
+          echo "$emulator_pid" > "$EVIDENCE_DIR/emulator.pid"
 
-          adb wait-for-device
-          timeout 300 bash -c '
+          if ! timeout 180 adb wait-for-device; then
+            echo "Emulator did not expose an ADB device within 180 seconds." >&2
+            ps -ef | grep -E "emulator|qemu" | grep -v grep || true
+            cat "$EVIDENCE_DIR/emulator.log" || true
+            exit 1
+          fi
+
+          if ! timeout 300 bash -c '
             until [[ "$(adb shell getprop sys.boot_completed | tr -d "\r")" == "1" ]]; do
+              if ! kill -0 '"$emulator_pid"' 2>/dev/null; then
+                echo "Emulator process exited before boot completed." >&2
+                exit 1
+              fi
               sleep 2
             done
-          '
+          '; then
+            echo "Emulator did not complete Android boot within 300 seconds." >&2
+            adb devices -l || true
+            adb shell getprop || true
+            cat "$EVIDENCE_DIR/emulator.log" || true
+            exit 1
+          fi
+
           adb shell input keyevent 82 || true
           adb shell settings put global window_animation_scale 0
           adb shell settings put global transition_animation_scale 0
