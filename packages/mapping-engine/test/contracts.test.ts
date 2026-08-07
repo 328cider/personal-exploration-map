@@ -24,6 +24,7 @@ test("applications use explicit commands instead of mutable core sessions", asyn
     async ingestPositionSamples(command) {
       calls.push(`ingest:${command.samples.length}`);
       return {
+        persistedSampleCount: command.samples.length,
         acceptedSampleCount: command.samples.length,
         rejectedSampleCount: 0,
       };
@@ -77,7 +78,7 @@ test("applications use explicit commands instead of mutable core sessions", asyn
     endedAtMs: 4_000,
   });
 
-  assert.equal(MAPPING_ENGINE_API_VERSION, "1");
+  assert.equal(MAPPING_ENGINE_API_VERSION, "2");
   assert.deepEqual(calls, [
     "create-map:My map",
     "start:map-1",
