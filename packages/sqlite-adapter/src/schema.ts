@@ -3,7 +3,7 @@ import type {
   AsyncSqliteExecutor,
 } from "./database.ts";
 
-export const MAPPING_DATABASE_VERSION = 2;
+export const MAPPING_DATABASE_VERSION = 3;
 
 export const CREATE_LEGACY_V1_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS explorations (
@@ -146,6 +146,28 @@ export const MIGRATE_V1_TO_V2_SQL = `
   PRAGMA user_version = 2;
 `;
 
+export const MIGRATE_V2_TO_V3_SQL = `
+  CREATE TABLE tracking_diagnostic_events (
+    id TEXT PRIMARY KEY NOT NULL,
+    personal_map_id TEXT NOT NULL,
+    exploration_id TEXT NOT NULL,
+    provider_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    occurred_at INTEGER NOT NULL,
+    payload_json TEXT,
+    FOREIGN KEY (personal_map_id) REFERENCES personal_maps(id) ON DELETE CASCADE,
+    FOREIGN KEY (exploration_id) REFERENCES explorations(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX tracking_diagnostic_events_exploration_time
+    ON tracking_diagnostic_events(exploration_id, occurred_at, id);
+
+  CREATE INDEX tracking_diagnostic_events_kind_time
+    ON tracking_diagnostic_events(kind, occurred_at);
+
+  PRAGMA user_version = 3;
+`;
+
 interface UserVersionRow {
   readonly user_version: number;
 }
@@ -173,12 +195,23 @@ async function runExclusive(
   await database.withExclusiveTransactionAsync(operation);
 }
 
+async function assertForeignKeyIntegrity(
+  database: AsyncSqliteDatabase,
+): Promise<void> {
+  const violations = await database.getAllAsync<ForeignKeyViolation>(
+    "PRAGMA foreign_key_check",
+  );
+  if (violations.length > 0) {
+    throw new Error(
+      `Mapping database migration left ${violations.length} foreign-key violation(s).`,
+    );
+  }
+}
+
 /**
- * Migrates the canonical local database without discarding v1 explorations.
- *
- * Each legacy exploration becomes one PersonalMap with the same id. This keeps
- * existing UI references usable during the transition while allowing future
- * explorations to attach to the same long-lived map.
+ * Migrates the local-first mapping database without discarding canonical raw
+ * evidence. Operational diagnostics are added in v3 as a separate table and
+ * never become authoritative map data.
  */
 export async function migrateMappingDatabase(
   database: AsyncSqliteDatabase,
@@ -214,16 +247,16 @@ export async function migrateMappingDatabase(
     } finally {
       await database.execAsync("PRAGMA foreign_keys = ON;");
     }
-
-    const violations = await database.getAllAsync<ForeignKeyViolation>(
-      "PRAGMA foreign_key_check",
-    );
-    if (violations.length > 0) {
-      throw new Error(
-        `Mapping database migration left ${violations.length} foreign-key violation(s).`,
-      );
-    }
+    await assertForeignKeyIntegrity(database);
     version = 2;
+  }
+
+  if (version < 3) {
+    await runExclusive(database, async (transaction) => {
+      await transaction.execAsync(MIGRATE_V2_TO_V3_SQL);
+    });
+    await assertForeignKeyIntegrity(database);
+    version = 3;
   }
 
   if (version !== MAPPING_DATABASE_VERSION) {
