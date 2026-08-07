@@ -6,6 +6,9 @@ on:
       - "packages/mapping-core/**"
       - "packages/mapping-engine/**"
       - "packages/experience-sdk/**"
+      - "packages/sqlite-adapter/**"
+      - "apps/mobile/src/storage/database.ts"
+      - "apps/mobile/src/storage/sqliteMappingRepository.ts"
       - "package.json"
       - ".github/workflows/core.yml"
   push:
@@ -14,6 +17,9 @@ on:
       - "packages/mapping-core/**"
       - "packages/mapping-engine/**"
       - "packages/experience-sdk/**"
+      - "packages/sqlite-adapter/**"
+      - "apps/mobile/src/storage/database.ts"
+      - "apps/mobile/src/storage/sqliteMappingRepository.ts"
       - "package.json"
       - ".github/workflows/core.yml"
 
@@ -46,3 +52,4 @@ jobs:
           "$TSC" --noEmit -p packages/mapping-core/tsconfig.json
           "$TSC" --noEmit -p packages/mapping-engine/tsconfig.json
           "$TSC" --noEmit -p packages/experience-sdk/tsconfig.json
+          "$TSC" --noEmit -p packages/sqlite-adapter/tsconfig.json
