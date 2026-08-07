@@ -1,9 +1,14 @@
 import type * as Location from "expo-location";
-import type { MarkerCategory, RawPositionSample } from "@exploration-map/mapping-core";
+import type {
+  MarkerCategory,
+  PersonalMapSnapshot,
+  RawPositionSample,
+} from "@exploration-map/mapping-core";
 import {
   createMappingEngine,
   type MappingEngine,
   type MappingEntityKind,
+  type PersonalMapListItem,
   type TrackingProviderPort,
 } from "@exploration-map/mapping-engine";
 
@@ -83,6 +88,18 @@ export function getMobileMappingEngine(): MappingEngine {
   return ensureRuntime().engine;
 }
 
+export async function listMobilePersonalMaps(): Promise<
+  readonly PersonalMapListItem[]
+> {
+  return getMobileMappingEngine().listPersonalMaps();
+}
+
+export async function loadMobilePersonalMap(
+  personalMapId: string,
+): Promise<PersonalMapSnapshot | null> {
+  return getMobileMappingEngine().getPersonalMap({ personalMapId });
+}
+
 /**
  * Shared foreground/background observation entrypoint.
  *
@@ -119,16 +136,20 @@ function providerIdForMode(mode: MobileTrackingMode): string {
     : FOREGROUND_GNSS_PROVIDER_ID;
 }
 
-export async function startNewPersonalMapExploration(
-  name: string,
-  mode: MobileTrackingMode,
-): Promise<StartedExploration> {
+async function assertNoActiveExploration(): Promise<void> {
   const active = await getActiveTrackingContext();
   if (active !== null) {
     throw new Error(
       "別の探索が記録中です。終了してから新しい探索を始めてください。",
     );
   }
+}
+
+export async function startNewPersonalMapExploration(
+  name: string,
+  mode: MobileTrackingMode,
+): Promise<StartedExploration> {
+  await assertNoActiveExploration();
 
   const engine = getMobileMappingEngine();
   const createdAtMs = Date.now();
@@ -140,6 +161,33 @@ export async function startNewPersonalMapExploration(
     personalMapId,
     name,
     startedAtMs: createdAtMs,
+    trackingProviderId: providerIdForMode(mode),
+  });
+  return { personalMapId, explorationId };
+}
+
+export async function continuePersonalMapExploration(
+  personalMapId: string,
+  explorationName: string,
+  mode: MobileTrackingMode,
+): Promise<StartedExploration> {
+  await assertNoActiveExploration();
+
+  const engine = getMobileMappingEngine();
+  const existingMap = await engine.getPersonalMap({ personalMapId });
+  if (existingMap === null) {
+    throw new Error("続きを記録する個人地図が見つかりませんでした。");
+  }
+  if (existingMap.frame.kind === "local") {
+    throw new Error(
+      "この地図はGPSなしのローカル座標で作られています。明示的な接続方法が用意されるまで、GNSS探索を同じ地図へ追加できません。",
+    );
+  }
+
+  const { explorationId } = await engine.startExploration({
+    personalMapId,
+    name: explorationName,
+    startedAtMs: Date.now(),
     trackingProviderId: providerIdForMode(mode),
   });
   return { personalMapId, explorationId };
@@ -228,12 +276,7 @@ function demoSamples(
 }
 
 export async function createDemoPersonalMap(): Promise<StartedExploration> {
-  const active = await getActiveTrackingContext();
-  if (active !== null) {
-    throw new Error(
-      "記録中の探索を終了してからデモ地図を作成してください。",
-    );
-  }
+  await assertNoActiveExploration();
 
   const engine = getMobileMappingEngine();
   const startedAtMs = Date.now() - 22 * 60 * 1_000;

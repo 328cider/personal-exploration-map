@@ -1,9 +1,9 @@
 import { ScrollView, StyleSheet, Text, View } from "react-native";
-import type { MapSnapshot } from "@exploration-map/mapping-core";
+import type { PersonalMapSnapshot } from "@exploration-map/mapping-core";
+import type { PersonalMapListItem } from "@exploration-map/mapping-engine";
 
 import { AppButton } from "../components/AppButton";
 import { TrackCanvas } from "../components/TrackCanvas";
-import type { ExplorationSummary } from "../storage/explorationRepository";
 import { palette, spacing } from "../theme";
 import {
   formatDateTime,
@@ -12,14 +12,16 @@ import {
 } from "../utils/format";
 
 interface ReviewScreenProps {
-  readonly exploration: ExplorationSummary;
-  readonly snapshot: MapSnapshot;
+  readonly personalMap: PersonalMapListItem;
+  readonly snapshot: PersonalMapSnapshot;
+  readonly onContinue: () => void;
   readonly onHome: () => void;
 }
 
 export function ReviewScreen({
-  exploration,
+  personalMap,
   snapshot,
+  onContinue,
   onHome,
 }: ReviewScreenProps) {
   return (
@@ -27,9 +29,11 @@ export function ReviewScreen({
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      <Text style={styles.eyebrow}>YOUR MAP</Text>
-      <Text style={styles.title}>{exploration.name}</Text>
-      <Text style={styles.date}>{formatDateTime(exploration.startedAtMs)}</Text>
+      <Text style={styles.eyebrow}>YOUR PERSONAL MAP</Text>
+      <Text style={styles.title}>{personalMap.name}</Text>
+      <Text style={styles.date}>
+        最終更新 {formatDateTime(personalMap.updatedAtMs)}
+      </Text>
 
       <View style={styles.canvasWrapper}>
         <TrackCanvas snapshot={snapshot} />
@@ -38,11 +42,11 @@ export function ReviewScreen({
       <View style={styles.legend}>
         <View style={styles.legendItem}>
           <View style={styles.startLegend} />
-          <Text style={styles.legendText}>開始</Text>
+          <Text style={styles.legendText}>各探索の開始</Text>
         </View>
         <View style={styles.legendItem}>
           <View style={styles.endLegend} />
-          <Text style={styles.legendText}>終了</Text>
+          <Text style={styles.legendText}>各探索の終了</Text>
         </View>
         <View style={styles.legendItem}>
           <View style={styles.markerLegend} />
@@ -50,19 +54,23 @@ export function ReviewScreen({
         </View>
       </View>
 
+      <Text style={styles.segmentNote}>
+        探索ごとの経路は別々に保持し、実際に歩いていない区間を直線でつないでいません。
+      </Text>
+
       <View style={styles.metrics}>
         <View style={styles.metric}>
           <Text style={styles.metricValue}>
             {formatDistance(snapshot.stats.distanceMeters)}
           </Text>
-          <Text style={styles.metricLabel}>経路</Text>
+          <Text style={styles.metricLabel}>合計経路</Text>
         </View>
         <View style={styles.metricDivider} />
         <View style={styles.metric}>
           <Text style={styles.metricValue}>
-            {formatDuration(snapshot.stats.durationMs)}
+            {snapshot.stats.explorationCount}
           </Text>
-          <Text style={styles.metricLabel}>探索時間</Text>
+          <Text style={styles.metricLabel}>探索回数</Text>
         </View>
         <View style={styles.metricDivider} />
         <View style={styles.metric}>
@@ -75,6 +83,12 @@ export function ReviewScreen({
         <View style={styles.qualityHeader}>
           <Text style={styles.qualityTitle}>地図の根拠</Text>
           <Text style={styles.qualityRevision}>rev {snapshot.revision}</Text>
+        </View>
+        <View style={styles.qualityRow}>
+          <Text style={styles.qualityLabel}>合計探索時間</Text>
+          <Text style={styles.qualityValue}>
+            {formatDuration(snapshot.stats.durationMs)}
+          </Text>
         </View>
         <View style={styles.qualityRow}>
           <Text style={styles.qualityLabel}>生の位置サンプル</Text>
@@ -93,7 +107,7 @@ export function ReviewScreen({
           </Text>
         </View>
         <Text style={styles.qualityNote}>
-          除外した位置も削除せず保持しています。フィルタを改善した時に地図を再生成できます。
+          除外した位置も削除せず保持しています。フィルタを改善した時に、すべての探索から地図を再生成できます。
         </Text>
       </View>
 
@@ -116,7 +130,10 @@ export function ReviewScreen({
         </View>
       ) : null}
 
-      <AppButton onPress={onHome} style={styles.homeButton}>
+      <AppButton onPress={onContinue} style={styles.continueButton}>
+        この地図の続きを探索
+      </AppButton>
+      <AppButton onPress={onHome} style={styles.homeButton} variant="ghost">
         自分の地図一覧へ
       </AppButton>
     </ScrollView>
@@ -152,8 +169,9 @@ const styles = StyleSheet.create({
   },
   legend: {
     flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "center",
-    gap: spacing.lg,
+    gap: spacing.md,
     marginTop: spacing.sm,
   },
   legendItem: {
@@ -184,6 +202,14 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 5,
     backgroundColor: palette.marker,
+  },
+  segmentNote: {
+    color: palette.mutedInk,
+    fontSize: 11,
+    lineHeight: 17,
+    textAlign: "center",
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.md,
   },
   metrics: {
     flexDirection: "row",
@@ -303,7 +329,10 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: spacing.xs,
   },
-  homeButton: {
+  continueButton: {
     marginTop: spacing.xl,
+  },
+  homeButton: {
+    marginTop: spacing.sm,
   },
 });

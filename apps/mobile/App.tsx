@@ -9,13 +9,20 @@ import {
   Text,
   View,
 } from "react-native";
-import type { MapSnapshot, MarkerCategory } from "@exploration-map/mapping-core";
+import type {
+  MarkerCategory,
+  PersonalMapSnapshot,
+} from "@exploration-map/mapping-core";
+import type { PersonalMapListItem } from "@exploration-map/mapping-engine";
 
 import {
   addConfirmedMarker,
+  continuePersonalMapExploration,
   createDemoPersonalMap,
   endActiveExploration,
   getMobileTrackingStatus,
+  listMobilePersonalMaps,
+  loadMobilePersonalMap,
   startNewPersonalMapExploration,
   stopOrphanedMobileTracking,
   type StartedExploration,
@@ -30,8 +37,6 @@ import {
   getActiveExploration,
   getExplorationSummary,
   getLiveExplorationStats,
-  listExplorations,
-  loadExplorationMap,
   type ExplorationSummary,
   type LiveExplorationStats,
 } from "./src/storage/explorationRepository";
@@ -44,11 +49,19 @@ import type { MobileTrackingMode } from "./src/tracking/types";
 import { palette, spacing } from "./src/theme";
 import { defaultExplorationName } from "./src/utils/format";
 
+type ExplorationTarget =
+  | { readonly kind: "new" }
+  | {
+      readonly kind: "continue";
+      readonly personalMapId: string;
+      readonly mapName: string;
+    };
+
 type Screen =
   | { readonly kind: "home" }
-  | { readonly kind: "permissions" }
+  | { readonly kind: "permissions"; readonly target: ExplorationTarget }
   | ({ readonly kind: "recording" } & StartedExploration)
-  | { readonly kind: "review"; readonly explorationId: string };
+  | { readonly kind: "review"; readonly personalMapId: string };
 
 const EMPTY_LIVE_STATS: LiveExplorationStats = {
   rawSampleCount: 0,
@@ -62,21 +75,22 @@ export default function App() {
   const [initialized, setInitialized] = useState(false);
   const [busy, setBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [explorations, setExplorations] = useState<
-    readonly ExplorationSummary[]
+  const [personalMaps, setPersonalMaps] = useState<
+    readonly PersonalMapListItem[]
   >([]);
   const [activeExploration, setActiveExploration] =
     useState<ExplorationSummary | null>(null);
   const [liveStats, setLiveStats] =
     useState<LiveExplorationStats>(EMPTY_LIVE_STATS);
   const [runtimeRunning, setRuntimeRunning] = useState(false);
-  const [reviewExploration, setReviewExploration] =
-    useState<ExplorationSummary | null>(null);
-  const [reviewSnapshot, setReviewSnapshot] = useState<MapSnapshot | null>(null);
+  const [reviewPersonalMap, setReviewPersonalMap] =
+    useState<PersonalMapListItem | null>(null);
+  const [reviewSnapshot, setReviewSnapshot] =
+    useState<PersonalMapSnapshot | null>(null);
 
   const refreshHome = useCallback(async () => {
-    const items = await listExplorations();
-    setExplorations(items);
+    const items = await listMobilePersonalMaps();
+    setPersonalMaps(items);
   }, []);
 
   const refreshRecording = useCallback(async (explorationId: string) => {
@@ -92,20 +106,22 @@ export default function App() {
     );
   }, []);
 
-  const openReview = useCallback(async (explorationId: string) => {
+  const openReview = useCallback(async (personalMapId: string) => {
     setBusy(true);
     setErrorMessage(null);
     try {
-      const [summary, snapshot] = await Promise.all([
-        getExplorationSummary(explorationId),
-        loadExplorationMap(explorationId),
+      const [snapshot, items] = await Promise.all([
+        loadMobilePersonalMap(personalMapId),
+        listMobilePersonalMaps(),
       ]);
-      if (summary === null || snapshot === null) {
-        throw new Error("探索地図を読み込めませんでした。");
+      const personalMap = items.find((item) => item.id === personalMapId);
+      if (snapshot === null || personalMap === undefined) {
+        throw new Error("個人地図を読み込めませんでした。");
       }
-      setReviewExploration(summary);
+      setPersonalMaps(items);
+      setReviewPersonalMap(personalMap);
       setReviewSnapshot(snapshot);
-      setScreen({ kind: "review", explorationId });
+      setScreen({ kind: "review", personalMapId });
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -119,7 +135,7 @@ export default function App() {
       try {
         await initializeDatabase();
         const [items, active, context] = await Promise.all([
-          listExplorations(),
+          listMobilePersonalMaps(),
           getActiveExploration(),
           getActiveTrackingContext(),
         ]);
@@ -134,11 +150,12 @@ export default function App() {
         if (!mounted) {
           return;
         }
-        setExplorations(items);
+        setPersonalMaps(items);
         if (
           active !== null &&
           context !== null &&
-          context.explorationId === active.id
+          context.explorationId === active.id &&
+          context.personalMapId === active.personalMapId
         ) {
           setActiveExploration(active);
           setScreen({ kind: "recording", ...context });
@@ -192,6 +209,10 @@ export default function App() {
   }
 
   async function beginExploration(mode: MobileTrackingMode) {
+    if (screen.kind !== "permissions") {
+      return;
+    }
+    const target = screen.target;
     setBusy(true);
     setErrorMessage(null);
     try {
@@ -221,10 +242,15 @@ export default function App() {
         }
       }
 
-      const started = await startNewPersonalMapExploration(
-        defaultExplorationName(),
-        mode,
-      );
+      const explorationName = defaultExplorationName();
+      const started =
+        target.kind === "new"
+          ? await startNewPersonalMapExploration(explorationName, mode)
+          : await continuePersonalMapExploration(
+              target.personalMapId,
+              explorationName,
+              mode,
+            );
       await refreshRecording(started.explorationId);
       setScreen({ kind: "recording", ...started });
       await refreshHome();
@@ -241,9 +267,10 @@ export default function App() {
     try {
       await endActiveExploration(context);
       setRuntimeRunning(false);
+      setActiveExploration(null);
       await Promise.all([
         refreshHome(),
-        openReview(context.explorationId),
+        openReview(context.personalMapId),
       ]);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : String(error));
@@ -264,29 +291,32 @@ export default function App() {
     await refreshRecording(context.explorationId);
   }
 
-  async function handleOpenExploration(explorationId: string) {
-    const summary = await getExplorationSummary(explorationId);
-    if (summary?.status === "recording") {
+  async function handleOpenPersonalMap(personalMapId: string) {
+    setErrorMessage(null);
+    try {
       const context = await getActiveTrackingContext();
-      if (context === null || context.explorationId !== explorationId) {
-        throw new Error(
-          "記録中の探索コンテキストを復元できませんでした。アプリを再起動して確認してください。",
-        );
+      if (context?.personalMapId === personalMapId) {
+        const summary = await getExplorationSummary(context.explorationId);
+        if (summary === null) {
+          throw new Error("記録中の探索を読み込めませんでした。");
+        }
+        setActiveExploration(summary);
+        await refreshRecording(context.explorationId);
+        setScreen({ kind: "recording", ...context });
+        return;
       }
-      setActiveExploration(summary);
-      await refreshRecording(explorationId);
-      setScreen({ kind: "recording", ...context });
-      return;
+      await openReview(personalMapId);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
     }
-    await openReview(explorationId);
   }
 
   async function handleCreateDemo() {
     setBusy(true);
     try {
-      const { explorationId } = await createDemoPersonalMap();
+      const { personalMapId } = await createDemoPersonalMap();
       await refreshHome();
-      await openReview(explorationId);
+      await openReview(personalMapId);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -295,9 +325,39 @@ export default function App() {
   }
 
   async function returnHome() {
-    setReviewExploration(null);
+    setReviewPersonalMap(null);
     setReviewSnapshot(null);
     await refreshHome();
+    setScreen({ kind: "home" });
+  }
+
+  function continueReview() {
+    if (reviewPersonalMap === null) {
+      return;
+    }
+    setScreen({
+      kind: "permissions",
+      target: {
+        kind: "continue",
+        personalMapId: reviewPersonalMap.id,
+        mapName: reviewPersonalMap.name,
+      },
+    });
+  }
+
+  function backFromPermissions() {
+    if (
+      screen.kind === "permissions" &&
+      screen.target.kind === "continue" &&
+      reviewPersonalMap !== null &&
+      reviewSnapshot !== null
+    ) {
+      setScreen({
+        kind: "review",
+        personalMapId: screen.target.personalMapId,
+      });
+      return;
+    }
     setScreen({ kind: "home" });
   }
 
@@ -327,18 +387,24 @@ export default function App() {
 
       {screen.kind === "home" ? (
         <HomeScreen
-          explorations={explorations}
+          personalMaps={personalMaps}
+          activePersonalMapId={activeExploration?.personalMapId ?? null}
           loading={busy}
           onCreateDemo={() => void handleCreateDemo()}
-          onOpen={(id) => void handleOpenExploration(id)}
-          onStart={() => setScreen({ kind: "permissions" })}
+          onOpen={(id) => void handleOpenPersonalMap(id)}
+          onStartNew={() =>
+            setScreen({ kind: "permissions", target: { kind: "new" } })
+          }
         />
       ) : null}
 
       {screen.kind === "permissions" ? (
         <PermissionScreen
           loading={busy}
-          onBack={() => setScreen({ kind: "home" })}
+          targetMapName={
+            screen.target.kind === "continue" ? screen.target.mapName : null
+          }
+          onBack={backFromPermissions}
           onStartBackground={() => void beginExploration("background")}
           onStartForeground={() => void beginExploration("foreground")}
         />
@@ -356,11 +422,12 @@ export default function App() {
       ) : null}
 
       {screen.kind === "review" &&
-      reviewExploration !== null &&
+      reviewPersonalMap !== null &&
       reviewSnapshot !== null ? (
         <ReviewScreen
-          exploration={reviewExploration}
+          personalMap={reviewPersonalMap}
           snapshot={reviewSnapshot}
+          onContinue={continueReview}
           onHome={() => void returnHome()}
         />
       ) : null}
