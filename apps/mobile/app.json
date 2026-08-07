@@ -13,7 +13,7 @@
     "android": {
       "package": "com.cider328.personalexplorationmap",
       "permissions": [
-        "POST_NOTIFICATIONS"
+        "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "plugins": [
