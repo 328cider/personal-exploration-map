@@ -5,12 +5,18 @@ import {
   View,
   type LayoutChangeEvent,
 } from "react-native";
-import type { MapSnapshot, TrackPoint } from "@exploration-map/mapping-core";
+import type {
+  MapSnapshot,
+  PersonalMapSnapshot,
+  TrackPoint,
+} from "@exploration-map/mapping-core";
 
 import { palette, spacing } from "../theme";
 
+type RenderableSnapshot = MapSnapshot | PersonalMapSnapshot;
+
 interface TrackCanvasProps {
-  readonly snapshot: MapSnapshot;
+  readonly snapshot: RenderableSnapshot;
   readonly height?: number;
 }
 
@@ -18,6 +24,11 @@ interface ScreenPoint {
   readonly x: number;
   readonly y: number;
   readonly source: TrackPoint;
+}
+
+interface ScreenSegment {
+  readonly id: string;
+  readonly points: readonly ScreenPoint[];
 }
 
 function markerGlyph(category: string): string {
@@ -39,10 +50,23 @@ function markerGlyph(category: string): string {
   }
 }
 
+function snapshotSegments(snapshot: RenderableSnapshot): readonly {
+  readonly id: string;
+  readonly track: readonly TrackPoint[];
+}[] {
+  if ("segments" in snapshot) {
+    return snapshot.segments.map((segment) => ({
+      id: segment.explorationId,
+      track: segment.track,
+    }));
+  }
+  return [{ id: snapshot.explorationId, track: snapshot.track }];
+}
+
 export function TrackCanvas({ height = 360, snapshot }: TrackCanvasProps) {
   const [width, setWidth] = useState(0);
   const padding = 34;
-  const projected = useMemo<readonly ScreenPoint[]>(() => {
+  const projectedSegments = useMemo<readonly ScreenSegment[]>(() => {
     if (width <= 0 || snapshot.bounds === null) {
       return [];
     }
@@ -58,14 +82,17 @@ export function TrackCanvas({ height = 360, snapshot }: TrackCanvasProps) {
     const offsetX = (width - usedWidth) / 2;
     const offsetY = (height - usedHeight) / 2;
 
-    return snapshot.track.map((point) => ({
-      source: point,
-      x: offsetX + (point.xMeters - snapshot.bounds!.minX) * scale,
-      y:
-        height -
-        (offsetY + (point.yMeters - snapshot.bounds!.minY) * scale),
+    return snapshotSegments(snapshot).map((segment) => ({
+      id: segment.id,
+      points: segment.track.map((point) => ({
+        source: point,
+        x: offsetX + (point.xMeters - snapshot.bounds!.minX) * scale,
+        y:
+          height -
+          (offsetY + (point.yMeters - snapshot.bounds!.minY) * scale),
+      })),
     }));
-  }, [height, snapshot.bounds, snapshot.track, width]);
+  }, [height, snapshot, width]);
 
   const markerPoints = useMemo(() => {
     if (width <= 0 || snapshot.bounds === null) {
@@ -98,6 +125,11 @@ export function TrackCanvas({ height = 360, snapshot }: TrackCanvasProps) {
     });
   }, [height, snapshot.bounds, snapshot.markers, width]);
 
+  const pointCount = projectedSegments.reduce(
+    (sum, segment) => sum + segment.points.length,
+    0,
+  );
+
   function handleLayout(event: LayoutChangeEvent) {
     setWidth(event.nativeEvent.layout.width);
   }
@@ -117,61 +149,75 @@ export function TrackCanvas({ height = 360, snapshot }: TrackCanvasProps) {
         />
       ))}
 
-      {projected.slice(1).map((point, index) => {
-        const previous = projected[index];
-        if (previous === undefined) {
+      {projectedSegments.flatMap((segment) =>
+        segment.points.slice(1).map((point, index) => {
+          const previous = segment.points[index];
+          if (previous === undefined) {
+            return null;
+          }
+          const deltaX = point.x - previous.x;
+          const deltaY = point.y - previous.y;
+          const length = Math.hypot(deltaX, deltaY);
+          const angle = Math.atan2(deltaY, deltaX);
+          const confidence = Math.min(
+            point.source.confidence,
+            previous.source.confidence,
+          );
+          return (
+            <View
+              key={`${segment.id}-${previous.source.sampleId}-${point.source.sampleId}`}
+              style={[
+                styles.segment,
+                {
+                  left: (previous.x + point.x) / 2 - length / 2,
+                  top: (previous.y + point.y) / 2 - 2,
+                  width: length,
+                  opacity: Math.max(0.35, confidence),
+                  backgroundColor:
+                    confidence >= 0.5
+                      ? palette.track
+                      : palette.trackLowConfidence,
+                  transform: [{ rotateZ: `${angle}rad` }],
+                },
+              ]}
+            />
+          );
+        }),
+      )}
+
+      {projectedSegments.map((segment, index) => {
+        const first = segment.points[0];
+        if (first === undefined) {
           return null;
         }
-        const deltaX = point.x - previous.x;
-        const deltaY = point.y - previous.y;
-        const length = Math.hypot(deltaX, deltaY);
-        const angle = Math.atan2(deltaY, deltaX);
-        const confidence = Math.min(
-          point.source.confidence,
-          previous.source.confidence,
-        );
         return (
           <View
-            key={`${previous.source.sampleId}-${point.source.sampleId}`}
+            key={`start-${segment.id}`}
+            accessibilityLabel={`探索${index + 1}の開始地点`}
             style={[
-              styles.segment,
-              {
-                left: (previous.x + point.x) / 2 - length / 2,
-                top: (previous.y + point.y) / 2 - 2,
-                width: length,
-                opacity: Math.max(0.35, confidence),
-                backgroundColor:
-                  confidence >= 0.5
-                    ? palette.track
-                    : palette.trackLowConfidence,
-                transform: [{ rotateZ: `${angle}rad` }],
-              },
+              styles.startPoint,
+              { left: first.x - 6, top: first.y - 6 },
             ]}
           />
         );
       })}
 
-      {projected[0] === undefined ? null : (
-        <View
-          accessibilityLabel="探索開始地点"
-          style={[
-            styles.startPoint,
-            { left: projected[0].x - 6, top: projected[0].y - 6 },
-          ]}
-        />
-      )}
-      {projected.length < 2 || projected.at(-1) === undefined ? null : (
-        <View
-          accessibilityLabel="探索終了地点"
-          style={[
-            styles.endPoint,
-            {
-              left: projected.at(-1)!.x - 7,
-              top: projected.at(-1)!.y - 7,
-            },
-          ]}
-        />
-      )}
+      {projectedSegments.map((segment, index) => {
+        const last = segment.points.at(-1);
+        if (segment.points.length < 2 || last === undefined) {
+          return null;
+        }
+        return (
+          <View
+            key={`end-${segment.id}`}
+            accessibilityLabel={`探索${index + 1}の終了地点`}
+            style={[
+              styles.endPoint,
+              { left: last.x - 7, top: last.y - 7 },
+            ]}
+          />
+        );
+      })}
 
       {markerPoints.map(({ marker, x, y }) => (
         <View
@@ -183,7 +229,7 @@ export function TrackCanvas({ height = 360, snapshot }: TrackCanvasProps) {
         </View>
       ))}
 
-      {snapshot.track.length === 0 ? (
+      {pointCount === 0 ? (
         <View style={styles.emptyState}>
           <Text style={styles.emptyTitle}>まだ経路がありません</Text>
           <Text style={styles.emptyBody}>
