@@ -46,6 +46,8 @@ const requiredFiles = [
   "packages/mapping-engine/src/index.ts",
   "packages/experience-sdk/package.json",
   "packages/experience-sdk/src/index.ts",
+  "packages/sqlite-adapter/package.json",
+  "packages/sqlite-adapter/src/index.ts",
 ];
 for (const file of requiredFiles) {
   requireFile(file);
@@ -112,6 +114,7 @@ for (const file of collectSourceFiles("packages/mapping-core/src")) {
     /from\s+["']expo\//u,
     /from\s+["']@exploration-map\/mapping-engine["']/u,
     /from\s+["']@exploration-map\/experience-sdk["']/u,
+    /from\s+["']@exploration-map\/sqlite-adapter["']/u,
   ];
   for (const pattern of forbiddenImports) {
     if (pattern.test(content)) {
@@ -167,6 +170,37 @@ for (const packagePath of [
     failures.push(
       `${packagePath} contains non-domain dependencies: ${forbidden.join(", ")}`,
     );
+  }
+}
+
+const sqlitePackage = readPackage("packages/sqlite-adapter/package.json");
+if (sqlitePackage !== null) {
+  const allowedDependencies = new Set([
+    "@exploration-map/mapping-core",
+    "@exploration-map/mapping-engine",
+  ]);
+  const forbidden = Object.keys(sqlitePackage.dependencies ?? {}).filter(
+    (name) => !allowedDependencies.has(name),
+  );
+  if (forbidden.length > 0) {
+    failures.push(
+      `packages/sqlite-adapter/package.json contains non-domain dependencies: ${forbidden.join(", ")}`,
+    );
+  }
+}
+
+for (const file of collectSourceFiles("packages/sqlite-adapter/src")) {
+  const content = read(file);
+  for (const pattern of [
+    /from\s+["']react["']/u,
+    /from\s+["']react-native["']/u,
+    /from\s+["']expo(?:-[^"']+)?["']/u,
+    /from\s+["']expo\//u,
+    /from\s+["']@exploration-map\/experience-sdk["']/u,
+  ]) {
+    if (pattern.test(content)) {
+      failures.push(`Forbidden platform or game import in ${file}: ${pattern}`);
+    }
   }
 }
 
