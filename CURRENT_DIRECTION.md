@@ -6,7 +6,7 @@
 
 ## 現在のマイルストーン
 
-**M0: Passive Mapping Vertical Slice — Android実機成立性の検証へ移行**
+**M0: Passive Mapping Vertical Slice — 計測可能なAndroid実機検証**
 
 次の体験を、バックグラウンドGNSSが利用できるAndroid実機で成立させる。
 
@@ -18,6 +18,7 @@
 - 異常位置をraw evidenceから削除せず、derived mapだけから除外
 - 次回、同じPersonalMapへ独立したExplorationSessionとして続きを追加
 - session間を未観測の直線で接続しない
+- 欠落、精度、callback、復帰、中断時間を端末内で計測できる
 
 ## 現在の到達点
 
@@ -41,7 +42,7 @@
 - Homeの主語を日付別GPSログからPersonalMapへ変更
 - 複数ExplorationSessionを別segmentとして1枚の地図に表示
 - `この地図の続きを探索`を追加
-- 続きの権限画面で、追加対象のPersonalMapを明示
+- 続きの権限画面で追加対象のPersonalMapを明示
 - local-coordinate PersonalMapへ未アンカーGNSSを追加しない
 - 探索中のライブ地図常設、場所カテゴリ選択、ゲーム要素は追加していない
 
@@ -53,18 +54,34 @@
 - geographic / local、異なるlocal frameを暗黙混在させない
 - mobile側の確認はUX補助、engine側が最終防衛線
 
-### OSS / standards
+### Build / OSS reuse
 
+- Expo SDK 57のlockfile、Expo Doctor、mobile typecheck、Android development APK buildをIssue #2で再現可能にした
 - 部品別のBuild / Adopt / Benchmarkとlicenseを`docs/OSS_REUSE_AUDIT.md`へ記録
 - 局所投影の推奨範囲と反日付変更線処理をテスト化
 - renderer、簡略化、export、PDRは既存OSS・標準を比較してから実装
-- 一般部品を「将来必要かもしれない」だけで先行導入しない
+
+### Tracking diagnostics
+
+PR #27でIssue #3の計測基盤をmainへ反映済み。
+
+- DB v3の`tracking_diagnostic_events`
+- provider start / stop requested / success / failure
+- foreground / background callback received / persisted / failed
+- callback batch size、duplicate、accepted / rejected counts
+- AppState foreground / background transition
+- process restart後のsession recovery
+- marker入力completed / cancelledと中断時間
+- raw observationsをmapping-coreでreplayするgap / accuracy / rejection集計
+- PersonalMap Reviewのdevelopment diagnostics
+- device、battery、permission、OEM条件を記録するrun template
+
+diagnostic eventはcanonical map truthではない。best-effort queueで保存し、raw位置記録やprovider lifecycleを待たせない。採否は常にraw evidenceから再計算する。詳細はADR 0010に従う。
 
 ## 現在の未検証部分
 
-コードと静的検査は成立しているが、次はまだ実機で確認していない。
+build・計測コード・静的検査は成立しているが、次は実端末で未検証。
 
-- Android development buildが再現可能に作れること
 - foreground / background権限の実際の導線
 - 画面OFF・ポケット内で30〜60分記録が続くこと
 - OS・端末メーカーによる停止、復帰、通知挙動
@@ -76,12 +93,12 @@
 
 ## 次の順序
 
-1. **Issue #2**: lockfile、Expo Doctor、Android development buildを再現可能にする
-2. **Issue #17**: 初回tracking開始失敗時に空PersonalMapを残さないcanonical compensationを実装する
-3. **Issue #3**: background GNSSの欠落、精度、電池、権限、プロセス終了を実機計測する
+1. **Issue #3**: development APKで30〜60分のforeground / background比較を行う
+2. **Issue #3**: notification復帰、process recreation、permission変更、battery saver、OEM差を追加測定する
+3. **Issue #17**: 初回tracking開始失敗時に空PersonalMapを残さないcanonical compensationを実装する
 4. **Issue #4**: 10件の実探索でPassive-first UXと「育つ白紙地図」の価値をGo / Narrow / Stop判定する
-5. **Issue #19**: 実機表示基盤として`react-native-svg` rendererを評価・移行する
-6. **Issue #20 / #22**: 簡略化OSS比較とGPX / GeoJSON / lossless bundle境界を実装する
+5. **Issue #19**: `react-native-svg` rendererを実機評価・移行する
+6. **Issue #20 / #22**: 簡略化OSS比較とGPX / GeoJSON / lossless bundleを実装する
 7. M0の価値を確認した後、**Issue #5**でポケット内PDRをGo / Narrow / Stop判定する
 8. PDR判定後にGPSなし探索とanchor transformの製品統合範囲を決める
 
@@ -95,6 +112,7 @@
 - 「山」「街」「建物」など用途別モードの増殖
 - 二つ目のappがない段階での動的plugin loaderやnpm package公開
 - 精度未検証PDRの既定有効化
+- 自動telemetry / analytics service
 
 ## 変更してはいけない原則
 
@@ -109,5 +127,6 @@
 - canonicalな地図変更は明示的なapplication boundaryを通す。
 - UI、renderer、game、experienceはcanonical mapを直接変更しない。
 - game / experienceはread-onlyで、地図修正はユーザー確認後の明示commandにする。
+- diagnosticsはmap truthと分離し、raw evidenceから採否を再計算する。
 - 独自価値のない一般部品はOSS・標準・platformを先に調査する。
 - 位置履歴は高感度かつユーザー所有で、local-firstを既定にする。
