@@ -19,92 +19,96 @@ export function PermissionScreen({
   onBack,
 }: PermissionScreenProps) {
   return (
-    <ScrollView
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
-      <Text style={styles.eyebrow}>探索を邪魔しないために</Text>
-      <Text style={styles.title}>始めたら、スマホは{"\n"}しまって大丈夫です。</Text>
-      <Text style={styles.intro}>
-        画面を消しても移動を記録するには、利用中の位置情報に加えてバックグラウンド位置情報が必要です。
-      </Text>
-
-      {targetMapName === null ? null : (
-        <View style={styles.targetCard}>
-          <Text style={styles.targetLabel}>続きを追加する地図</Text>
-          <Text numberOfLines={2} style={styles.targetName}>
-            {targetMapName}
-          </Text>
-          <Text style={styles.targetBody}>
-            今回の移動は、この個人地図へ新しい探索として追加されます。過去の探索とは別の経路として保持します。
-          </Text>
-        </View>
-      )}
-
-      <View style={styles.flowCard}>
-        <View style={styles.flowStep}>
-          <Text style={styles.flowNumber}>1</Text>
-          <View style={styles.flowText}>
-            <Text style={styles.flowTitle}>探索を始める</Text>
-            <Text style={styles.flowBody}>この画面で許可して、記録を開始します。</Text>
-          </View>
-        </View>
-        <View style={styles.flowLine} />
-        <View style={styles.flowStep}>
-          <Text style={styles.flowNumber}>2</Text>
-          <View style={styles.flowText}>
-            <Text style={styles.flowTitle}>スマホをポケットへ</Text>
-            <Text style={styles.flowBody}>画面やカメラを見ながら歩く必要はありません。</Text>
-          </View>
-        </View>
-        <View style={styles.flowLine} />
-        <View style={styles.flowStep}>
-          <Text style={styles.flowNumber}>3</Text>
-          <View style={styles.flowText}>
-            <Text style={styles.flowTitle}>必要な時だけ取り出す</Text>
-            <Text style={styles.flowBody}>発見や分岐を短い操作で残せます。</Text>
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.dataCard}>
-        <Text style={styles.dataTitle}>位置情報の扱い</Text>
-        <Text style={styles.dataBody}>
-          現在のMVPは端末内のSQLiteに保存し、アカウントやクラウドへ送信しません。終了後も自分で地図を見返すために保持します。
+    <View style={styles.screen}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.eyebrow}>探索を邪魔しないために</Text>
+        <Text style={styles.title}>始めたら、スマホは{"\n"}しまって大丈夫です。</Text>
+        <Text style={styles.intro}>
+          画面を消しても移動を記録するには、利用中の位置情報に加えてバックグラウンド位置情報が必要です。
         </Text>
-      </View>
 
-      <AppButton
-        loading={loading}
-        onPress={onStartBackground}
-        style={styles.primaryAction}
-      >
-        ポケット記録を許可して開始
-      </AppButton>
-      <AppButton
-        disabled={loading}
-        onPress={onStartForeground}
-        variant="secondary"
-        style={styles.secondaryAction}
-      >
-        画面を開いたまま簡易記録
-      </AppButton>
-      <Text style={styles.foregroundNote}>
-        簡易記録は、画面を消したり別のアプリを開くと止まる可能性があります。
-      </Text>
-      <AppButton disabled={loading} onPress={onBack} variant="ghost">
-        戻る
-      </AppButton>
-      <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.bottomSafeSpace} />
-    </ScrollView>
+        {targetMapName === null ? null : (
+          <View style={styles.targetCard}>
+            <Text style={styles.targetLabel}>続きを追加する地図</Text>
+            <Text numberOfLines={2} style={styles.targetName}>
+              {targetMapName}
+            </Text>
+            <Text style={styles.targetBody}>
+              今回の移動は、この個人地図へ新しい探索として追加されます。過去の探索とは別の経路として保持します。
+            </Text>
+          </View>
+        )}
+
+        <View style={styles.flowCard}>
+          <View style={styles.flowStep}>
+            <Text style={styles.flowNumber}>1</Text>
+            <View style={styles.flowText}>
+              <Text style={styles.flowTitle}>探索を始める</Text>
+              <Text style={styles.flowBody}>この画面で許可して、記録を開始します。</Text>
+            </View>
+          </View>
+          <View style={styles.flowLine} />
+          <View style={styles.flowStep}>
+            <Text style={styles.flowNumber}>2</Text>
+            <View style={styles.flowText}>
+              <Text style={styles.flowTitle}>スマホをポケットへ</Text>
+              <Text style={styles.flowBody}>画面やカメラを見ながら歩く必要はありません。</Text>
+            </View>
+          </View>
+          <View style={styles.flowLine} />
+          <View style={styles.flowStep}>
+            <Text style={styles.flowNumber}>3</Text>
+            <View style={styles.flowText}>
+              <Text style={styles.flowTitle}>必要な時だけ取り出す</Text>
+              <Text style={styles.flowBody}>発見や分岐を短い操作で残せます。</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.dataCard}>
+          <Text style={styles.dataTitle}>位置情報の扱い</Text>
+          <Text style={styles.dataBody}>
+            現在のMVPは端末内のSQLiteに保存し、アカウントやクラウドへ送信しません。終了後も自分で地図を見返すために保持します。
+          </Text>
+        </View>
+
+        <AppButton
+          disabled={loading}
+          onPress={onStartForeground}
+          variant="secondary"
+          style={styles.secondaryAction}
+        >
+          画面を開いたまま簡易記録
+        </AppButton>
+        <Text style={styles.foregroundNote}>
+          簡易記録は、画面を消したり別のアプリを開くと止まる可能性があります。
+        </Text>
+        <AppButton disabled={loading} onPress={onBack} variant="ghost">
+          戻る
+        </AppButton>
+      </ScrollView>
+
+      <View style={styles.primaryFooter}>
+        <AppButton loading={loading} onPress={onStartBackground}>
+          ポケット記録を許可して開始
+        </AppButton>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: palette.background,
+  },
   content: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xl,
-    paddingBottom: spacing.xxl,
+    paddingBottom: spacing.xl,
   },
   eyebrow: {
     color: palette.primary,
@@ -216,11 +220,8 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: spacing.xs,
   },
-  primaryAction: {
-    marginTop: spacing.xl,
-  },
   secondaryAction: {
-    marginTop: spacing.sm,
+    marginTop: spacing.xl,
   },
   foregroundNote: {
     color: palette.mutedInk,
@@ -230,7 +231,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     marginTop: spacing.sm,
   },
-  bottomSafeSpace: {
-    height: 96,
+  primaryFooter: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: palette.border,
+    backgroundColor: palette.background,
   },
 });
