@@ -33,9 +33,11 @@ export interface LiveExplorationStats {
 
 interface ExplorationRow {
   id: string;
+  personal_map_id: string;
   name: string;
   status: "recording" | "completed";
-  tracking_mode: TrackingMode;
+  tracking_provider_id: string;
+  tracking_mode: TrackingMode | null;
   frame_hint: string | null;
   started_at: number;
   ended_at: number | null;
@@ -91,6 +93,38 @@ function confidenceFromAccuracy(accuracy: number | null): number {
   return Math.max(0.1, Math.min(0.95, 1 - accuracy / 120));
 }
 
+function trackingProviderIdForMode(mode: TrackingMode): string {
+  switch (mode) {
+    case "background":
+      return "gnss-background";
+    case "foreground":
+      return "gnss-foreground";
+    case "demo":
+      return "simulation";
+  }
+}
+
+function trackingModeFromRow(row: ExplorationRow): TrackingMode {
+  if (row.tracking_mode !== null) {
+    return row.tracking_mode;
+  }
+  switch (row.tracking_provider_id) {
+    case "gnss-background":
+      return "background";
+    case "simulation":
+      return "demo";
+    default:
+      return "foreground";
+  }
+}
+
+function observationId(
+  explorationId: string,
+  location: Location.LocationObject,
+): string {
+  return `position-${explorationId}-${Math.round(location.timestamp)}-gnss`;
+}
+
 async function setStateValue(key: string, value: string | null): Promise<void> {
   const database = await getDatabase();
   if (value === null) {
@@ -129,20 +163,31 @@ export async function createExploration(
   const id = createId("exploration");
   const now = Date.now();
 
-  await database.withTransactionAsync(async () => {
-    await database.runAsync(
-      `INSERT INTO explorations(
-        id, name, status, tracking_mode, frame_hint,
-        started_at, ended_at, created_at, updated_at
-      ) VALUES (?, ?, 'recording', ?, NULL, ?, NULL, ?, ?)`,
+  await database.withExclusiveTransactionAsync(async (transaction) => {
+    await transaction.runAsync(
+      `INSERT INTO personal_maps(id, name, created_at, updated_at)
+       VALUES (?, ?, ?, ?)`,
       id,
       name,
+      now,
+      now,
+    );
+    await transaction.runAsync(
+      `INSERT INTO explorations(
+        id, personal_map_id, name, status,
+        tracking_provider_id, tracking_mode, frame_hint,
+        started_at, ended_at, created_at, updated_at
+      ) VALUES (?, ?, ?, 'recording', ?, ?, NULL, ?, NULL, ?, ?)`,
+      id,
+      id,
+      name,
+      trackingProviderIdForMode(trackingMode),
       trackingMode,
       now,
       now,
       now,
     );
-    await database.runAsync(
+    await transaction.runAsync(
       `INSERT INTO app_state(key, value) VALUES ('active_exploration_id', ?)
        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
       id,
@@ -155,10 +200,25 @@ export async function createExploration(
 export async function deleteExploration(id: string): Promise<void> {
   const database = await getDatabase();
   const activeId = await getStateValue("active_exploration_id");
-  await database.withTransactionAsync(async () => {
-    await database.runAsync("DELETE FROM explorations WHERE id = ?", id);
+  await database.withExclusiveTransactionAsync(async (transaction) => {
+    const row = await transaction.getFirstAsync<{ personal_map_id: string }>(
+      "SELECT personal_map_id FROM explorations WHERE id = ?",
+      id,
+    );
+    await transaction.runAsync("DELETE FROM explorations WHERE id = ?", id);
+    if (row !== null) {
+      await transaction.runAsync(
+        `DELETE FROM personal_maps
+         WHERE id = ?
+           AND NOT EXISTS (
+             SELECT 1 FROM explorations WHERE personal_map_id = ?
+           )`,
+        row.personal_map_id,
+        row.personal_map_id,
+      );
+    }
     if (activeId === id) {
-      await database.runAsync(
+      await transaction.runAsync(
         "DELETE FROM app_state WHERE key = 'active_exploration_id'",
       );
     }
@@ -178,8 +238,10 @@ export async function listExplorations(): Promise<readonly ExplorationSummary[]>
   const rows = await database.getAllAsync<SummaryRow>(`
     SELECT
       e.id,
+      e.personal_map_id,
       e.name,
       e.status,
+      e.tracking_provider_id,
       e.tracking_mode,
       e.frame_hint,
       e.started_at,
@@ -203,8 +265,10 @@ export async function getExplorationSummary(
   const row = await database.getFirstAsync<SummaryRow>(
     `SELECT
       e.id,
+      e.personal_map_id,
       e.name,
       e.status,
+      e.tracking_provider_id,
       e.tracking_mode,
       e.frame_hint,
       e.started_at,
@@ -226,7 +290,7 @@ function toSummary(row: SummaryRow): ExplorationSummary {
     id: row.id,
     name: row.name,
     status: row.status,
-    trackingMode: row.tracking_mode,
+    trackingMode: trackingModeFromRow(row),
     startedAtMs: row.started_at,
     endedAtMs: row.ended_at,
     rawSampleCount: Number(row.raw_sample_count),
@@ -247,19 +311,21 @@ export async function appendLocationBatch(
   }
 
   const database = await getDatabase();
-  await database.withTransactionAsync(async () => {
+  await database.withExclusiveTransactionAsync(async (transaction) => {
+    let latestInsertedAt = 0;
     for (const location of locations) {
       const accuracy = location.coords.accuracy;
-      await database.runAsync(
+      const recordedAtMs = Math.round(location.timestamp);
+      const result = await transaction.runAsync(
         `INSERT OR IGNORE INTO position_samples(
           id, exploration_id, recorded_at, source, coordinate_kind,
           latitude, longitude, altitude_meters, x_meters, y_meters, floor_level,
           horizontal_accuracy_meters, heading_degrees, speed_meters_per_second,
           confidence
         ) VALUES (?, ?, ?, 'gnss', 'geographic', ?, ?, ?, NULL, NULL, NULL, ?, ?, ?, ?)`,
-        createId("position"),
+        observationId(activeId, location),
         activeId,
-        Math.round(location.timestamp),
+        recordedAtMs,
         location.coords.latitude,
         location.coords.longitude,
         location.coords.altitude,
@@ -268,12 +334,28 @@ export async function appendLocationBatch(
         location.coords.speed,
         confidenceFromAccuracy(accuracy),
       );
+      if (result.changes > 0) {
+        latestInsertedAt = Math.max(latestInsertedAt, recordedAtMs);
+      }
     }
-    await database.runAsync(
-      "UPDATE explorations SET updated_at = ? WHERE id = ?",
-      Date.now(),
-      activeId,
-    );
+    if (latestInsertedAt > 0) {
+      await transaction.runAsync(
+        `UPDATE explorations
+         SET updated_at = MAX(updated_at, ?)
+         WHERE id = ?`,
+        latestInsertedAt,
+        activeId,
+      );
+      await transaction.runAsync(
+        `UPDATE personal_maps
+         SET updated_at = MAX(updated_at, ?)
+         WHERE id = (
+           SELECT personal_map_id FROM explorations WHERE id = ?
+         )`,
+        latestInsertedAt,
+        activeId,
+      );
+    }
   });
 }
 
@@ -323,52 +405,79 @@ export async function addMarkerToExploration(
 ): Promise<void> {
   const database = await getDatabase();
   const recordedAtMs = Date.now();
-  const latest = await database.getFirstAsync<PositionRow>(
-    `SELECT * FROM position_samples
-     WHERE exploration_id = ? AND recorded_at <= ?
-     ORDER BY recorded_at DESC
-     LIMIT 1`,
-    explorationId,
-    recordedAtMs,
-  );
+  await database.withExclusiveTransactionAsync(async (transaction) => {
+    const latest = await transaction.getFirstAsync<PositionRow>(
+      `SELECT * FROM position_samples
+       WHERE exploration_id = ? AND recorded_at <= ?
+       ORDER BY recorded_at DESC
+       LIMIT 1`,
+      explorationId,
+      recordedAtMs,
+    );
 
-  await database.runAsync(
-    `INSERT INTO markers(
-      id, exploration_id, recorded_at, category, label, note,
-      coordinate_kind, latitude, longitude, altitude_meters,
-      x_meters, y_meters, floor_level
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    createId("marker"),
-    explorationId,
-    recordedAtMs,
-    input.category,
-    input.label,
-    input.note ?? null,
-    latest?.coordinate_kind ?? null,
-    latest?.latitude ?? null,
-    latest?.longitude ?? null,
-    latest?.altitude_meters ?? null,
-    latest?.x_meters ?? null,
-    latest?.y_meters ?? null,
-    latest?.floor_level ?? null,
-  );
+    await transaction.runAsync(
+      `INSERT INTO markers(
+        id, exploration_id, recorded_at, category, label, note,
+        coordinate_kind, latitude, longitude, altitude_meters,
+        x_meters, y_meters, floor_level
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      createId("marker"),
+      explorationId,
+      recordedAtMs,
+      input.category,
+      input.label,
+      input.note ?? null,
+      latest?.coordinate_kind ?? null,
+      latest?.latitude ?? null,
+      latest?.longitude ?? null,
+      latest?.altitude_meters ?? null,
+      latest?.x_meters ?? null,
+      latest?.y_meters ?? null,
+      latest?.floor_level ?? null,
+    );
+    await transaction.runAsync(
+      `UPDATE explorations
+       SET updated_at = MAX(updated_at, ?)
+       WHERE id = ?`,
+      recordedAtMs,
+      explorationId,
+    );
+    await transaction.runAsync(
+      `UPDATE personal_maps
+       SET updated_at = MAX(updated_at, ?)
+       WHERE id = (
+         SELECT personal_map_id FROM explorations WHERE id = ?
+       )`,
+      recordedAtMs,
+      explorationId,
+    );
+  });
 }
 
 export async function completeExploration(id: string): Promise<void> {
   const database = await getDatabase();
   const activeId = await getStateValue("active_exploration_id");
   const now = Date.now();
-  await database.withTransactionAsync(async () => {
-    await database.runAsync(
+  await database.withExclusiveTransactionAsync(async (transaction) => {
+    await transaction.runAsync(
       `UPDATE explorations
-       SET status = 'completed', ended_at = ?, updated_at = ?
+       SET status = 'completed', ended_at = ?, updated_at = MAX(updated_at, ?)
        WHERE id = ?`,
       now,
       now,
       id,
     );
+    await transaction.runAsync(
+      `UPDATE personal_maps
+       SET updated_at = MAX(updated_at, ?)
+       WHERE id = (
+         SELECT personal_map_id FROM explorations WHERE id = ?
+       )`,
+      now,
+      id,
+    );
     if (activeId === id) {
-      await database.runAsync(
+      await transaction.runAsync(
         "DELETE FROM app_state WHERE key = 'active_exploration_id'",
       );
     }
@@ -518,6 +627,7 @@ export async function createDemoExploration(): Promise<string> {
   const database = await getDatabase();
   const id = createId("demo");
   const startedAtMs = Date.now() - 22 * 60 * 1000;
+  const endedAtMs = Date.now();
   const points = [
     [0, 0],
     [0, 22],
@@ -530,22 +640,31 @@ export async function createDemoExploration(): Promise<string> {
     [75, 19],
   ] as const;
 
-  await database.withTransactionAsync(async () => {
-    await database.runAsync(
-      `INSERT INTO explorations(
-        id, name, status, tracking_mode, frame_hint,
-        started_at, ended_at, created_at, updated_at
-      ) VALUES (?, ?, 'completed', 'demo', 'demo-local-space', ?, ?, ?, ?)`,
+  await database.withExclusiveTransactionAsync(async (transaction) => {
+    await transaction.runAsync(
+      `INSERT INTO personal_maps(id, name, created_at, updated_at)
+       VALUES (?, 'デモ探索', ?, ?)`,
       id,
-      "デモ探索",
       startedAtMs,
-      Date.now(),
-      Date.now(),
-      Date.now(),
+      endedAtMs,
+    );
+    await transaction.runAsync(
+      `INSERT INTO explorations(
+        id, personal_map_id, name, status,
+        tracking_provider_id, tracking_mode, frame_hint,
+        started_at, ended_at, created_at, updated_at
+      ) VALUES (?, ?, 'デモ探索', 'completed',
+        'simulation', 'demo', 'demo-local-space', ?, ?, ?, ?)`,
+      id,
+      id,
+      startedAtMs,
+      endedAtMs,
+      startedAtMs,
+      endedAtMs,
     );
 
     for (const [index, [xMeters, yMeters]] of points.entries()) {
-      await database.runAsync(
+      await transaction.runAsync(
         `INSERT INTO position_samples(
           id, exploration_id, recorded_at, source, coordinate_kind,
           latitude, longitude, altitude_meters, x_meters, y_meters, floor_level,
@@ -560,7 +679,7 @@ export async function createDemoExploration(): Promise<string> {
       );
     }
 
-    await database.runAsync(
+    await transaction.runAsync(
       `INSERT INTO markers(
         id, exploration_id, recorded_at, category, label, note,
         coordinate_kind, latitude, longitude, altitude_meters,
