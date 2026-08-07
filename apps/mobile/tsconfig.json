@@ -6,5 +6,6 @@
     "exactOptionalPropertyTypes": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["**/*.ts", "**/*.tsx"]
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["test", "scripts"]
 }
