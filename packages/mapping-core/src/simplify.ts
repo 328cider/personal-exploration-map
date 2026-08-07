@@ -1,5 +1,13 @@
 import type { TrackPoint } from "./model.ts";
 
+/**
+ * Dependency-free Ramer-Douglas-Peucker implementation.
+ *
+ * This is a standard commodity algorithm, not product-specific intelligence.
+ * It remains temporarily so mapping-core tests can run without package install
+ * and TrackPoint/sample provenance is preserved exactly. ADR 0008 requires a
+ * simplify-js benchmark before this implementation is treated as permanent.
+ */
 function squaredDistanceToSegment(
   point: TrackPoint,
   start: TrackPoint,
