@@ -1,6 +1,7 @@
 import type { TrackingProviderPort } from "@exploration-map/mapping-engine";
 
 export type MobileTrackingMode = "background" | "foreground";
+export type MobileTrackingDelivery = "background" | "foreground";
 
 export interface TrackingPermissionState {
   readonly foregroundGranted: boolean;

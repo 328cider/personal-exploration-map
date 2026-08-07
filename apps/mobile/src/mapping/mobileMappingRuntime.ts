@@ -12,6 +12,7 @@ import {
   type TrackingProviderPort,
 } from "@exploration-map/mapping-engine";
 
+import { recordTrackingDiagnosticBestEffort } from "../diagnostics/trackingDiagnostics";
 import {
   clearActiveTrackingContext,
   getActiveTrackingContext,
@@ -26,6 +27,7 @@ import {
 import { locationBatchToRawSamples } from "../tracking/locationSamples";
 import type {
   GnssTrackingProviderSet,
+  MobileTrackingDelivery,
   MobileTrackingMode,
   MobileTrackingRuntimeStatus,
 } from "../tracking/types";
@@ -39,6 +41,10 @@ let runtime:
       readonly gnss: GnssTrackingProviderSet;
     }
   | undefined;
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 function idFactory(kind: MappingEntityKind): string {
   switch (kind) {
@@ -104,11 +110,12 @@ export async function loadMobilePersonalMap(
 /**
  * Shared foreground/background observation entrypoint.
  *
- * The OS callback resolves the durable PersonalMap/ExplorationSession context,
- * then issues the same canonical engine command used by the foreground app.
+ * Callback diagnostics describe delivery and persistence, while mapping-core
+ * replay remains the authority for accepted/rejected map truth.
  */
 export async function ingestActiveLocationBatch(
   locations: readonly Location.LocationObject[],
+  delivery: MobileTrackingDelivery,
 ): Promise<void> {
   if (locations.length === 0) {
     return;
@@ -118,12 +125,61 @@ export async function ingestActiveLocationBatch(
     return;
   }
 
-  const samples = locationBatchToRawSamples(active.explorationId, locations);
-  await getMobileMappingEngine().ingestPositionSamples({
-    personalMapId: active.personalMapId,
-    explorationId: active.explorationId,
-    samples,
+  const sampleTimestamps = locations.map((location) =>
+    Math.round(location.timestamp),
+  );
+  const firstSampleAtMs = Math.min(...sampleTimestamps);
+  const lastSampleAtMs = Math.max(...sampleTimestamps);
+  await recordTrackingDiagnosticBestEffort({
+    context: active,
+    kind: "callback.received",
+    payload: {
+      delivery,
+      sampleCount: locations.length,
+      firstSampleAtMs,
+      lastSampleAtMs,
+      callbackReceivedAtMs: Date.now(),
+    },
   });
+
+  const samples = locationBatchToRawSamples(active.explorationId, locations);
+  try {
+    const result = await getMobileMappingEngine().ingestPositionSamples({
+      personalMapId: active.personalMapId,
+      explorationId: active.explorationId,
+      samples,
+    });
+    await recordTrackingDiagnosticBestEffort({
+      context: active,
+      kind: "callback.persisted",
+      payload: {
+        delivery,
+        sampleCount: samples.length,
+        persistedSampleCount: result.persistedSampleCount,
+        duplicateSampleCount: Math.max(
+          0,
+          samples.length - result.persistedSampleCount,
+        ),
+        acceptedSampleCount: result.acceptedSampleCount,
+        rejectedSampleCount: result.rejectedSampleCount,
+        firstSampleAtMs,
+        lastSampleAtMs,
+      },
+    });
+  } catch (error) {
+    await recordTrackingDiagnosticBestEffort({
+      context: active,
+      kind: "callback.failed",
+      payload: {
+        delivery,
+        sampleCount: samples.length,
+        firstSampleAtMs,
+        lastSampleAtMs,
+        message: errorMessage(error),
+      },
+    });
+    throw error;
+  }
 }
 
 export interface StartedExploration {
@@ -210,6 +266,31 @@ export async function addConfirmedMarker(
       category: input.category,
       label: input.label,
       ...(input.note === undefined ? {} : { note: input.note }),
+    },
+  });
+}
+
+export async function recordMarkerInputTiming(
+  context: StartedExploration,
+  outcome: "completed" | "cancelled",
+  durationMs: number,
+): Promise<void> {
+  const active = await getActiveTrackingContext();
+  if (
+    active === null ||
+    active.personalMapId !== context.personalMapId ||
+    active.explorationId !== context.explorationId
+  ) {
+    return;
+  }
+  await recordTrackingDiagnosticBestEffort({
+    context: active,
+    kind:
+      outcome === "completed"
+        ? "marker.input.completed"
+        : "marker.input.cancelled",
+    payload: {
+      durationMs: Math.max(0, durationMs),
     },
   });
 }
