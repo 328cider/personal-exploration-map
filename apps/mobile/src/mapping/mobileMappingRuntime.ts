@@ -7,7 +7,11 @@ import {
   type TrackingProviderPort,
 } from "@exploration-map/mapping-engine";
 
-import { getActiveTrackingContext } from "../storage/activeTrackingState";
+import {
+  clearActiveTrackingContext,
+  getActiveTrackingContext,
+  setActiveTrackingContext,
+} from "../storage/activeTrackingState";
 import { sqliteMappingRepository } from "../storage/sqliteMappingRepository";
 import {
   BACKGROUND_GNSS_PROVIDER_ID,
@@ -119,6 +123,13 @@ export async function startNewPersonalMapExploration(
   name: string,
   mode: MobileTrackingMode,
 ): Promise<StartedExploration> {
+  const active = await getActiveTrackingContext();
+  if (active !== null) {
+    throw new Error(
+      "別の探索が記録中です。終了してから新しい探索を始めてください。",
+    );
+  }
+
   const engine = getMobileMappingEngine();
   const createdAtMs = Date.now();
   const { personalMapId } = await engine.createPersonalMap({
@@ -157,11 +168,26 @@ export async function addConfirmedMarker(
 export async function endActiveExploration(
   context: StartedExploration,
 ): Promise<void> {
-  await getMobileMappingEngine().endExploration({
-    personalMapId: context.personalMapId,
-    explorationId: context.explorationId,
-    endedAtMs: Date.now(),
-  });
+  const activeBeforeStop = await getActiveTrackingContext();
+  try {
+    await getMobileMappingEngine().endExploration({
+      personalMapId: context.personalMapId,
+      explorationId: context.explorationId,
+      endedAtMs: Date.now(),
+    });
+    await clearActiveTrackingContext(context.explorationId);
+  } catch (error) {
+    // A provider stop may clear the platform context before the repository
+    // completion transaction runs. Restore the same still-recording context if
+    // completion fails so the user can recover instead of losing the session.
+    if (
+      activeBeforeStop !== null &&
+      activeBeforeStop.explorationId === context.explorationId
+    ) {
+      await setActiveTrackingContext(activeBeforeStop).catch(() => undefined);
+    }
+    throw error;
+  }
 }
 
 export async function getMobileTrackingStatus(): Promise<MobileTrackingRuntimeStatus> {
@@ -202,6 +228,13 @@ function demoSamples(
 }
 
 export async function createDemoPersonalMap(): Promise<StartedExploration> {
+  const active = await getActiveTrackingContext();
+  if (active !== null) {
+    throw new Error(
+      "記録中の探索を終了してからデモ地図を作成してください。",
+    );
+  }
+
   const engine = getMobileMappingEngine();
   const startedAtMs = Date.now() - 22 * 60 * 1_000;
   const { personalMapId } = await engine.createPersonalMap({
