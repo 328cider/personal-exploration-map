@@ -112,28 +112,28 @@ export async function getActiveTrackingContext(): Promise<ActiveTrackingContext 
 
   const preferredExplorationId =
     serializedContext?.explorationId ?? legacyExplorationId;
-  const durable = await loadRecordingContext(preferredExplorationId);
+  const preferred = await loadRecordingContext(preferredExplorationId);
+  const durable =
+    preferred ??
+    (preferredExplorationId === null
+      ? null
+      : await loadRecordingContext(null));
+
   if (durable === null) {
-    // A missing app_state can occur if the process dies after the canonical
-    // session transaction but before a platform provider stores its context.
-    // Recover the newest recording session rather than starting a second one.
-    const fallback =
-      preferredExplorationId === null
-        ? await loadRecordingContext(null)
-        : null;
-    if (fallback === null) {
-      if (serialized !== null || legacyExplorationId !== null) {
-        await clearActiveTrackingContext();
-      }
-      return null;
+    if (serialized !== null || legacyExplorationId !== null) {
+      await clearActiveTrackingContext();
     }
-    await setActiveTrackingContext(fallback);
-    return fallback;
+    return null;
   }
 
+  // A missing or stale app_state can occur if the process dies after the
+  // canonical session transaction but before a platform provider stores its
+  // context. Recover the durable recording row rather than starting a second
+  // exploration.
   if (
     serializedContext?.personalMapId !== durable.personalMapId ||
     serializedContext.providerId !== durable.providerId ||
+    serializedContext.explorationId !== durable.explorationId ||
     legacyExplorationId !== durable.explorationId
   ) {
     await setActiveTrackingContext(durable);
