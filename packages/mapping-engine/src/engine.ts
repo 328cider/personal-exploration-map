@@ -14,6 +14,7 @@ import type {
   AddMarkerCommand,
   CreateMappingEngineOptions,
   CreatePersonalMapCommand,
+  CreatePersonalMapWithFirstExplorationCommand,
   EndExplorationCommand,
   GetPersonalMapQuery,
   IngestPositionSamplesCommand,
@@ -82,7 +83,7 @@ function markerFromEvent(event: MappingEvent): MapMarker {
 
 function localFrameLabelForStart(
   provider: TrackingProviderPort,
-  command: StartExplorationCommand,
+  command: Omit<StartExplorationCommand, "personalMapId">,
 ): string | undefined {
   if (provider.coordinateKind === "geographic") {
     if (command.localFrameLabel !== undefined) {
@@ -105,10 +106,6 @@ function localFrameLabelForStart(
 /**
  * Rejects an incompatible continuation before creating an ExplorationSession
  * record or starting a platform provider.
- *
- * The app shell may preflight the same condition to explain it earlier, but
- * this engine check is the canonical invariant and cannot be bypassed by a
- * future game or alternate explorer shell.
  */
 function assertProviderCompatibleWithPersonalMap(
   mapInput: CreatePersonalMapSnapshotInput,
@@ -150,6 +147,64 @@ function assertProviderCompatibleWithPersonalMap(
   }
 }
 
+function createPersonalMapRecord(
+  command: CreatePersonalMapCommand,
+  idFactory: CreateMappingEngineOptions["idFactory"],
+): StoredPersonalMap {
+  assertNonBlank(command.name, "Personal map name");
+  assertFiniteTimestamp(command.createdAtMs, "createdAtMs");
+  const id = createRequiredId(
+    "personal-map",
+    command.requestedId,
+    idFactory,
+  );
+  return {
+    id,
+    name: command.name.trim(),
+    createdAtMs: command.createdAtMs,
+    updatedAtMs: command.createdAtMs,
+  };
+}
+
+function createExplorationRecord(input: {
+  readonly command: Omit<StartExplorationCommand, "personalMapId">;
+  readonly personalMapId: string;
+  readonly provider: TrackingProviderPort;
+  readonly idFactory: CreateMappingEngineOptions["idFactory"];
+}): StoredExploration {
+  assertNonBlank(input.command.name, "Exploration name");
+  assertNonBlank(input.command.trackingProviderId, "trackingProviderId");
+  assertFiniteTimestamp(input.command.startedAtMs, "startedAtMs");
+
+  const localFrameLabel = localFrameLabelForStart(
+    input.provider,
+    input.command,
+  );
+  return {
+    id: createRequiredId(
+      "exploration",
+      input.command.requestedId,
+      input.idFactory,
+    ),
+    personalMapId: input.personalMapId,
+    name: input.command.name.trim(),
+    startedAtMs: input.command.startedAtMs,
+    trackingProviderId: input.command.trackingProviderId,
+    ...(localFrameLabel === undefined ? {} : { localFrameLabel }),
+  };
+}
+
+function createStartedMutation(record: StoredExploration) {
+  return createExplorationSession({
+    id: record.id,
+    name: record.name,
+    startedAtMs: record.startedAtMs,
+    ...(record.localFrameLabel === undefined
+      ? {}
+      : { localFrameLabel: record.localFrameLabel }),
+  });
+}
+
 async function requireExploration(
   options: CreateMappingEngineOptions,
   personalMapId: string,
@@ -180,6 +235,14 @@ export function createMappingEngine(
   const providers = createProviderMap(options.trackingProviders);
   const listeners = new Set<MappingEngineListener>();
 
+  function requireProvider(providerId: string): TrackingProviderPort {
+    const provider = providers.get(providerId);
+    if (provider === undefined) {
+      throw new Error(`Unknown tracking provider: ${providerId}`);
+    }
+    return provider;
+  }
+
   function publish(personalMapId: string, events: readonly MappingEvent[]): void {
     for (const event of events) {
       const notification = { personalMapId, event } as const;
@@ -197,36 +260,88 @@ export function createMappingEngine(
   async function createPersonalMap(
     command: CreatePersonalMapCommand,
   ): Promise<{ readonly personalMapId: string }> {
-    assertNonBlank(command.name, "Personal map name");
-    assertFiniteTimestamp(command.createdAtMs, "createdAtMs");
-
-    const personalMapId = createRequiredId(
-      "personal-map",
-      command.requestedId,
-      options.idFactory,
-    );
-    const record: StoredPersonalMap = {
-      id: personalMapId,
-      name: command.name.trim(),
-      createdAtMs: command.createdAtMs,
-      updatedAtMs: command.createdAtMs,
-    };
-
+    const record = createPersonalMapRecord(command, options.idFactory);
     await options.repository.runInTransaction((writer) =>
       writer.createPersonalMap(record),
     );
+    return { personalMapId: record.id };
+  }
 
-    return { personalMapId };
+  async function createPersonalMapWithFirstExploration(
+    command: CreatePersonalMapWithFirstExplorationCommand,
+  ): Promise<{
+    readonly personalMapId: string;
+    readonly explorationId: string;
+  }> {
+    const personalMap = createPersonalMapRecord(
+      command.personalMap,
+      options.idFactory,
+    );
+    const provider = requireProvider(
+      command.exploration.trackingProviderId,
+    );
+    const exploration = createExplorationRecord({
+      command: command.exploration,
+      personalMapId: personalMap.id,
+      provider,
+      idFactory: options.idFactory,
+    });
+    if (exploration.startedAtMs < personalMap.createdAtMs) {
+      throw new Error(
+        "The first exploration must not start before its PersonalMap is created.",
+      );
+    }
+
+    await options.repository.runInTransaction(async (writer) => {
+      await writer.createPersonalMap(personalMap);
+      await writer.createExploration(exploration);
+    });
+
+    try {
+      await provider.start({
+        personalMapId: personalMap.id,
+        explorationId: exploration.id,
+      });
+    } catch (startError) {
+      let compensated = false;
+      try {
+        compensated = await options.repository.runInTransaction((writer) =>
+          writer.deletePersonalMapIfOnlyUnobservedExploration(
+            personalMap.id,
+            exploration.id,
+          ),
+        );
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [startError, cleanupError],
+          `Tracking provider ${provider.id} failed to start and the new PersonalMap could not be compensated.`,
+        );
+      }
+      if (!compensated) {
+        throw new AggregateError(
+          [
+            startError,
+            new Error(
+              "Automatic compensation was refused because the new PersonalMap no longer consisted of exactly one unobserved exploration.",
+            ),
+          ],
+          `Tracking provider ${provider.id} failed to start; canonical evidence was preserved for explicit recovery.`,
+        );
+      }
+      throw startError;
+    }
+
+    publish(personalMap.id, createStartedMutation(exploration).events);
+    return {
+      personalMapId: personalMap.id,
+      explorationId: exploration.id,
+    };
   }
 
   async function startExploration(
     command: StartExplorationCommand,
   ): Promise<{ readonly explorationId: string }> {
     assertNonBlank(command.personalMapId, "personalMapId");
-    assertNonBlank(command.name, "Exploration name");
-    assertNonBlank(command.trackingProviderId, "trackingProviderId");
-    assertFiniteTimestamp(command.startedAtMs, "startedAtMs");
-
     const mapInput = await options.repository.loadPersonalMapReplayInput(
       command.personalMapId,
     );
@@ -234,68 +349,56 @@ export function createMappingEngine(
       throw new Error(`Personal map not found: ${command.personalMapId}`);
     }
 
-    const provider = providers.get(command.trackingProviderId);
-    if (provider === undefined) {
-      throw new Error(
-        `Unknown tracking provider: ${command.trackingProviderId}`,
-      );
-    }
-
-    const localFrameLabel = localFrameLabelForStart(provider, command);
+    const provider = requireProvider(command.trackingProviderId);
+    const exploration = createExplorationRecord({
+      command,
+      personalMapId: command.personalMapId,
+      provider,
+      idFactory: options.idFactory,
+    });
     assertProviderCompatibleWithPersonalMap(
       mapInput,
       provider,
-      localFrameLabel,
+      exploration.localFrameLabel,
     );
-
-    const explorationId = createRequiredId(
-      "exploration",
-      command.requestedId,
-      options.idFactory,
-    );
-    const record: StoredExploration = {
-      id: explorationId,
-      personalMapId: command.personalMapId,
-      name: command.name.trim(),
-      startedAtMs: command.startedAtMs,
-      trackingProviderId: command.trackingProviderId,
-      ...(localFrameLabel === undefined ? {} : { localFrameLabel }),
-    };
 
     await options.repository.runInTransaction((writer) =>
-      writer.createExploration(record),
+      writer.createExploration(exploration),
     );
 
     try {
       await provider.start({
         personalMapId: command.personalMapId,
-        explorationId,
+        explorationId: exploration.id,
       });
     } catch (startError) {
+      let compensated = false;
       try {
-        await options.repository.runInTransaction((writer) =>
-          writer.deleteExploration(explorationId),
+        compensated = await options.repository.runInTransaction((writer) =>
+          writer.deleteExplorationIfUnobserved(exploration.id),
         );
       } catch (cleanupError) {
         throw new AggregateError(
           [startError, cleanupError],
-          `Tracking provider ${provider.id} failed to start and the exploration record could not be cleaned up.`,
+          `Tracking provider ${provider.id} failed to start and the exploration record could not be compensated.`,
+        );
+      }
+      if (!compensated) {
+        throw new AggregateError(
+          [
+            startError,
+            new Error(
+              "Automatic compensation was refused because raw observations or confirmed markers already exist.",
+            ),
+          ],
+          `Tracking provider ${provider.id} failed to start; canonical evidence was preserved for explicit recovery.`,
         );
       }
       throw startError;
     }
 
-    const started = createExplorationSession({
-      id: explorationId,
-      name: record.name,
-      startedAtMs: record.startedAtMs,
-      ...(record.localFrameLabel === undefined
-        ? {}
-        : { localFrameLabel: record.localFrameLabel }),
-    });
-    publish(command.personalMapId, started.events);
-
-    return { explorationId };
+    publish(command.personalMapId, createStartedMutation(exploration).events);
+    return { explorationId: exploration.id };
   }
 
   async function ingestPositionSamples(
@@ -403,13 +506,7 @@ export function createMappingEngine(
       throw new Error("endedAtMs must not be before startedAtMs.");
     }
 
-    const provider = providers.get(loaded.record.trackingProviderId);
-    if (provider === undefined) {
-      throw new Error(
-        `Tracking provider is unavailable: ${loaded.record.trackingProviderId}`,
-      );
-    }
-
+    const provider = requireProvider(loaded.record.trackingProviderId);
     await provider.stop(command.explorationId);
 
     const completed = endExplorationSession(
@@ -443,6 +540,7 @@ export function createMappingEngine(
 
   return {
     createPersonalMap,
+    createPersonalMapWithFirstExploration,
     startExploration,
     ingestPositionSamples,
     addMarker,
