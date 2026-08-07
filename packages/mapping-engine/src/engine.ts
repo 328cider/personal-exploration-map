@@ -14,6 +14,7 @@ import type {
   AddMarkerCommand,
   CreateMappingEngineOptions,
   CreatePersonalMapCommand,
+  CreatePersonalMapWithFirstExplorationCommand,
   EndExplorationCommand,
   GetPersonalMapQuery,
   IngestPositionSamplesCommand,
@@ -82,7 +83,7 @@ function markerFromEvent(event: MappingEvent): MapMarker {
 
 function localFrameLabelForStart(
   provider: TrackingProviderPort,
-  command: StartExplorationCommand,
+  command: Pick<StartExplorationCommand, "localFrameLabel">,
 ): string | undefined {
   if (provider.coordinateKind === "geographic") {
     if (command.localFrameLabel !== undefined) {
@@ -150,6 +151,17 @@ function assertProviderCompatibleWithPersonalMap(
   }
 }
 
+function explorationStartedEvents(record: StoredExploration): readonly MappingEvent[] {
+  return createExplorationSession({
+    id: record.id,
+    name: record.name,
+    startedAtMs: record.startedAtMs,
+    ...(record.localFrameLabel === undefined
+      ? {}
+      : { localFrameLabel: record.localFrameLabel }),
+  }).events;
+}
+
 async function requireExploration(
   options: CreateMappingEngineOptions,
   personalMapId: string,
@@ -194,6 +206,14 @@ export function createMappingEngine(
     }
   }
 
+  function requireProvider(providerId: string): TrackingProviderPort {
+    const provider = providers.get(providerId);
+    if (provider === undefined) {
+      throw new Error(`Unknown tracking provider: ${providerId}`);
+    }
+    return provider;
+  }
+
   async function createPersonalMap(
     command: CreatePersonalMapCommand,
   ): Promise<{ readonly personalMapId: string }> {
@@ -219,6 +239,95 @@ export function createMappingEngine(
     return { personalMapId };
   }
 
+  async function createPersonalMapWithFirstExploration(
+    command: CreatePersonalMapWithFirstExplorationCommand,
+  ): Promise<{
+    readonly personalMapId: string;
+    readonly explorationId: string;
+  }> {
+    assertNonBlank(command.personalMapName, "Personal map name");
+    assertNonBlank(command.explorationName, "Exploration name");
+    assertNonBlank(command.trackingProviderId, "trackingProviderId");
+    assertFiniteTimestamp(command.createdAtMs, "createdAtMs");
+    assertFiniteTimestamp(command.startedAtMs, "startedAtMs");
+    if (command.startedAtMs < command.createdAtMs) {
+      throw new Error("startedAtMs must not be before createdAtMs.");
+    }
+
+    const provider = requireProvider(command.trackingProviderId);
+    const localFrameLabel = localFrameLabelForStart(provider, command);
+    const personalMapId = createRequiredId(
+      "personal-map",
+      command.requestedPersonalMapId,
+      options.idFactory,
+    );
+    const explorationId = createRequiredId(
+      "exploration",
+      command.requestedExplorationId,
+      options.idFactory,
+    );
+
+    const personalMapRecord: StoredPersonalMap = {
+      id: personalMapId,
+      name: command.personalMapName.trim(),
+      createdAtMs: command.createdAtMs,
+      updatedAtMs: Math.max(command.createdAtMs, command.startedAtMs),
+    };
+    const explorationRecord: StoredExploration = {
+      id: explorationId,
+      personalMapId,
+      name: command.explorationName.trim(),
+      startedAtMs: command.startedAtMs,
+      trackingProviderId: command.trackingProviderId,
+      ...(localFrameLabel === undefined ? {} : { localFrameLabel }),
+    };
+
+    // An empty aggregate is unresolved, but using the same compatibility path
+    // keeps first-session provider declarations and local frame requirements
+    // aligned with all later continuations.
+    assertProviderCompatibleWithPersonalMap(
+      {
+        id: personalMapId,
+        name: personalMapRecord.name,
+        explorations: [],
+      },
+      provider,
+      localFrameLabel,
+    );
+
+    await options.repository.runInTransaction(async (writer) => {
+      await writer.createPersonalMap(personalMapRecord);
+      await writer.createExploration(explorationRecord);
+    });
+
+    try {
+      await provider.start({ personalMapId, explorationId });
+    } catch (startError) {
+      try {
+        const removed = await options.repository.runInTransaction((writer) =>
+          writer.deletePersonalMapIfOnlyEmptyExploration(
+            personalMapId,
+            explorationId,
+          ),
+        );
+        if (!removed) {
+          throw new Error(
+            `Refused to remove provisional PersonalMap ${personalMapId} because evidence or another exploration exists.`,
+          );
+        }
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [startError, cleanupError],
+          `Tracking provider ${provider.id} failed to start and the provisional PersonalMap could not be safely compensated.`,
+        );
+      }
+      throw startError;
+    }
+
+    publish(personalMapId, explorationStartedEvents(explorationRecord));
+    return { personalMapId, explorationId };
+  }
+
   async function startExploration(
     command: StartExplorationCommand,
   ): Promise<{ readonly explorationId: string }> {
@@ -234,13 +343,7 @@ export function createMappingEngine(
       throw new Error(`Personal map not found: ${command.personalMapId}`);
     }
 
-    const provider = providers.get(command.trackingProviderId);
-    if (provider === undefined) {
-      throw new Error(
-        `Unknown tracking provider: ${command.trackingProviderId}`,
-      );
-    }
-
+    const provider = requireProvider(command.trackingProviderId);
     const localFrameLabel = localFrameLabelForStart(provider, command);
     assertProviderCompatibleWithPersonalMap(
       mapInput,
@@ -285,16 +388,7 @@ export function createMappingEngine(
       throw startError;
     }
 
-    const started = createExplorationSession({
-      id: explorationId,
-      name: record.name,
-      startedAtMs: record.startedAtMs,
-      ...(record.localFrameLabel === undefined
-        ? {}
-        : { localFrameLabel: record.localFrameLabel }),
-    });
-    publish(command.personalMapId, started.events);
-
+    publish(command.personalMapId, explorationStartedEvents(record));
     return { explorationId };
   }
 
@@ -443,6 +537,7 @@ export function createMappingEngine(
 
   return {
     createPersonalMap,
+    createPersonalMapWithFirstExploration,
     startExploration,
     ingestPositionSamples,
     addMarker,

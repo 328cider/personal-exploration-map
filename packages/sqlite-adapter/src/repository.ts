@@ -351,6 +351,49 @@ function createWriter(database: AsyncSqliteExecutor): MappingRepositoryWriter {
       );
     },
 
+    async deletePersonalMapIfOnlyEmptyExploration(
+      personalMapId,
+      explorationId,
+    ) {
+      const result = await database.runAsync(
+        `DELETE FROM personal_maps
+         WHERE id = ?
+           AND 1 = (
+             SELECT COUNT(*)
+             FROM explorations
+             WHERE personal_map_id = ?
+           )
+           AND EXISTS (
+             SELECT 1
+             FROM explorations e
+             WHERE e.id = ?
+               AND e.personal_map_id = ?
+               AND e.status = 'recording'
+               AND NOT EXISTS (
+                 SELECT 1 FROM position_samples p
+                 WHERE p.exploration_id = e.id
+               )
+               AND NOT EXISTS (
+                 SELECT 1 FROM markers m
+                 WHERE m.exploration_id = e.id
+               )
+           )`,
+        personalMapId,
+        personalMapId,
+        explorationId,
+        personalMapId,
+      );
+      if (result.changes > 0) {
+        await database.runAsync(
+          `DELETE FROM app_state
+           WHERE key = 'active_exploration_id' AND value = ?`,
+          explorationId,
+        );
+        return true;
+      }
+      return false;
+    },
+
     async appendPositionSamples(explorationId, samples) {
       await requirePersonalMapId(database, explorationId);
       const inserted: RawPositionSample[] = [];

@@ -57,6 +57,7 @@ const requiredAnchors = new Map([
     [
       "createMappingEngine",
       "sqliteMappingRepository",
+      "createPersonalMapWithFirstExploration",
       "ingestPositionSamples",
       "startExploration",
       "addMarker",
@@ -129,6 +130,21 @@ for (const forbidden of [
   if (app.includes(forbidden)) {
     failures.push(`App.tsx still uses legacy canonical write: ${forbidden}`);
   }
+}
+
+const mobileRuntime = requireFile(
+  "apps/mobile/src/mapping/mobileMappingRuntime.ts",
+)
+  ? read("apps/mobile/src/mapping/mobileMappingRuntime.ts")
+  : "";
+if (
+  /startNewPersonalMapExploration[\s\S]*?createPersonalMap\s*\(/u.test(
+    mobileRuntime,
+  )
+) {
+  failures.push(
+    "New-map flow must use createPersonalMapWithFirstExploration rather than separate create/start commands.",
+  );
 }
 
 const backgroundTask = requireFile(

@@ -17,6 +17,14 @@ test("applications use explicit commands instead of mutable core sessions", asyn
       calls.push(`create-map:${command.name}`);
       return { personalMapId: command.requestedId ?? "map-1" };
     },
+    async createPersonalMapWithFirstExploration(command) {
+      calls.push(`create-first:${command.personalMapName}`);
+      return {
+        personalMapId: command.requestedPersonalMapId ?? "map-first",
+        explorationId:
+          command.requestedExplorationId ?? "session-first",
+      };
+    },
     async startExploration(command) {
       calls.push(`start:${command.personalMapId}`);
       return { explorationId: command.requestedId ?? "session-1" };
@@ -48,13 +56,20 @@ test("applications use explicit commands instead of mutable core sessions", asyn
     },
   };
 
+  const first = await engine.createPersonalMapWithFirstExploration({
+    personalMapName: "First map",
+    explorationName: "First exploration",
+    createdAtMs: 500,
+    startedAtMs: 500,
+    trackingProviderId: "gnss",
+  });
   const created = await engine.createPersonalMap({
     name: "My map",
     createdAtMs: 1_000,
   });
   const started = await engine.startExploration({
     personalMapId: created.personalMapId,
-    name: "First exploration",
+    name: "Continued exploration",
     startedAtMs: 2_000,
     trackingProviderId: "gnss",
   });
@@ -78,8 +93,13 @@ test("applications use explicit commands instead of mutable core sessions", asyn
     endedAtMs: 4_000,
   });
 
-  assert.equal(MAPPING_ENGINE_API_VERSION, "4");
+  assert.equal(MAPPING_ENGINE_API_VERSION, "5");
+  assert.deepEqual(first, {
+    personalMapId: "map-first",
+    explorationId: "session-first",
+  });
   assert.deepEqual(calls, [
+    "create-first:First map",
     "create-map:My map",
     "start:map-1",
     "ingest:0",
