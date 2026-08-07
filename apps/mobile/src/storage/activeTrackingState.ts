@@ -10,7 +10,7 @@ export interface ActiveTrackingContext {
   readonly providerId: string;
 }
 
-interface LegacyExplorationContextRow {
+interface ExplorationContextRow {
   readonly personal_map_id: string;
   readonly tracking_provider_id: string;
 }
@@ -62,44 +62,55 @@ export async function setActiveTrackingContext(
 }
 
 export async function getActiveTrackingContext(): Promise<ActiveTrackingContext | null> {
-  const serialized = await getStateValue(ACTIVE_CONTEXT_KEY);
+  const [serialized, legacyExplorationId] = await Promise.all([
+    getStateValue(ACTIVE_CONTEXT_KEY),
+    getStateValue(LEGACY_ACTIVE_EXPLORATION_KEY),
+  ]);
+
+  let serializedContext: ActiveTrackingContext | null = null;
   if (serialized !== null) {
     try {
       const parsed: unknown = JSON.parse(serialized);
       if (isActiveTrackingContext(parsed)) {
-        return parsed;
+        serializedContext = parsed;
       }
     } catch {
-      // Fall through to recovery from the durable exploration row.
+      // Recover from the durable exploration row below.
     }
   }
 
-  const legacyExplorationId = await getStateValue(
-    LEGACY_ACTIVE_EXPLORATION_KEY,
-  );
-  if (legacyExplorationId === null) {
+  const explorationId =
+    serializedContext?.explorationId ?? legacyExplorationId;
+  if (explorationId === null) {
     return null;
   }
 
   const database = await getDatabase();
-  const row = await database.getFirstAsync<LegacyExplorationContextRow>(
+  const row = await database.getFirstAsync<ExplorationContextRow>(
     `SELECT personal_map_id, tracking_provider_id
      FROM explorations
      WHERE id = ? AND status = 'recording'`,
-    legacyExplorationId,
+    explorationId,
   );
   if (row === null) {
-    await clearActiveTrackingContext();
+    await clearActiveTrackingContext(explorationId);
     return null;
   }
 
-  const recovered: ActiveTrackingContext = {
+  const durable: ActiveTrackingContext = {
     personalMapId: row.personal_map_id,
-    explorationId: legacyExplorationId,
+    explorationId,
     providerId: row.tracking_provider_id,
   };
-  await setActiveTrackingContext(recovered);
-  return recovered;
+
+  if (
+    serializedContext?.personalMapId !== durable.personalMapId ||
+    serializedContext.providerId !== durable.providerId ||
+    legacyExplorationId !== durable.explorationId
+  ) {
+    await setActiveTrackingContext(durable);
+  }
+  return durable;
 }
 
 export async function clearActiveTrackingContext(
