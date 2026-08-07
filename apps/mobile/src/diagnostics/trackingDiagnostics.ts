@@ -1,6 +1,7 @@
 import {
   createExplorationTrackingDiagnostics,
   type ExplorationTrackingDiagnostics,
+  type TrackingDiagnosticEvent,
   type TrackingDiagnosticEventKind,
   type TrackingDiagnosticPayload,
 } from "@exploration-map/mapping-engine";
@@ -18,6 +19,8 @@ const diagnosticsStore = createSqliteTrackingDiagnosticsStore(
   getMappingDatabase,
 );
 
+let diagnosticWriteQueue: Promise<void> = Promise.resolve();
+
 export interface ExplorationTrackingReportItem {
   readonly explorationId: string;
   readonly name: string;
@@ -31,39 +34,55 @@ interface ExplorationDiagnosticRow {
   readonly tracking_provider_id: string;
 }
 
-export async function recordTrackingDiagnosticEvent(input: {
+interface DiagnosticInput {
   readonly context: ActiveTrackingContext;
   readonly kind: TrackingDiagnosticEventKind;
   readonly occurredAtMs?: number;
   readonly payload?: TrackingDiagnosticPayload;
-}): Promise<boolean> {
-  return diagnosticsStore.append({
+}
+
+function createDiagnosticEvent(input: DiagnosticInput): TrackingDiagnosticEvent {
+  return {
     id: createId("tracking-event"),
     personalMapId: input.context.personalMapId,
     explorationId: input.context.explorationId,
     providerId: input.context.providerId,
     kind: input.kind,
+    // Capture the observation time before a queued SQLite write begins.
     occurredAtMs: input.occurredAtMs ?? Date.now(),
     ...(input.payload === undefined ? {} : { payload: input.payload }),
-  });
+  };
+}
+
+export async function recordTrackingDiagnosticEvent(
+  input: DiagnosticInput,
+): Promise<boolean> {
+  return diagnosticsStore.append(createDiagnosticEvent(input));
 }
 
 /**
  * Diagnostics must never interrupt canonical position persistence or provider
- * lifecycle. Callers use this helper on the tracking hot path.
+ * lifecycle. Events are timestamped immediately, then serialized through a
+ * private best-effort queue to avoid concurrent SQLite writes on callback hot
+ * paths. The returned promise may be awaited by lifecycle code, but callback
+ * ingestion deliberately fires it without waiting.
  */
-export async function recordTrackingDiagnosticBestEffort(input: {
-  readonly context: ActiveTrackingContext;
-  readonly kind: TrackingDiagnosticEventKind;
-  readonly occurredAtMs?: number;
-  readonly payload?: TrackingDiagnosticPayload;
-}): Promise<void> {
-  try {
-    await recordTrackingDiagnosticEvent(input);
-  } catch {
-    // Operational evidence is useful but non-canonical. Never trade away a raw
-    // location sample or a recoverable tracking session to record diagnostics.
-  }
+export function recordTrackingDiagnosticBestEffort(
+  input: DiagnosticInput,
+): Promise<void> {
+  const event = createDiagnosticEvent(input);
+  const write = diagnosticWriteQueue.then(async () => {
+    try {
+      await diagnosticsStore.append(event);
+    } catch {
+      // Operational evidence is useful but non-canonical. Never trade away a
+      // raw location sample or recoverable tracking session for diagnostics.
+    }
+  });
+  // Each queued task handles its own persistence failure, so the queue remains
+  // usable even after an individual diagnostic insert cannot be written.
+  diagnosticWriteQueue = write;
+  return write;
 }
 
 export async function recordActiveTrackingDiagnosticBestEffort(input: {
@@ -81,6 +100,10 @@ export async function recordActiveTrackingDiagnosticBestEffort(input: {
 export async function loadPersonalMapTrackingDiagnostics(
   personalMapId: string,
 ): Promise<readonly ExplorationTrackingReportItem[]> {
+  // Make a review opened immediately after stopping deterministic: wait only
+  // for diagnostics already queued by this process, never for future events.
+  await diagnosticWriteQueue;
+
   const database = await getDatabase();
   const rows = await database.getAllAsync<ExplorationDiagnosticRow>(
     `SELECT id, name, tracking_provider_id
