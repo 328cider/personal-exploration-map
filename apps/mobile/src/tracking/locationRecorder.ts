@@ -97,6 +97,7 @@ export function createGnssTrackingProviderSet(
 ): GnssTrackingProviderSet {
   const backgroundProvider: TrackingProviderPort = {
     id: BACKGROUND_GNSS_PROVIDER_ID,
+    coordinateKind: "geographic",
 
     async start(input) {
       const available = await TaskManager.isAvailableAsync();
@@ -162,6 +163,7 @@ export function createGnssTrackingProviderSet(
 
   const foregroundProvider: TrackingProviderPort = {
     id: FOREGROUND_GNSS_PROVIDER_ID,
+    coordinateKind: "geographic",
 
     async start(input) {
       await assertCompatibleActiveContext(
