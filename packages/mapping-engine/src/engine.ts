@@ -5,6 +5,7 @@ import {
   createPersonalMapSnapshot,
   endExploration as endExplorationSession,
   replayExploration,
+  type CreatePersonalMapSnapshotInput,
   type MapMarker,
   type MappingEvent,
 } from "../../mapping-core/src/index.ts";
@@ -46,6 +47,14 @@ function createProviderMap(
   const result = new Map<string, TrackingProviderPort>();
   for (const provider of providers) {
     assertNonBlank(provider.id, "Tracking provider id");
+    if (
+      provider.coordinateKind !== "geographic" &&
+      provider.coordinateKind !== "local"
+    ) {
+      throw new Error(
+        `Tracking provider ${provider.id} has an invalid coordinate kind.`,
+      );
+    }
     if (result.has(provider.id)) {
       throw new Error(`Duplicate tracking provider id: ${provider.id}`);
     }
@@ -69,6 +78,76 @@ function markerFromEvent(event: MappingEvent): MapMarker {
     throw new Error(`Expected marker.added event, received ${event.type}.`);
   }
   return event.marker;
+}
+
+function localFrameLabelForStart(
+  provider: TrackingProviderPort,
+  command: StartExplorationCommand,
+): string | undefined {
+  if (provider.coordinateKind === "geographic") {
+    if (command.localFrameLabel !== undefined) {
+      throw new Error(
+        `Geographic tracking provider ${provider.id} must not receive a localFrameLabel.`,
+      );
+    }
+    return undefined;
+  }
+
+  const label = command.localFrameLabel?.trim();
+  if (label === undefined || label.length === 0) {
+    throw new Error(
+      `Local tracking provider ${provider.id} requires a non-blank localFrameLabel.`,
+    );
+  }
+  return label;
+}
+
+/**
+ * Rejects an incompatible continuation before creating an ExplorationSession
+ * record or starting a platform provider.
+ *
+ * The app shell may preflight the same condition to explain it earlier, but
+ * this engine check is the canonical invariant and cannot be bypassed by a
+ * future game or alternate explorer shell.
+ */
+function assertProviderCompatibleWithPersonalMap(
+  mapInput: CreatePersonalMapSnapshotInput,
+  provider: TrackingProviderPort,
+  localFrameLabel: string | undefined,
+): void {
+  const map = createPersonalMapSnapshot(mapInput);
+  const frame = map.frame;
+
+  if (frame.kind === "unresolved") {
+    return;
+  }
+
+  if (provider.coordinateKind === "geographic") {
+    if (frame.kind === "local") {
+      throw new Error(
+        `Geographic tracking provider ${provider.id} cannot extend local PersonalMap ${map.personalMapId} without an explicit anchor transform.`,
+      );
+    }
+    return;
+  }
+
+  if (frame.kind === "geographic-local") {
+    throw new Error(
+      `Local tracking provider ${provider.id} cannot extend geographic PersonalMap ${map.personalMapId} without an explicit anchor transform.`,
+    );
+  }
+
+  if (frame.label === undefined) {
+    throw new Error(
+      `Local PersonalMap ${map.personalMapId} has no explicit frame label and cannot accept another local exploration safely.`,
+    );
+  }
+
+  if (frame.label !== localFrameLabel) {
+    throw new Error(
+      `Local tracking frame ${localFrameLabel} does not match PersonalMap frame ${frame.label}.`,
+    );
+  }
 }
 
 async function requireExploration(
@@ -162,6 +241,13 @@ export function createMappingEngine(
       );
     }
 
+    const localFrameLabel = localFrameLabelForStart(provider, command);
+    assertProviderCompatibleWithPersonalMap(
+      mapInput,
+      provider,
+      localFrameLabel,
+    );
+
     const explorationId = createRequiredId(
       "exploration",
       command.requestedId,
@@ -173,9 +259,7 @@ export function createMappingEngine(
       name: command.name.trim(),
       startedAtMs: command.startedAtMs,
       trackingProviderId: command.trackingProviderId,
-      ...(command.localFrameLabel === undefined
-        ? {}
-        : { localFrameLabel: command.localFrameLabel }),
+      ...(localFrameLabel === undefined ? {} : { localFrameLabel }),
     };
 
     await options.repository.runInTransaction((writer) =>
