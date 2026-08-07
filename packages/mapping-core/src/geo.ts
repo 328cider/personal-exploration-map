@@ -45,6 +45,23 @@ export function projectGeographicToLocal(
   return { xMeters, yMeters };
 }
 
+export function unprojectLocalToGeographic(
+  xMeters: number,
+  yMeters: number,
+  originLatitude: number,
+  originLongitude: number,
+): GeographicPosition {
+  const originLatitudeRadians = originLatitude * DEG_TO_RAD;
+  const latitude =
+    originLatitude + yMeters / EARTH_RADIUS_METERS / DEG_TO_RAD;
+  const longitude =
+    originLongitude +
+    xMeters /
+      (EARTH_RADIUS_METERS * Math.cos(originLatitudeRadians)) /
+      DEG_TO_RAD;
+  return { kind: "geographic", latitude, longitude };
+}
+
 export function distanceBetweenPositions(
   first: Position,
   second: Position,
