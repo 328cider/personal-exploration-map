@@ -20,6 +20,7 @@ OS API、DB、描画、標準アルゴリズム、座標変換、交換形式ま
 - **Adopt** — 既存OSS、標準、platformを製品経路に使う
 - **Build** — 製品固有の不変条件なので自作する
 - **Benchmark** — 候補を実データで比較するまで採否を決めない
+- **Retain after benchmark** — commodity実装だが、現要件では置換便益が依存コストを上回らない
 - **Defer** — 現在の価値検証に不要なので実装しない
 
 ## Decision matrix
@@ -29,18 +30,18 @@ OS API、DB、描画、標準アルゴリズム、座標変換、交換形式ま
 | Background GNSS | Expo Location / TaskManager | **Adopt** | OS権限、foreground service、callbackをplatformへ任せる。OpenTracks等から試験観点を学ぶ |
 | Local persistence | Expo SQLite + generic SQLite adapter | **Adopt** | DB engineやORMを自作しない。raw replayとtransaction境界だけ製品固有 |
 | PersonalMap domain | mapping-core / mapping-engine | **Build** | map truth、session境界、偽接続禁止、game write禁止は製品固有 |
-| Blank-map rendering | React Native View-per-segment | **Adopt react-native-svg next** | 現実装はreferenceのみ。Polyline/Path/marker、zoom/panへ進む前にSVGへ移す |
-| High-load rendering | 未導入 | **Benchmark React Native Skia only if needed** | SVGが実測閾値を満たさない場合だけ導入する |
+| Blank-map rendering | View-per-segment reference | **Adopt react-native-svg** | MIT。session-separated pathとmarkerをread-onlyで描画。実機frame gateはIssue #19 |
+| High-load rendering | 未導入 | **Benchmark Skia only if needed** | SVGが実機閾値を満たさない場合だけ導入する |
 | Optional basemap | 未導入 | **Defer / evaluate MapLibre later** | 白紙地図が正本。basemapは任意補助レイヤーでありM0必須ではない |
-| Track simplification | internal Ramer–Douglas–Peucker | **Build temporarily, benchmark simplify-js** | dependency-free coreとmetadata保持を優先。性能・edge caseで必要ならBSD-2-Clause実装へ置換 |
+| Track simplification | internal standard RDP | **Retain after simplify-js benchmark** | HQはgeometry同一だがM0/M1でmaterialな性能差なし。defaultは高速だがgeometryを変更。再評価条件を明示 |
 | Geographic distance | internal haversine | **Build within explicit local envelope** | 小さなPersonalMapには十分。global/high-precision要件が出たらGeographicLibを採用 |
 | Geographic projection | local equirectangular approximation | **Build within explicit local envelope** | first accepted pointを原点とする局所地図用。Proj4jsはCRS変換要件が出た時だけ採用 |
 | GeoJSON exchange | 未実装 | **Adopt RFC 7946 semantics** | geographic derived segments / markersに使用。local coordinatesを偽のGeoJSONへしない |
 | GPX exchange | 未実装 | **Adopt GPX 1.1 semantics** | WGS84 track。ExplorationSessionごとに`trkseg`を分け、偽接続しない |
 | Lossless app export | 未実装 | **Build small versioned bundle** | raw evidence、local frame、rejected reason、confirmed markerを標準形式だけでは失うため |
 | Background logger reference | OpenTracks / GPSLogger | **Benchmark behavior; do not copy blindly** | lifecycle、battery、vendor kill、exportの試験観点を利用。ライセンス境界を守る |
-| Pocket PDR | port only | **Benchmark existing research first** | Path Guide、RoNIN、TLIO、phone-in-pocket研究等と比較し、独自sensor fusionを先行実装しない |
-| Camera / visual tracking | 非採用 | **Defer** | SIMT Track+等は有力比較対象だが、常時カメラは現在のpassive-first UXに不一致 |
+| Pocket PDR | port only | **Benchmark existing research first** | Path Guide、RoNIN、TLIO等と比較し、独自sensor fusionを先行実装しない |
+| Camera / visual tracking | 非採用 | **Defer** | camera-assisted trackingは比較対象だが、常時カメラはpassive-first UXに不一致 |
 
 ## Rendering
 
@@ -48,21 +49,22 @@ OS API、DB、描画、標準アルゴリズム、座標変換、交換形式ま
 
 採用理由:
 
-- Expoが公式SDKとして統合方法を提供している
+- ExpoとReact Nativeで成熟した描画primitiveを利用できる
 - blank local coordinate mapを`Path` / `Polyline` / `Circle`で表現できる
 - sessionごとのpathを分け、未観測区間を接続しない構造が自然
 - current View-per-segmentより、要素数・transform・zoom/panの責務が明確
-- MIT系の許容的ライセンスで、game/rendering layerに閉じ込められる
+- MITライセンスでrenderer層に閉じ込められる
 
 導入条件:
 
-1. Issue #2でExpo dependencyとlockfileを再現可能にする
+1. committed lockfileとExpo compatibilityを維持する
 2. current canvasと同一fixtureを描画する
 3. confidence、start/end、marker、multiple segmentsを維持する
 4. rendererがmap truthやaccepted/rejectedを変更しない
-5. 1k / 5k / 10k pointsで操作性を計測する
+5. 1k / 5k / 10k pointsを計測する
+6. Android実機で視認性とframe stabilityを確認する
 
-current `TrackCanvas`はM0のreference implementationとしてのみ維持し、機能を増やし続けない。
+実装・CPU geometry benchmarkはPR #32、physical-device gateはIssue #19で扱う。
 
 ### React Native Skia — Benchmark only
 
@@ -70,7 +72,7 @@ SVGが次のいずれかで不足した場合だけ比較する。
 
 - 5,000 accepted points、20 segments、100 markersでpan/zoomが目視で不安定
 - target端末でinteraction中に継続的なframe dropが発生
-- uncertainty bandや大量overlayがSVG DOM相当の要素数で重い
+- uncertainty bandや大量overlayで要素数が支配的になる
 
 「高性能そう」という理由だけでは導入しない。Skia導入はnative build、API surface、テストコストを増やす。
 
@@ -85,28 +87,53 @@ MapLibreはGeoJSON/basemap表示の候補だが、PersonalMapの正本にはし�
 
 ## Track simplification
 
-current `simplifyTrack`はRamer–Douglas–Peuckerの小さなdependency-free実装である。アルゴリズム自体はcommodityであり、独自発明として扱わない。
+`mapping-core/src/simplify.ts`は標準Ramer–Douglas–Peuckerの小さなdependency-free実装である。製品独自アルゴリズムとして扱わない。
 
-### Why retain temporarily
+### Completed benchmark
 
-- mapping-core testをpackage installなしで実行できる
-- `TrackPoint` objectとsample provenanceをそのまま返す
-- toleranceの意味が明示的で、現在のfixtureが小さい
-- `simplify-js`の既定radial-distance pre-passを含めるかは製品上の選択になる
-- M0では描画前の数百〜数千点が主で、performance問題が未観測
+Experiment 004で`simplify-js@1.2.4`（BSD-2-Clause）と比較した。
 
-### Benchmark gate
+- exact version、license、integrity、repository metadataをartifactへ保存
+- product workspaceへdependencyを追加せず比較
+- noisy line 1k / 10k / 100k
+- rectangular loop 10k
+- marker-nearby turn 10k
+- 2つのgap-separated 5k segments
+- tolerance 1.5m
 
-`simplify-js`（BSD-2-Clause）と同一fixtureで比較する。
+結果:
 
-- output point count
-- corner preservation
-- marker近傍の形状
-- 1k / 10k / 100k pointsのruntime
-- highest-quality optionの差
-- dependency、type package、bundle size
+- high-quality modeは全fixtureでinternal RDPとexact point ids一致
+- original TrackPoint referenceとprovenanceを保持
+- M0/M1の1k〜10k noisy routeでhigh-quality modeに一貫した性能優位なし
+- 100k pointsでもhigh-quality median差は約1%
+- default modeは高速だがnoisy routeのpoint selectionを変更し、internal polylineとの差が最大約1.696m
+- segmentを別々に処理すればgapは維持可能
 
-結果が同等以上でdependency costが許容できればAdoptへ変更する。current implementationを維持する場合も、標準アルゴリズムであることと再評価条件をADRに残す。
+詳細は[`experiments/004-simplify-js.md`](experiments/004-simplify-js.md)。
+
+### Decision — retain internal RDP
+
+現時点では`simplify-js`をproduction dependencyへ追加しない。
+
+理由:
+
+- M0/M1規模でmaterialな性能改善がない
+- current implementationは小さく監査しやすい
+- dependency-free core testを維持できる
+- TrackPoint/sample provenanceが明確
+- default fast modeのgeometry差を実機価値検証前に導入しない
+
+これはOSS回避ではなく、exact candidateを比較した結果としての`Retain after benchmark`である。
+
+### Revisit conditions
+
+- 1 sessionで100k accepted points級が通常利用になる
+- simplificationが実機Review latencyを支配する
+- recursive implementationでstack / latency問題が出る
+- GeoJSON pipelineとの共通化価値が生じる
+- marker-aware / topology-aware simplificationが必要になる
+- 別候補にmaterialな改善がある
 
 `@turf/simplify`はGeoJSON pipeline全体が必要な時に検討する。単一アルゴリズムだけのためにTurf全体をmapping-coreへ入れない。
 
@@ -123,25 +150,25 @@ current local projectionは、PersonalMapの最初のaccepted geographic point�
 - antimeridian deltaはshortest longitude deltaへ正規化
 - global route、測量、救助、安全保証には使わない
 
-この範囲は法的精度保証ではなく、M0の表示と個人探索用のengineering envelopeである。範囲外sampleをrawから削除せず、diagnostic / map split / better transformの判断材料にする。
+範囲外sampleをrawから削除せず、diagnostic / map split / better transformの判断材料にする。
 
-### When to adopt Proj4js
+### Adopt Proj4js when
 
 - explicit EPSG / projected CRSをimportする
 - 自治体・GIS dataとの座標系変換が必要
 - user-controlled map originだけでは不十分
 
-### When to adopt GeographicLib
+### Adopt GeographicLib when
 
 - 20 kmを超えるPersonalMapを1 frameで扱う
-- high latitude / antimeridian / long geodesicで距離精度が製品価値になる
+- high latitude / long geodesicで距離精度が製品価値になる
 - export/import整合性に楕円体測地線が必要
 
 現在のM0へ将来要件だけで導入しない。
 
 ## Exchange formats
 
-詳細は [`EXPORT_BOUNDARY.md`](EXPORT_BOUNDARY.md) を正本とする。
+詳細は[`EXPORT_BOUNDARY.md`](EXPORT_BOUNDARY.md)を正本とする。
 
 - GeoJSON: geographic derived mapのinteroperability
 - GPX: geographic track/logger interoperability
@@ -176,41 +203,41 @@ Apache-2.0のため再利用候補になり得るが、Kotlin/Android implementa
 - inertial / magnetic cues
 - one recorded pathをfollowするUX
 
-PersonalMap aggregateの代替ではないが、single-traversal indoor traceの重要baselineである。source/licenseを確認せず取り込まない。
+PersonalMap aggregateの代替ではないが、single traversal indoor traceの重要baselineである。source/licenseを確認せず取り込まない。
 
 ### RoNIN
 
 - device orientation variationを扱うlearned inertial navigation
-- public code / dataをoffline benchmark候補にする
+- public dataset / codeによるoffline benchmark候補
 - GPL-3.0 codeをproduct packageへ組み込まない
 
 ### TLIO
 
-- learned displacementとfilterを組み合わせるbaseline
+- learned displacementとfilterのbaseline
 - reproducibility、model/runtime、training data、licenseを確認してから利用する
 
-### SIMT Track+
+### Camera-assisted tracking
 
-weak-GPS trackingの製品比較対象。ただしcamera / ARCoreを使うため、現在のphone-in-pocket defaultには採用しない。
+weak-GPS trackingの比較対象。ただしcamera / ARCoreを使うため、現在のphone-in-pocket defaultには採用しない。
 
-PDR判断は [`experiments/002-pocket-pdr.md`](experiments/002-pocket-pdr.md) に従い、Go / Narrow / Stopを先に定義する。
+PDR判断は[`experiments/002-pocket-pdr.md`](experiments/002-pocket-pdr.md)とcompanion benchmark文書に従い、Go / Narrow / Stopを先に定義する。
 
 ## License policy
 
-| Candidate | Expected license / status | Product use rule |
+| Candidate | License / status | Product use rule |
 |---|---|---|
 | Expo Location / TaskManager / SQLite | Expo ecosystem permissive OSS | Adopt through official package |
-| react-native-svg | MIT | Adopt after lockfile / Expo compatibility validation |
-| React Native Skia | permissive; verify pinned release | Benchmark only; record exact version/license before install |
-| MapLibre React Native | permissive; verify pinned release | Optional basemap only |
-| simplify-js | BSD-2-Clause | Benchmark; direct adoption allowed after version review |
-| Turf | MIT | Use only when GeoJSON pipeline justifies it |
-| Proj4js | MIT | Adopt only for explicit CRS transformation requirement |
-| GeographicLib | MIT/X11-style; verify JS package | Adopt only when precision envelope requires it |
-| OpenTracks | Apache-2.0 | Behavior/reference or isolated reuse with notice review |
-| GPSLogger | GPL-family | No code inclusion in proprietary/private product path without explicit legal decision |
-| RoNIN | GPL-3.0 | Offline benchmark/reference only by default |
-| Path Guide / TLIO research code | verify repository-specific license | No product inclusion until license is explicit |
+| react-native-svg | MIT | Renderer層で採用。exact versionをlockfileで固定 |
+| React Native Skia | permissive; pinned releaseで再確認 | SVG不足時だけbenchmark |
+| MapLibre React Native | permissive; pinned releaseで再確認 | Optional basemap only |
+| simplify-js 1.2.4 | BSD-2-Clause | Benchmark済み。現在は非採用、再評価条件あり |
+| Turf | MIT | GeoJSON pipelineが正当化する場合のみ |
+| Proj4js | MIT | explicit CRS変換要件時のみ |
+| GeographicLib | MIT/X11-style; JS packageを再確認 | precision envelope超過時のみ |
+| OpenTracks | Apache-2.0 | Behavior/referenceまたはNOTICE確認済みisolated reuse |
+| GPSLogger | GPL-family | 明示的な法的判断なしにproduct codeへ含めない |
+| RoNIN | GPL-3.0 | offline benchmark/reference only |
+| Path Guide / TLIO research code | repository-specific license要確認 | license明示までproduct inclusionなし |
 
 「GitHubに公開されている」は再利用許可を意味しない。採用時にはexact repository、version/tag、license file、NOTICE義務、transitive dependenciesを記録する。
 
@@ -219,8 +246,9 @@ PDR判断は [`experiments/002-pocket-pdr.md`](experiments/002-pocket-pdr.md) �
 次の時点でこの監査を更新する。
 
 - 新しいrenderer / sensor / DB / geodesy dependencyを追加する前
-- Issue #2でlockfileを作成する時
+- lockfileまたはExpo SDKを更新する時
 - PDR spike開始前
 - GPX / GeoJSON export実装前
+- simplification再評価条件が成立した時
 - second app / game appが実際に同じpackageを使う時
 - 既存製品が本製品の体験全体を満たした時

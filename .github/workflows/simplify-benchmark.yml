@@ -1,0 +1,50 @@
+name: simplify-benchmark
+
+on:
+  pull_request:
+    paths:
+      - "packages/mapping-core/benchmarks/simplify-js.mjs"
+      - "packages/mapping-core/src/simplify.ts"
+      - "docs/experiments/004-simplify-js.md"
+      - ".github/workflows/simplify-benchmark.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: Record exact candidate metadata
+        run: npm view simplify-js@1.2.4 version license dist.integrity repository.url --json > simplify-js-metadata.json
+      - name: Install the benchmark candidate outside product workspaces
+        run: >-
+          npm install
+          --prefix /tmp/simplify-js-benchmark
+          --no-save
+          --ignore-scripts
+          --no-audit
+          --no-fund
+          simplify-js@1.2.4
+      - name: Compare internal RDP and simplify-js
+        env:
+          SIMPLIFY_JS_PATH: /tmp/simplify-js-benchmark/node_modules/simplify-js/simplify.js
+        run: >-
+          node --experimental-strip-types
+          packages/mapping-core/benchmarks/simplify-js.mjs
+          | tee simplify-benchmark.ndjson
+      - uses: actions/upload-artifact@v4
+        with:
+          name: simplify-js-benchmark
+          path: |
+            simplify-js-metadata.json
+            simplify-benchmark.ndjson
+          if-no-files-found: error
+          retention-days: 7
