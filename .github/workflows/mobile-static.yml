@@ -7,6 +7,8 @@ on:
       - "packages/mapping-core/**"
       - "packages/mapping-engine/**"
       - "packages/sqlite-adapter/**"
+      - "scripts/check-architecture-boundaries.mjs"
+      - "scripts/check-mobile-write-boundary.mjs"
       - "package.json"
       - ".github/workflows/mobile-static.yml"
   push:
@@ -16,6 +18,8 @@ on:
       - "packages/mapping-core/**"
       - "packages/mapping-engine/**"
       - "packages/sqlite-adapter/**"
+      - "scripts/check-architecture-boundaries.mjs"
+      - "scripts/check-mobile-write-boundary.mjs"
       - "package.json"
       - ".github/workflows/mobile-static.yml"
 
@@ -30,6 +34,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Check architecture boundaries
+        run: node scripts/check-architecture-boundaries.mjs
+      - name: Check mobile canonical write boundary
+        run: node scripts/check-mobile-write-boundary.mjs
       - name: Install workspace dependencies without native build scripts
         run: npm install --ignore-scripts --no-audit --no-fund
       - name: Type-check the mobile application

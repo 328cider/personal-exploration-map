@@ -11,17 +11,22 @@ import {
 } from "react-native";
 import type { MapSnapshot, MarkerCategory } from "@exploration-map/mapping-core";
 
+import {
+  addConfirmedMarker,
+  createDemoPersonalMap,
+  endActiveExploration,
+  getMobileTrackingStatus,
+  startNewPersonalMapExploration,
+  stopOrphanedMobileTracking,
+  type StartedExploration,
+} from "./src/mapping/mobileMappingRuntime";
 import { HomeScreen } from "./src/screens/HomeScreen";
 import { PermissionScreen } from "./src/screens/PermissionScreen";
 import { RecordingScreen } from "./src/screens/RecordingScreen";
 import { ReviewScreen } from "./src/screens/ReviewScreen";
+import { getActiveTrackingContext } from "./src/storage/activeTrackingState";
 import { initializeDatabase } from "./src/storage/database";
 import {
-  addMarkerToExploration,
-  completeExploration,
-  createDemoExploration,
-  createExploration,
-  deleteExploration,
   getActiveExploration,
   getExplorationSummary,
   getLiveExplorationStats,
@@ -29,21 +34,20 @@ import {
   loadExplorationMap,
   type ExplorationSummary,
   type LiveExplorationStats,
-  type TrackingMode,
 } from "./src/storage/explorationRepository";
 import {
   getTrackingPermissionState,
-  gnssTrackingProvider,
   requestBackgroundTrackingPermission,
   requestForegroundTrackingPermission,
 } from "./src/tracking/locationRecorder";
+import type { MobileTrackingMode } from "./src/tracking/types";
 import { palette, spacing } from "./src/theme";
 import { defaultExplorationName } from "./src/utils/format";
 
 type Screen =
   | { readonly kind: "home" }
   | { readonly kind: "permissions" }
-  | { readonly kind: "recording"; readonly explorationId: string }
+  | ({ readonly kind: "recording" } & StartedExploration)
   | { readonly kind: "review"; readonly explorationId: string };
 
 const EMPTY_LIVE_STATS: LiveExplorationStats = {
@@ -79,11 +83,13 @@ export default function App() {
     const [summary, stats, runtime] = await Promise.all([
       getExplorationSummary(explorationId),
       getLiveExplorationStats(explorationId),
-      gnssTrackingProvider.status(),
+      getMobileTrackingStatus(),
     ]);
     setActiveExploration(summary);
     setLiveStats(stats);
-    setRuntimeRunning(runtime.running);
+    setRuntimeRunning(
+      runtime.running && runtime.explorationId === explorationId,
+    );
   }, []);
 
   const openReview = useCallback(async (explorationId: string) => {
@@ -112,15 +118,16 @@ export default function App() {
     void (async () => {
       try {
         await initializeDatabase();
-        const [items, active] = await Promise.all([
+        const [items, active, context] = await Promise.all([
           listExplorations(),
           getActiveExploration(),
+          getActiveTrackingContext(),
         ]);
 
-        if (active === null) {
-          const runtime = await gnssTrackingProvider.status();
-          if (runtime.running) {
-            await gnssTrackingProvider.stop();
+        if (active === null || context === null) {
+          const runtime = await getMobileTrackingStatus();
+          if (runtime.running || runtime.explorationId !== null) {
+            await stopOrphanedMobileTracking();
           }
         }
 
@@ -128,9 +135,13 @@ export default function App() {
           return;
         }
         setExplorations(items);
-        if (active !== null) {
+        if (
+          active !== null &&
+          context !== null &&
+          context.explorationId === active.id
+        ) {
           setActiveExploration(active);
-          setScreen({ kind: "recording", explorationId: active.id });
+          setScreen({ kind: "recording", ...context });
           await refreshRecording(active.id);
         }
       } catch (error) {
@@ -180,10 +191,9 @@ export default function App() {
     return granted;
   }
 
-  async function beginExploration(mode: Exclude<TrackingMode, "demo">) {
+  async function beginExploration(mode: MobileTrackingMode) {
     setBusy(true);
     setErrorMessage(null);
-    let createdId: string | null = null;
     try {
       const foregroundGranted = await ensureForegroundPermission();
       if (!foregroundGranted) {
@@ -211,38 +221,30 @@ export default function App() {
         }
       }
 
-      createdId = await createExploration(defaultExplorationName(), mode);
-      await gnssTrackingProvider.start(mode);
-      await refreshRecording(createdId);
-      setScreen({ kind: "recording", explorationId: createdId });
+      const started = await startNewPersonalMapExploration(
+        defaultExplorationName(),
+        mode,
+      );
+      await refreshRecording(started.explorationId);
+      setScreen({ kind: "recording", ...started });
       await refreshHome();
     } catch (error) {
-      if (createdId !== null) {
-        await deleteExploration(createdId).catch(() => undefined);
-      }
       setErrorMessage(error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
     }
   }
 
-  async function handleEndExploration(explorationId: string) {
+  async function handleEndExploration(context: StartedExploration) {
     setBusy(true);
     setErrorMessage(null);
     try {
-      await gnssTrackingProvider.stop();
-    } catch (error) {
-      setErrorMessage(
-        `位置記録の停止確認に失敗しました: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
-
-    try {
-      await completeExploration(explorationId);
+      await endActiveExploration(context);
       setRuntimeRunning(false);
-      await Promise.all([refreshHome(), openReview(explorationId)]);
+      await Promise.all([
+        refreshHome(),
+        openReview(context.explorationId),
+      ]);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -251,23 +253,29 @@ export default function App() {
   }
 
   async function handleAddMarker(
-    explorationId: string,
+    context: StartedExploration,
     input: {
       readonly category: MarkerCategory;
       readonly label: string;
       readonly note?: string;
     },
   ) {
-    await addMarkerToExploration(explorationId, input);
-    await refreshRecording(explorationId);
+    await addConfirmedMarker(context, input);
+    await refreshRecording(context.explorationId);
   }
 
   async function handleOpenExploration(explorationId: string) {
     const summary = await getExplorationSummary(explorationId);
     if (summary?.status === "recording") {
+      const context = await getActiveTrackingContext();
+      if (context === null || context.explorationId !== explorationId) {
+        throw new Error(
+          "記録中の探索コンテキストを復元できませんでした。アプリを再起動して確認してください。",
+        );
+      }
       setActiveExploration(summary);
       await refreshRecording(explorationId);
-      setScreen({ kind: "recording", explorationId });
+      setScreen({ kind: "recording", ...context });
       return;
     }
     await openReview(explorationId);
@@ -276,9 +284,9 @@ export default function App() {
   async function handleCreateDemo() {
     setBusy(true);
     try {
-      const id = await createDemoExploration();
+      const { explorationId } = await createDemoPersonalMap();
       await refreshHome();
-      await openReview(id);
+      await openReview(explorationId);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -342,10 +350,8 @@ export default function App() {
           liveStats={liveStats}
           runtimeRunning={runtimeRunning}
           stopping={busy}
-          onAddMarker={(input) =>
-            handleAddMarker(activeExploration.id, input)
-          }
-          onEnd={() => void handleEndExploration(activeExploration.id)}
+          onAddMarker={(input) => handleAddMarker(screen, input)}
+          onEnd={() => void handleEndExploration(screen)}
         />
       ) : null}
 
