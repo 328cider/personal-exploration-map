@@ -42,6 +42,16 @@ Observed, derived, manually confirmed, and inferred information remain distingui
 
 <!-- Explain uncertainty, gaps, and provenance. -->
 
+### Map-write authority
+
+- [ ] Canonical map writes pass through an explicit controlled application boundary.
+- [ ] UI, renderer, game, and experience code do not directly mutate canonical domain state.
+- [ ] A game-initiated real-map correction requires user confirmation before becoming an explicit map command, or is not applicable.
+
+Canonical writer and command / boundary used:
+
+<!-- Name the responsible application boundary and explain any exception. Do not justify placement only by predicted reuse. -->
+
 ### Build / Adopt / Benchmark
 
 Existing apps, OSS, standards, platform APIs, and research checked:
@@ -54,7 +64,7 @@ Existing apps, OSS, standards, platform APIs, and research checked:
 ### Replaceable game layer
 
 - [ ] Mapping remains usable with Fog, achievements, stories, collection, and other game layers disabled.
-- [ ] Game or presentation code cannot modify raw evidence or core acceptance decisions.
+- [ ] Game or presentation code has read-only access to canonical map state and cannot modify raw evidence or core acceptance decisions.
 
 ### Privacy and safety
 
@@ -67,8 +77,9 @@ Existing apps, OSS, standards, platform APIs, and research checked:
 <!-- Tests, device conditions, experiment metrics, screenshots, and known limits. -->
 
 - [ ] `node scripts/check-product-governance.mjs`
+- [ ] `node scripts/check-architecture-boundaries.mjs`
 - [ ] `npm test`
-- [ ] `npm run typecheck:core`
+- [ ] `npm run typecheck`
 - [ ] Mobile changes include applicable real-device evidence, or explain why not yet available.
 
 Success criteria:

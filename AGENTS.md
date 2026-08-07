@@ -25,10 +25,11 @@
 4. 生の位置・センサー観測は証拠として保持し、フィルタ済み地図は派生物にする。
 5. 精度や接続に不確実性がある場合はUIで隠さない。
 6. 個人地図は複数の探索セッションから育て、未観測区間を偽接続しない。
-7. ゲーム、実績、Fog、ストーリーは交換可能な拡張。mapping-coreの真実を書き換えない。
-8. 既存地図やクラウドは必須依存にしない。
-9. 独自価値のない部品はOSS・標準・プラットフォームを先に調査する。
-10. 位置履歴は高感度データとしてlocal-firstを既定にする。
+7. canonicalな地図への変更は明示的なapplication boundaryを通し、UI・renderer・game・experienceへ直接mutation権限を渡さない。
+8. ゲーム、実績、Fog、ストーリーは交換可能なread-only拡張。地図の真実を書き換えない。
+9. 既存地図やクラウドは必須依存にしない。
+10. 独自価値のない部品はOSS・標準・プラットフォームを先に調査する。
+11. 位置履歴は高感度データとしてlocal-firstを既定にする。
 
 ## Before implementation
 
@@ -37,6 +38,7 @@ IssueまたはPRに次を残す。該当しない場合も理由を書く。
 - 解くユーザー問題
 - Passive-first UXへの影響と追加操作時間
 - 変更する地図レイヤー: raw evidence / derived map / manual correction / inference / game overlay
+- canonical mapを書き換える主体と、通過する明示command / application boundary
 - 責務分割: core / engine / adapter / renderer / experience-game
 - Build / Adopt / Benchmark判断と確認した既存アプリ・OSS・標準・研究
 - ゲームなしでマッピング機能が成立するか
@@ -58,8 +60,10 @@ IssueまたはPRに次を残す。該当しない場合も理由を書く。
 
 - appが使うheadless command / query facade
 - map / exploration lifecycle、transaction、repository / tracking port、event publication
-- 地図への唯一の書き込み窓口
+- 現在採用している地図への唯一の書き込み窓口
 - mutable sessionやcore mutationをapp / gameへ公開しない
+
+`mapping-engine`という名称やAPIはADRで変更できるが、canonical writeを制御されたapplication boundaryへ集約する憲章原則は維持する。
 
 ### Platform adapters
 

@@ -60,6 +60,15 @@ body:
       required: true
 
   - type: textarea
+    id: map_write_authority
+    attributes:
+      label: Canonical map-write authority
+      description: Who may change canonical map state, and through which explicit command or controlled application boundary? UI, renderer, game, and experience must not mutate it directly.
+      placeholder: Canonical writer, command/boundary, user confirmation for game-initiated corrections, and why the responsibility is placed there.
+    validations:
+      required: true
+
+  - type: textarea
     id: reuse
     attributes:
       label: OSS / standard reuse — Build / Adopt / Benchmark
@@ -71,7 +80,7 @@ body:
     id: game_boundary
     attributes:
       label: Replaceable game-layer check
-      description: Does the mapping app still work with Fog, achievements, stories, and other game layers disabled?
+      description: Does the mapping app still work with Fog, achievements, stories, and other game layers disabled? Confirm that game/experience access to the canonical map is read-only.
     validations:
       required: true
 
@@ -101,4 +110,6 @@ body:
         - label: I will not change the constitution inside an ordinary feature implementation.
           required: true
         - label: I checked whether an existing product, OSS component, standard, or platform capability can replace this work.
+          required: true
+        - label: I will route canonical map writes through an explicit controlled application boundary rather than direct UI, renderer, or game mutation.
           required: true
