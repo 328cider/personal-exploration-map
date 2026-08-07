@@ -26,6 +26,10 @@ interface RecordingScreenProps {
     readonly label: string;
     readonly note?: string;
   }) => Promise<void>;
+  readonly onMarkerInputMetric: (
+    outcome: "completed" | "cancelled",
+    durationMs: number,
+  ) => Promise<void>;
   readonly onEnd: () => void;
 }
 
@@ -35,10 +39,12 @@ export function RecordingScreen({
   runtimeRunning,
   stopping,
   onAddMarker,
+  onMarkerInputMetric,
   onEnd,
 }: RecordingScreenProps) {
   const [now, setNow] = useState(Date.now());
   const [markerVisible, setMarkerVisible] = useState(false);
+  const [markerOpenedAtMs, setMarkerOpenedAtMs] = useState<number | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -47,6 +53,36 @@ export function RecordingScreen({
 
   const isBackground = exploration.trackingMode === "background";
   const accuracy = liveStats.latestAccuracyMeters;
+
+  function openMarkerInput() {
+    setMarkerOpenedAtMs(Date.now());
+    setMarkerVisible(true);
+  }
+
+  function closeMarkerInput() {
+    if (markerOpenedAtMs !== null) {
+      void onMarkerInputMetric(
+        "cancelled",
+        Math.max(0, Date.now() - markerOpenedAtMs),
+      );
+    }
+    setMarkerOpenedAtMs(null);
+    setMarkerVisible(false);
+  }
+
+  async function saveMarker(input: {
+    readonly category: MarkerCategory;
+    readonly label: string;
+    readonly note?: string;
+  }) {
+    const durationMs =
+      markerOpenedAtMs === null
+        ? 0
+        : Math.max(0, Date.now() - markerOpenedAtMs);
+    await onAddMarker(input);
+    setMarkerOpenedAtMs(null);
+    void onMarkerInputMetric("completed", durationMs);
+  }
 
   return (
     <>
@@ -113,7 +149,7 @@ export function RecordingScreen({
 
         <AppButton
           disabled={stopping}
-          onPress={() => setMarkerVisible(true)}
+          onPress={openMarkerInput}
           style={styles.markerButton}
           variant="secondary"
         >
@@ -134,8 +170,8 @@ export function RecordingScreen({
 
       <MarkerModal
         visible={markerVisible}
-        onClose={() => setMarkerVisible(false)}
-        onSave={onAddMarker}
+        onClose={closeMarkerInput}
+        onSave={saveMarker}
       />
     </>
   );
