@@ -47,6 +47,9 @@ const requiredAnchors = new Map([
       "addConfirmedMarker",
       "endActiveExploration",
       "createDemoPersonalMap",
+      "AppState.addEventListener",
+      "app.session.recovered",
+      "loadPersonalMapTrackingDiagnostics",
     ],
   ],
   [
@@ -58,15 +61,42 @@ const requiredAnchors = new Map([
       "startExploration",
       "addMarker",
       "endExploration",
+      "callback.received",
+      "callback.persisted",
+      "callback.failed",
+      "recordMarkerInputTiming",
     ],
   ],
   [
+    "apps/mobile/src/diagnostics/trackingDiagnostics.ts",
+    [
+      "createSqliteTrackingDiagnosticsStore",
+      "recordTrackingDiagnosticBestEffort",
+      "createExplorationTrackingDiagnostics",
+    ],
+  ],
+  [
+    "apps/mobile/src/components/TrackingDiagnosticsPanel.tsx",
+    ["受動記録の計測", "sample gap", "callback batches"],
+  ],
+  [
     "apps/mobile/src/tracking/backgroundLocationTask.ts",
-    ["ingestActiveLocationBatch", "recordBackgroundTaskError"],
+    [
+      "ingestActiveLocationBatch",
+      "recordBackgroundTaskError",
+      '"background"',
+    ],
   ],
   [
     "apps/mobile/src/tracking/locationRecorder.ts",
-    ["TrackingProviderPort", "setActiveTrackingContext"],
+    [
+      "TrackingProviderPort",
+      "setActiveTrackingContext",
+      "provider.start.requested",
+      "provider.started",
+      "provider.stop.requested",
+      "provider.stopped",
+    ],
   ],
   [
     "apps/mobile/src/storage/explorationRepository.ts",
@@ -117,7 +147,7 @@ const readRepository = requireFile(
 )
   ? read("apps/mobile/src/storage/explorationRepository.ts")
   : "";
-for (const token of [".runAsync(", ".execAsync(", "withExclusiveTransactionAsync"] ) {
+for (const token of [".runAsync(", ".execAsync(", "withExclusiveTransactionAsync"]) {
   if (readRepository.includes(token)) {
     failures.push(
       `Read-only explorationRepository contains a write-capable SQLite call: ${token}`,
@@ -140,6 +170,24 @@ for (const file of collectSourceFiles("apps/mobile/src")) {
         `Mobile app source writes canonical mapping tables directly: ${file}: ${pattern}`,
       );
     }
+  }
+}
+
+const diagnosticsSource = requireFile(
+  "apps/mobile/src/diagnostics/trackingDiagnostics.ts",
+)
+  ? read("apps/mobile/src/diagnostics/trackingDiagnostics.ts")
+  : "";
+for (const forbidden of [
+  "appendPositionSample",
+  "createExplorationSession",
+  "createPersonalMapSnapshot",
+  "endExploration",
+]) {
+  if (diagnosticsSource.includes(forbidden)) {
+    failures.push(
+      `Operational diagnostics must not own canonical mapping mutation: ${forbidden}`,
+    );
   }
 }
 
