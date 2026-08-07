@@ -16,7 +16,7 @@
 - `npm run typecheck:core`: 成功
 - モバイル側のTypeScript / TSX 18ファイルを `transpileModule` で構文変換: 成功
 - `git status -sb`: clean
-- ローカルGit履歴: 5コミット
+- ローカルGit履歴: 変更を役割別の複数コミットに分割
 
 テストで固定している主な性質:
 
