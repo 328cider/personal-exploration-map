@@ -30,3 +30,19 @@ jobs:
           node-version: 22
       - name: Run dependency-free mapping package tests
         run: npm test
+      - name: Install pinned TypeScript compiler outside the workspace
+        run: >-
+          npm install
+          --prefix /tmp/personal-map-typescript
+          --no-save
+          --ignore-scripts
+          --no-audit
+          --no-fund
+          typescript@5.8.3
+      - name: Type-check dependency-free mapping packages
+        shell: bash
+        run: |
+          TSC=/tmp/personal-map-typescript/node_modules/.bin/tsc
+          "$TSC" --noEmit -p packages/mapping-core/tsconfig.json
+          "$TSC" --noEmit -p packages/mapping-engine/tsconfig.json
+          "$TSC" --noEmit -p packages/experience-sdk/tsconfig.json
