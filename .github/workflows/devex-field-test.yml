@@ -22,7 +22,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: devex-field-test-${{ github.ref }}
+  group: devex-field-test-v2-${{ github.ref }}
   cancel-in-progress: true
 
 env:
