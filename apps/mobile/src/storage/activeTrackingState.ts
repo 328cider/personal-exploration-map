@@ -93,10 +93,13 @@ async function loadRecordingContext(
 }
 
 export async function getActiveTrackingContext(): Promise<ActiveTrackingContext | null> {
-  const [serialized, legacyExplorationId] = await Promise.all([
-    getStateValue(ACTIVE_CONTEXT_KEY),
-    getStateValue(LEGACY_ACTIVE_EXPLORATION_KEY),
-  ]);
+  // Read sequentially through the shared serialized database boundary. Running
+  // these statements with Promise.all can make Expo SQLite release one native
+  // statement while the other operation is still using the same database.
+  const serialized = await getStateValue(ACTIVE_CONTEXT_KEY);
+  const legacyExplorationId = await getStateValue(
+    LEGACY_ACTIVE_EXPLORATION_KEY,
+  );
 
   let serializedContext: ActiveTrackingContext | null = null;
   if (serialized !== null) {
@@ -147,16 +150,17 @@ export async function clearActiveTrackingContext(
   const database = await getDatabase();
   await database.withExclusiveTransactionAsync(async (transaction) => {
     if (expectedExplorationId !== undefined) {
-      const [current, legacy] = await Promise.all([
-        transaction.getFirstAsync<{ readonly value: string | null }>(
-          "SELECT value FROM app_state WHERE key = ?",
-          ACTIVE_CONTEXT_KEY,
-        ),
-        transaction.getFirstAsync<{ readonly value: string | null }>(
-          "SELECT value FROM app_state WHERE key = ?",
-          LEGACY_ACTIVE_EXPLORATION_KEY,
-        ),
-      ]);
+      // A transaction executor is already inside the top-level database queue.
+      // Its statements must stay sequential rather than using Promise.all.
+      const current = await transaction.getFirstAsync<{
+        readonly value: string | null;
+      }>("SELECT value FROM app_state WHERE key = ?", ACTIVE_CONTEXT_KEY);
+      const legacy = await transaction.getFirstAsync<{
+        readonly value: string | null;
+      }>(
+        "SELECT value FROM app_state WHERE key = ?",
+        LEGACY_ACTIVE_EXPLORATION_KEY,
+      );
 
       if (current?.value !== null && current?.value !== undefined) {
         try {
