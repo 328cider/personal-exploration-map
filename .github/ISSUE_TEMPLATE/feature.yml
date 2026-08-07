@@ -1,0 +1,25 @@
+name: Product change
+about: Propose a user-visible mapping or UX change
+labels: [product]
+body:
+  - type: textarea
+    id: user_problem
+    attributes:
+      label: User problem
+      description: Describe the exploration situation without prescribing an implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: passive_ux
+    attributes:
+      label: Passive-first UX check
+      description: Can this be used while the phone stays in a pocket? What interruption does it add?
+    validations:
+      required: true
+  - type: textarea
+    id: map_truth
+    attributes:
+      label: Effect on map truth
+      description: Does this change raw evidence, a derived map, or an optional overlay?
+    validations:
+      required: true

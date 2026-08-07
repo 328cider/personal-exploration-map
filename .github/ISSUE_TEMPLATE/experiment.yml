@@ -1,0 +1,25 @@
+name: Technical experiment
+about: Validate a risky mapping assumption before productizing it
+labels: [experiment]
+body:
+  - type: textarea
+    id: hypothesis
+    attributes:
+      label: Hypothesis
+      description: What must be true for the product to work?
+    validations:
+      required: true
+  - type: textarea
+    id: protocol
+    attributes:
+      label: Test protocol
+      description: Devices, route, duration, and comparison method.
+    validations:
+      required: true
+  - type: textarea
+    id: success
+    attributes:
+      label: Success and stop criteria
+      description: Define the decision before collecting results.
+    validations:
+      required: true

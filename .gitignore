@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Expo / React Native
+.expo/
+dist/
+web-build/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# Native build output
+apps/mobile/android/.gradle/
+apps/mobile/android/app/build/
+apps/mobile/ios/Pods/
+apps/mobile/ios/build/
+
+# Environment and credentials
+.env
+.env.*
+!.env.example
+*.keystore
+
+# Editors and OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Test artifacts
+coverage/
+*.log
