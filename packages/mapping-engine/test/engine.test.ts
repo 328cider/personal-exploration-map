@@ -213,15 +213,20 @@ class InMemoryRepository
 }
 
 class FakeTrackingProvider implements TrackingProviderPort {
+  readonly id: string;
+  readonly coordinateKind: TrackingCoordinateKind;
   readonly starts: string[] = [];
   readonly stops: string[] = [];
   failStart = false;
   private runningExplorationId: string | null = null;
 
   constructor(
-    readonly id = "gnss",
-    readonly coordinateKind: TrackingCoordinateKind = "geographic",
-  ) {}
+    id = "gnss",
+    coordinateKind: TrackingCoordinateKind = "geographic",
+  ) {
+    this.id = id;
+    this.coordinateKind = coordinateKind;
+  }
 
   async start(input: {
     readonly personalMapId: string;
