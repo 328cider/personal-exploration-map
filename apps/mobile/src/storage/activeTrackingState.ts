@@ -132,8 +132,8 @@ export async function getActiveTrackingContext(): Promise<ActiveTrackingContext 
   // exploration.
   if (
     serializedContext?.personalMapId !== durable.personalMapId ||
-    serializedContext.providerId !== durable.providerId ||
-    serializedContext.explorationId !== durable.explorationId ||
+    serializedContext?.providerId !== durable.providerId ||
+    serializedContext?.explorationId !== durable.explorationId ||
     legacyExplorationId !== durable.explorationId
   ) {
     await setActiveTrackingContext(durable);
