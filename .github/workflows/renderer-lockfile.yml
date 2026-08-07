@@ -5,17 +5,13 @@ on:
     paths:
       - "apps/mobile/package.json"
       - ".github/workflows/renderer-lockfile.yml"
-  push:
-    branches: [agent/svg-renderer]
-    paths:
-      - "apps/mobile/package.json"
-      - ".github/workflows/renderer-lockfile.yml"
 
 permissions:
   contents: write
 
 jobs:
   generate:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,19 +25,20 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Verify the resolved renderer version
         run: npm ls react-native-svg --workspace @exploration-map/mobile --depth=0
-      - name: Commit the generated lockfile to the source branch
-        if: github.event_name == 'push'
+      - name: Write the generated lockfile to the pull-request branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_BRANCH: ${{ github.head_ref }}
+          REPOSITORY: ${{ github.repository }}
         shell: bash
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package-lock.json
-          if git diff --cached --quiet; then
-            echo "package-lock.json is already current"
-          else
-            git commit -m "chore(renderer): lock react-native-svg"
-            git push origin "HEAD:${GITHUB_REF_NAME}"
-          fi
+          CONTENT=$(base64 -w 0 package-lock.json)
+          gh api \
+            --method PUT \
+            "repos/${REPOSITORY}/contents/package-lock.json" \
+            -f message="chore(renderer): lock react-native-svg" \
+            -f content="${CONTENT}" \
+            -f branch="${HEAD_BRANCH}"
       - uses: actions/upload-artifact@v4
         with:
           name: renderer-package-lock
