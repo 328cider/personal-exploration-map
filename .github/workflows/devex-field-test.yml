@@ -176,19 +176,19 @@ jobs:
             done
           '; then
             echo "Emulator did not complete Android boot within 300 seconds." >&2
-            adb devices -l || true
-            adb shell getprop || true
+            timeout 15 adb devices -l || true
+            timeout 15 adb shell getprop || true
             cat "$EVIDENCE_DIR/emulator.log" || true
             exit 1
           fi
 
-          adb shell input keyevent 82 || true
-          adb shell settings put global window_animation_scale 0
-          adb shell settings put global transition_animation_scale 0
-          adb shell settings put global animator_duration_scale 0
-          adb shell settings put secure long_press_timeout 300
-          adb shell wm dismiss-keyguard || true
-          adb devices -l
+          timeout 15 adb shell input keyevent 82 || true
+          timeout 15 adb shell settings put global window_animation_scale 0
+          timeout 15 adb shell settings put global transition_animation_scale 0
+          timeout 15 adb shell settings put global animator_duration_scale 0
+          timeout 15 adb shell settings put secure long_press_timeout 300
+          timeout 15 adb shell wm dismiss-keyguard || true
+          timeout 15 adb devices -l
       - name: Run black-box PersonalMap lifecycle
         run: |
           python3 scripts/android-emulator-smoke.py \
@@ -198,10 +198,14 @@ jobs:
         if: always()
         run: |
           mkdir -p "$EVIDENCE_DIR"
-          adb logcat -d -v threadtime > "$EVIDENCE_DIR/workflow-final-logcat.txt" 2>&1 || true
-          adb shell dumpsys activity activities > "$EVIDENCE_DIR/workflow-final-activity.txt" 2>&1 || true
-          adb shell dumpsys location > "$EVIDENCE_DIR/workflow-final-location.txt" 2>&1 || true
-          adb exec-out screencap -p > "$EVIDENCE_DIR/workflow-final-screen.png" 2>/dev/null || true
+          timeout 30 adb logcat -d -v threadtime > "$EVIDENCE_DIR/workflow-final-logcat.txt" 2>&1 || true
+          timeout 30 adb shell dumpsys activity activities > "$EVIDENCE_DIR/workflow-final-activity.txt" 2>&1 || true
+          timeout 30 adb shell dumpsys location > "$EVIDENCE_DIR/workflow-final-location.txt" 2>&1 || true
+          timeout 30 adb exec-out screencap -p > "$EVIDENCE_DIR/workflow-final-screen.png" 2>/dev/null || true
+          if [[ -f "$EVIDENCE_DIR/emulator.pid" ]]; then
+            emulator_pid="$(cat "$EVIDENCE_DIR/emulator.pid")"
+            kill "$emulator_pid" 2>/dev/null || true
+          fi
       - name: Upload emulator screenshots, UI hierarchy and logs
         if: always()
         uses: actions/upload-artifact@v4
