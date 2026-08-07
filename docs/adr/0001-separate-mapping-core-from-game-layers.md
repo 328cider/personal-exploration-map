@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-08-07
+- Clarified by: [ADR 0006](0006-headless-mapping-engine-and-experience-boundary.md)
 
 ## Context
 
@@ -9,14 +10,17 @@
 
 ## Decision
 
-mapping-coreは探索、サンプル品質、座標変換、経路、発見、イベントだけを扱う。
+`mapping-core`は探索、サンプル品質、座標変換、経路、発見、PersonalMap、domain eventだけを扱う。
 
-ゲームはイベントと読み取り専用MapSnapshotを受け取り、派生overlayと独自状態を返すextensionとする。
+ゲームは`experience-sdk`を通じてdomain eventと読み取り専用PersonalMap snapshotを受け取り、派生overlay、presentation cue、独自stateだけを返す。ゲーム契約自体もmapping-coreには置かない。
+
+explorer / game appから地図を変更する場合は、ADR 0006で定義する`mapping-engine` commandを経由する。experience moduleへ直接のmap mutation権限を与えない。
 
 ## Consequences
 
 - ゲームなしでアプリが完成する
 - 複数テーマを差し替えられる
 - ゲームのルール変更で過去地図を移行しなくてよい
-- extension APIの設計が必要になる
+- experience APIとmapping-engine APIのversioningが必要になる
 - コアから直接「経験値」などを参照できない
+- game appはcore mutationを直接組み立てられない
