@@ -9,6 +9,7 @@ on:
       - "packages/sqlite-adapter/**"
       - "scripts/check-architecture-boundaries.mjs"
       - "scripts/check-mobile-write-boundary.mjs"
+      - "scripts/check-renderer-boundary.mjs"
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/mobile-static.yml"
@@ -21,6 +22,7 @@ on:
       - "packages/sqlite-adapter/**"
       - "scripts/check-architecture-boundaries.mjs"
       - "scripts/check-mobile-write-boundary.mjs"
+      - "scripts/check-renderer-boundary.mjs"
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/mobile-static.yml"
@@ -35,20 +37,31 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22.23.2
-          cache: npm
-          cache-dependency-path: package-lock.json
+          node-version-file: .nvmrc
       - name: Check architecture boundaries
         run: node scripts/check-architecture-boundaries.mjs
       - name: Check mobile canonical write boundary
         run: node scripts/check-mobile-write-boundary.mjs
-      - name: Install committed dependency graph
-        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Check renderer boundary
+        run: node scripts/check-renderer-boundary.mjs
+      - name: Generate dependency lock without native build scripts
+        run: npm install --ignore-scripts --no-audit --no-fund
       - name: Check Expo dependency compatibility
         working-directory: apps/mobile
         run: npx expo install --check
       - name: Run Expo Doctor
         working-directory: apps/mobile
         run: npx --yes expo-doctor
+      - name: Test renderer geometry
+        run: npm run test:renderer
+      - name: Benchmark renderer geometry
+        run: npm run benchmark:renderer
       - name: Type-check the mobile application
         run: npm run typecheck:mobile
+      - name: Upload generated lockfile for explicit review
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-svg-package-lock
+          path: package-lock.json
+          if-no-files-found: error
+          retention-days: 1
