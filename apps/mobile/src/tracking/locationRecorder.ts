@@ -121,6 +121,28 @@ async function recordProviderEvent(
   });
 }
 
+async function releaseContextAfterStopFailure(
+  context: ActiveTrackingContext | null,
+  explorationId: string,
+  delivery: MobileTrackingDelivery,
+  error: unknown,
+): Promise<void> {
+  if (context !== null) {
+    await recordProviderEvent(context, "provider.stop.failed", {
+      delivery,
+      message: errorMessage(error),
+      canonicalCompletionContinues: true,
+    });
+  }
+
+  // Provider shutdown is operational cleanup, not the authority for ending a
+  // user's ExplorationSession. Release the app-side context so a transient OS
+  // stop failure cannot trap the user on the recording screen. Any late
+  // callback finds no active context and is ignored; orphan cleanup retries on
+  // the next app start.
+  await clearActiveTrackingContext(explorationId).catch(() => undefined);
+}
+
 /**
  * Creates platform tracking adapters for the headless mapping engine.
  *
@@ -213,13 +235,12 @@ export function createGnssTrackingProviderSet(
         }
         await clearActiveTrackingContext(explorationId);
       } catch (error) {
-        if (context !== null) {
-          await recordProviderEvent(context, "provider.stop.failed", {
-            delivery: "background",
-            message: errorMessage(error),
-          });
-        }
-        throw error;
+        await releaseContextAfterStopFailure(
+          context,
+          explorationId,
+          "background",
+          error,
+        );
       }
     },
 
@@ -324,13 +345,14 @@ export function createGnssTrackingProviderSet(
         }
         await clearActiveTrackingContext(explorationId);
       } catch (error) {
-        if (context !== null) {
-          await recordProviderEvent(context, "provider.stop.failed", {
-            delivery: "foreground",
-            message: errorMessage(error),
-          });
-        }
-        throw error;
+        foregroundSubscription = null;
+        foregroundExplorationId = null;
+        await releaseContextAfterStopFailure(
+          context,
+          explorationId,
+          "foreground",
+          error,
+        );
       }
     },
 
