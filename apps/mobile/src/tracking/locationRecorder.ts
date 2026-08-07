@@ -60,6 +60,28 @@ async function backgroundTaskStarted(): Promise<boolean> {
   }
 }
 
+async function assertCompatibleActiveContext(
+  input: {
+    readonly personalMapId: string;
+    readonly explorationId: string;
+  },
+  providerId: string,
+): Promise<void> {
+  const active = await getActiveTrackingContext();
+  if (active === null) {
+    return;
+  }
+  if (
+    active.personalMapId !== input.personalMapId ||
+    active.explorationId !== input.explorationId ||
+    active.providerId !== providerId
+  ) {
+    throw new Error(
+      "別の探索が記録中です。終了してから新しい探索を始めてください。",
+    );
+  }
+}
+
 /**
  * Creates platform tracking adapters for the headless mapping engine.
  *
@@ -84,18 +106,13 @@ export function createGnssTrackingProviderSet(
         );
       }
 
+      await assertCompatibleActiveContext(
+        input,
+        BACKGROUND_GNSS_PROVIDER_ID,
+      );
       const alreadyStarted = await backgroundTaskStarted();
-      const active = await getActiveTrackingContext();
       if (alreadyStarted) {
-        if (
-          active?.explorationId === input.explorationId &&
-          active.providerId === BACKGROUND_GNSS_PROVIDER_ID
-        ) {
-          return;
-        }
-        throw new Error(
-          "別のバックグラウンド探索が動作中です。停止してから再試行してください。",
-        );
+        return;
       }
 
       await setActiveTrackingContext({
@@ -147,6 +164,10 @@ export function createGnssTrackingProviderSet(
     id: FOREGROUND_GNSS_PROVIDER_ID,
 
     async start(input) {
+      await assertCompatibleActiveContext(
+        input,
+        FOREGROUND_GNSS_PROVIDER_ID,
+      );
       if (
         foregroundSubscription !== null &&
         foregroundExplorationId !== input.explorationId
