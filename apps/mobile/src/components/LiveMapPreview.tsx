@@ -95,6 +95,8 @@ export function LiveMapPreview({ personalMapId }: LiveMapPreviewProps) {
     };
   }, [refresh]);
 
+  const mappedPointCount = snapshot?.stats.acceptedSampleCount ?? 0;
+
   return (
     <View style={styles.card}>
       <View style={styles.header}>
@@ -111,6 +113,8 @@ export function LiveMapPreview({ personalMapId }: LiveMapPreviewProps) {
           </Text>
         </View>
       </View>
+
+      <Text style={styles.progressText}>地図に反映 {mappedPointCount}点</Text>
 
       {snapshot === null ? (
         <View style={styles.emptyState}>
@@ -149,7 +153,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: spacing.md,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
   title: {
     color: palette.primary,
@@ -169,6 +173,13 @@ const styles = StyleSheet.create({
   refreshText: {
     color: palette.mutedInk,
     fontSize: 10,
+  },
+  progressText: {
+    color: palette.primary,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "800",
+    marginBottom: spacing.sm,
   },
   emptyState: {
     minHeight: 180,
