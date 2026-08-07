@@ -44,8 +44,8 @@ jobs:
         run: node scripts/check-mobile-write-boundary.mjs
       - name: Check renderer dependency and read-only boundary
         run: node scripts/check-renderer-boundary.mjs
-      - name: Install workspace dependencies without native build scripts
-        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Install locked workspace dependencies without native build scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Type-check the mobile application
         run: npm run typecheck:mobile
       - name: Test read-only renderer geometry
