@@ -8,6 +8,7 @@ on:
       - "apps/mobile/package.json"
       - "apps/mobile/src/components/TrackCanvas.tsx"
       - "apps/mobile/src/rendering/**"
+      - "package.json"
       - "package-lock.json"
       - ".github/workflows/android-development-build.yml"
 
