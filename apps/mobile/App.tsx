@@ -126,7 +126,9 @@ export default function App() {
         loadMobilePersonalMap(personalMapId),
         listMobilePersonalMaps(),
         __DEV__
-          ? loadPersonalMapTrackingDiagnostics(personalMapId)
+          ? loadPersonalMapTrackingDiagnostics(personalMapId).catch(
+              () => [] as readonly ExplorationTrackingReportItem[],
+            )
           : Promise.resolve([] as readonly ExplorationTrackingReportItem[]),
       ]);
       const personalMap = items.find((item) => item.id === personalMapId);
@@ -308,10 +310,13 @@ export default function App() {
       await endActiveExploration(context);
       setRuntimeRunning(false);
       setActiveExploration(null);
-      await Promise.all([
-        refreshHome(),
-        openReview(context.personalMapId),
-      ]);
+      setLiveStats(EMPTY_LIVE_STATS);
+
+      // Canonical completion succeeded. Move away from the recording screen
+      // before loading optional review data so a presentation/diagnostics error
+      // can never make the user appear trapped in an ended exploration.
+      setScreen({ kind: "home" });
+      await openReview(context.personalMapId);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : String(error));
     } finally {
