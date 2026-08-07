@@ -1,25 +1,104 @@
 name: Product change
-about: Propose a user-visible mapping or UX change
+description: Propose a user-visible mapping or UX change
+title: "[Product] "
 labels: [product]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Before proposing a change, read `PRODUCT_CONSTITUTION.md` and `CURRENT_DIRECTION.md`.
+        The constitution is durable; the current direction is temporary.
+
   - type: textarea
     id: user_problem
     attributes:
       label: User problem
-      description: Describe the exploration situation without prescribing an implementation.
+      description: Describe the exploration situation and user need without prescribing an implementation.
+      placeholder: What happens in the real exploration, and why is the current experience insufficient?
     validations:
       required: true
+
+  - type: textarea
+    id: constitution_alignment
+    attributes:
+      label: Constitution alignment
+      description: Explain how this fits the durable product invariants. If it requires changing them, stop and open a dedicated constitution-change Issue.
+      placeholder: Relevant invariant(s), possible tension, and why this does not silently redefine the product.
+    validations:
+      required: true
+
   - type: textarea
     id: passive_ux
     attributes:
       label: Passive-first UX check
-      description: Can this be used while the phone stays in a pocket? What interruption does it add?
+      description: Can the normal flow still work while the phone stays in a pocket? List added interactions and estimated interruption time.
+      placeholder: Start, pocket, optional discovery input, end, review.
     validations:
       required: true
-  - type: textarea
+
+  - type: dropdown
     id: map_truth
     attributes:
       label: Effect on map truth
-      description: Does this change raw evidence, a derived map, or an optional overlay?
+      description: Which layer is changed? Select the closest primary layer and explain details below if multiple apply.
+      options:
+        - Raw evidence
+        - Accepted / rejected quality decision
+        - Derived personal map
+        - Manual correction or anchor
+        - Optional inference
+        - Game / presentation overlay only
     validations:
       required: true
+
+  - type: textarea
+    id: map_truth_details
+    attributes:
+      label: Map-truth details and uncertainty
+      description: What is observed, derived, manually confirmed, or inferred? How will uncertainty be visible?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reuse
+    attributes:
+      label: OSS / standard reuse — Build / Adopt / Benchmark
+      description: List existing apps, OSS, standards, platform APIs, or research checked. Explain why adopting them is or is not sufficient, including license considerations.
+    validations:
+      required: true
+
+  - type: textarea
+    id: game_boundary
+    attributes:
+      label: Replaceable game-layer check
+      description: Does the mapping app still work with Fog, achievements, stories, and other game layers disabled?
+    validations:
+      required: true
+
+  - type: textarea
+    id: privacy_safety
+    attributes:
+      label: Privacy and safety
+      description: Address location-history ownership, sharing, retention, walking attention, and unsafe exploration incentives.
+    validations:
+      required: true
+
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation and stop criteria
+      description: Define success, failure, and rollback / Narrow / Stop conditions before implementation.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: acknowledgements
+    attributes:
+      label: Required acknowledgements
+      options:
+        - label: I read `PRODUCT_CONSTITUTION.md` and did not treat `CURRENT_DIRECTION.md` as a replacement for it.
+          required: true
+        - label: I will not change the constitution inside an ordinary feature implementation.
+          required: true
+        - label: I checked whether an existing product, OSS component, standard, or platform capability can replace this work.
+          required: true
