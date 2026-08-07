@@ -4,6 +4,8 @@ import type { PersonalMapListItem } from "@exploration-map/mapping-engine";
 
 import { AppButton } from "../components/AppButton";
 import { TrackCanvas } from "../components/TrackCanvas";
+import { TrackingDiagnosticsPanel } from "../components/TrackingDiagnosticsPanel";
+import type { ExplorationTrackingReportItem } from "../diagnostics/trackingDiagnostics";
 import { palette, spacing } from "../theme";
 import {
   formatDateTime,
@@ -14,6 +16,7 @@ import {
 interface ReviewScreenProps {
   readonly personalMap: PersonalMapListItem;
   readonly snapshot: PersonalMapSnapshot;
+  readonly diagnostics: readonly ExplorationTrackingReportItem[];
   readonly onContinue: () => void;
   readonly onHome: () => void;
 }
@@ -21,6 +24,7 @@ interface ReviewScreenProps {
 export function ReviewScreen({
   personalMap,
   snapshot,
+  diagnostics,
   onContinue,
   onHome,
 }: ReviewScreenProps) {
@@ -129,6 +133,8 @@ export function ReviewScreen({
           ))}
         </View>
       ) : null}
+
+      {__DEV__ ? <TrackingDiagnosticsPanel reports={diagnostics} /> : null}
 
       <AppButton onPress={onContinue} style={styles.continueButton}>
         この地図の続きを探索
