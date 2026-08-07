@@ -8,7 +8,9 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "prebuild": "expo prebuild",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test:renderer": "node --experimental-strip-types --test test/*.test.ts",
+    "benchmark:renderer": "node --experimental-strip-types scripts/benchmark-renderer.ts"
   },
   "dependencies": {
     "@exploration-map/mapping-core": "*",
