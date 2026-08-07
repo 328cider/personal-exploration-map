@@ -10,6 +10,7 @@ on:
       - "scripts/check-architecture-boundaries.mjs"
       - "scripts/check-mobile-write-boundary.mjs"
       - "package.json"
+      - "package-lock.json"
       - ".github/workflows/mobile-static.yml"
   push:
     branches: [main]
@@ -21,6 +22,7 @@ on:
       - "scripts/check-architecture-boundaries.mjs"
       - "scripts/check-mobile-write-boundary.mjs"
       - "package.json"
+      - "package-lock.json"
       - ".github/workflows/mobile-static.yml"
 
 permissions:
@@ -38,7 +40,21 @@ jobs:
         run: node scripts/check-architecture-boundaries.mjs
       - name: Check mobile canonical write boundary
         run: node scripts/check-mobile-write-boundary.mjs
-      - name: Install workspace dependencies without native build scripts
+      - name: Generate dependency lock without native build scripts
         run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Check Expo dependency compatibility
+        working-directory: apps/mobile
+        run: npx expo install --check
+      - name: Run Expo Doctor
+        working-directory: apps/mobile
+        run: npx expo-doctor
       - name: Type-check the mobile application
         run: npm run typecheck:mobile
+      - name: Upload generated lockfile for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-package-lock
+          path: package-lock.json
+          if-no-files-found: error
+          retention-days: 1
