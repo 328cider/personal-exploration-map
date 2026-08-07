@@ -1,0 +1,49 @@
+name: product-governance
+
+on:
+  pull_request:
+    paths:
+      - "PRODUCT_CONSTITUTION.md"
+      - "AGENTS.md"
+      - "CURRENT_DIRECTION.md"
+      - "docs/**"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/pull_request_template.md"
+      - "scripts/check-product-governance.mjs"
+      - ".github/workflows/product-governance.yml"
+  push:
+    branches: [main]
+    paths:
+      - "PRODUCT_CONSTITUTION.md"
+      - "AGENTS.md"
+      - "CURRENT_DIRECTION.md"
+      - "docs/**"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/pull_request_template.md"
+      - "scripts/check-product-governance.mjs"
+      - ".github/workflows/product-governance.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  guardrails:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Collect pull-request changed files
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          git diff --name-only "${{ github.event.pull_request.base.sha }}" HEAD > /tmp/governance-changed-files.txt
+          {
+            echo 'GOVERNANCE_CHANGED_FILES<<EOF'
+            cat /tmp/governance-changed-files.txt
+            echo 'EOF'
+          } >> "$GITHUB_ENV"
+
+      - name: Check product governance
+        run: node scripts/check-product-governance.mjs
