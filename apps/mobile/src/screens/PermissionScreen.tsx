@@ -19,7 +19,10 @@ export function PermissionScreen({
   onBack,
 }: PermissionScreenProps) {
   return (
-    <ScrollView contentContainerStyle={styles.content}>
+    <ScrollView
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
       <Text style={styles.eyebrow}>探索を邪魔しないために</Text>
       <Text style={styles.title}>始めたら、スマホは{"\n"}しまって大丈夫です。</Text>
       <Text style={styles.intro}>
@@ -92,6 +95,7 @@ export function PermissionScreen({
       <AppButton disabled={loading} onPress={onBack} variant="ghost">
         戻る
       </AppButton>
+      <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.bottomSafeSpace} />
     </ScrollView>
   );
 }
@@ -225,5 +229,8 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingHorizontal: spacing.md,
     marginTop: spacing.sm,
+  },
+  bottomSafeSpace: {
+    height: 96,
   },
 });
