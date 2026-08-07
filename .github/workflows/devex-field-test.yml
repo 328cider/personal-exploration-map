@@ -22,7 +22,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: devex-field-test-v2-${{ github.ref }}
+  group: devex-field-test-v3-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -108,8 +108,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
-      AVD_NAME: pem_api_35
-      SYSTEM_IMAGE: system-images;android-35;google_apis;x86_64
       APK_PATH: artifacts/field-test/personal-exploration-map-field-test.apk
       EVIDENCE_DIR: artifacts/emulator-e2e
     steps:
@@ -118,99 +116,52 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: android-actions/setup-android@v3
       - name: Download the exact field-test APK produced by this run
         uses: actions/download-artifact@v4
         with:
           name: personal-exploration-map-field-test
           path: artifacts/field-test
-      - name: Enable emulator acceleration
+      - name: Prepare evidence directory
         run: |
-          if [[ -e /dev/kvm ]]; then
-            sudo chmod 666 /dev/kvm
-          fi
-          "$ANDROID_HOME/emulator/emulator" -accel-check || true
-      - name: Install emulator image and create disposable AVD
-        run: |
-          sdkmanager --install \
-            "platform-tools" \
-            "emulator" \
-            "$SYSTEM_IMAGE"
-          echo "no" | avdmanager create avd \
-            --force \
-            --name "$AVD_NAME" \
-            --package "$SYSTEM_IMAGE" \
-            --device "pixel"
-      - name: Start headless Android emulator
-        run: |
-          set -euo pipefail
           mkdir -p "$EVIDENCE_DIR"
-          nohup "$ANDROID_HOME/emulator/emulator" \
-            -avd "$AVD_NAME" \
-            -no-window \
-            -no-audio \
-            -no-boot-anim \
-            -no-snapshot \
-            -wipe-data \
-            -gpu swiftshader_indirect \
-            -camera-back none \
-            -camera-front none \
-            > "$EVIDENCE_DIR/emulator.log" 2>&1 &
-          emulator_pid=$!
-          echo "$emulator_pid" > "$EVIDENCE_DIR/emulator.pid"
-
-          if ! timeout 180 adb wait-for-device; then
-            echo "Emulator did not expose an ADB device within 180 seconds." >&2
-            ps -ef | grep -E "emulator|qemu" | grep -v grep || true
-            cat "$EVIDENCE_DIR/emulator.log" || true
-            exit 1
-          fi
-
-          if ! timeout 300 bash -c '
-            until [[ "$(adb shell getprop sys.boot_completed | tr -d "\r")" == "1" ]]; do
-              if ! kill -0 '"$emulator_pid"' 2>/dev/null; then
-                echo "Emulator process exited before boot completed." >&2
-                exit 1
-              fi
-              sleep 2
-            done
-          '; then
-            echo "Emulator did not complete Android boot within 300 seconds." >&2
-            timeout 15 adb devices -l || true
-            timeout 15 adb shell getprop || true
-            cat "$EVIDENCE_DIR/emulator.log" || true
-            exit 1
-          fi
-
-          timeout 15 adb shell input keyevent 82 || true
-          timeout 15 adb shell settings put global window_animation_scale 0
-          timeout 15 adb shell settings put global transition_animation_scale 0
-          timeout 15 adb shell settings put global animator_duration_scale 0
-          timeout 15 adb shell settings put secure long_press_timeout 300
-          timeout 15 adb shell wm dismiss-keyguard || true
-          timeout 15 adb devices -l
-      - name: Run black-box PersonalMap lifecycle
+          cat > "$EVIDENCE_DIR/harness.json" <<'JSON'
+          {
+            "provider": "ReactiveCircus/android-emulator-runner",
+            "version": "2.37.0",
+            "apiLevel": 35,
+            "target": "google_apis",
+            "arch": "x86_64"
+          }
+          JSON
+      - name: Enable KVM group permissions
         run: |
-          python3 scripts/android-emulator-smoke.py \
-            --apk "$APK_PATH" \
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run black-box PersonalMap lifecycle on Android 15
+        uses: ReactiveCircus/android-emulator-runner@v2.37.0
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel
+          cores: 2
+          ram-size: 4096M
+          emulator-boot-timeout: 600
+          emulator-options: >-
+            -no-window -gpu swiftshader_indirect -no-snapshot -noaudio
+            -no-boot-anim -camera-back none -camera-front none
+          disable-animations: true
+          script: >-
+            python3 scripts/android-emulator-smoke.py
+            --apk "$APK_PATH"
             --artifacts "$EVIDENCE_DIR"
-      - name: Capture final emulator state
-        if: always()
-        run: |
-          mkdir -p "$EVIDENCE_DIR"
-          timeout 30 adb logcat -d -v threadtime > "$EVIDENCE_DIR/workflow-final-logcat.txt" 2>&1 || true
-          timeout 30 adb shell dumpsys activity activities > "$EVIDENCE_DIR/workflow-final-activity.txt" 2>&1 || true
-          timeout 30 adb shell dumpsys location > "$EVIDENCE_DIR/workflow-final-location.txt" 2>&1 || true
-          timeout 30 adb exec-out screencap -p > "$EVIDENCE_DIR/workflow-final-screen.png" 2>/dev/null || true
-          if [[ -f "$EVIDENCE_DIR/emulator.pid" ]]; then
-            emulator_pid="$(cat "$EVIDENCE_DIR/emulator.pid")"
-            kill "$emulator_pid" 2>/dev/null || true
-          fi
       - name: Upload emulator screenshots, UI hierarchy and logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: personal-exploration-map-emulator-e2e
           path: artifacts/emulator-e2e/
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
