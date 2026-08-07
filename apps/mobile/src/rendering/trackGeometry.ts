@@ -151,7 +151,12 @@ function opacityBucket(confidence: number): number {
     MINIMUM_VISIBLE_OPACITY,
     Math.min(1, confidence),
   );
-  return Math.round(visible / OPACITY_BUCKET_SIZE) * OPACITY_BUCKET_SIZE;
+  // Round upward so quantization never makes an already faint uncertainty
+  // stroke less visible than the configured minimum.
+  const bucketed =
+    Math.ceil(visible / OPACITY_BUCKET_SIZE - Number.EPSILON) *
+    OPACITY_BUCKET_SIZE;
+  return Number(Math.min(1, bucketed).toFixed(2));
 }
 
 function buildSegmentStrokes(
@@ -219,6 +224,10 @@ function buildSegmentStrokes(
   return strokes;
 }
 
+function canvasPoint(point: CanvasPoint): CanvasPoint {
+  return { x: point.x, y: point.y };
+}
+
 /**
  * Converts a read-only map snapshot into renderer geometry.
  *
@@ -278,7 +287,7 @@ export function buildTrackCanvasGeometry(input: {
         explorationId: segment.explorationId,
         explorationIndex,
         kind: "start",
-        point: first,
+        point: canvasPoint(first),
       });
     }
     const last = projected.at(-1);
@@ -287,7 +296,7 @@ export function buildTrackCanvasGeometry(input: {
         explorationId: segment.explorationId,
         explorationIndex,
         kind: "end",
-        point: last,
+        point: canvasPoint(last),
       });
     }
   });
