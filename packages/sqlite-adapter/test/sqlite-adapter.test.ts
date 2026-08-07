@@ -83,6 +83,7 @@ class NodeSqliteDatabase implements AsyncSqliteDatabase {
 
 class FakeTrackingProvider implements TrackingProviderPort {
   readonly id = "gnss-background";
+  readonly coordinateKind = "geographic" as const;
   readonly starts: string[] = [];
   readonly stops: string[] = [];
   private activeExplorationId: string | null = null;
