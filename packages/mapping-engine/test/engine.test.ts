@@ -87,8 +87,47 @@ class InMemoryRepository
     this.touchMap(record.personalMapId, record.startedAtMs);
   }
 
-  async deleteExploration(explorationId: string): Promise<void> {
+  async deleteExplorationIfUnobserved(
+    explorationId: string,
+  ): Promise<boolean> {
+    const data = this.explorations.get(explorationId);
+    if (
+      data === undefined ||
+      data.record.endedAtMs !== undefined ||
+      data.samples.length > 0 ||
+      data.markers.length > 0
+    ) {
+      return false;
+    }
     this.explorations.delete(explorationId);
+    this.recomputeMapUpdatedAt(data.record.personalMapId);
+    return true;
+  }
+
+  async deletePersonalMapIfOnlyUnobservedExploration(
+    personalMapId: string,
+    explorationId: string,
+  ): Promise<boolean> {
+    if (!this.maps.has(personalMapId)) {
+      return false;
+    }
+    const belonging = [...this.explorations.values()].filter(
+      (data) => data.record.personalMapId === personalMapId,
+    );
+    const only = belonging[0];
+    if (
+      belonging.length !== 1 ||
+      only === undefined ||
+      only.record.id !== explorationId ||
+      only.record.endedAtMs !== undefined ||
+      only.samples.length > 0 ||
+      only.markers.length > 0
+    ) {
+      return false;
+    }
+    this.explorations.delete(explorationId);
+    this.maps.delete(personalMapId);
+    return true;
   }
 
   async appendPositionSamples(
@@ -210,6 +249,24 @@ class InMemoryRepository
       });
     }
   }
+
+  private recomputeMapUpdatedAt(personalMapId: string): void {
+    const map = this.maps.get(personalMapId);
+    if (map === undefined) {
+      return;
+    }
+    const latest = [...this.explorations.values()]
+      .filter((data) => data.record.personalMapId === personalMapId)
+      .reduce(
+        (maximum, data) =>
+          Math.max(
+            maximum,
+            data.record.endedAtMs ?? data.record.startedAtMs,
+          ),
+        map.createdAtMs,
+      );
+    this.maps.set(personalMapId, { ...map, updatedAtMs: latest });
+  }
 }
 
 class FakeTrackingProvider implements TrackingProviderPort {
@@ -218,6 +275,10 @@ class FakeTrackingProvider implements TrackingProviderPort {
   readonly starts: string[] = [];
   readonly stops: string[] = [];
   failStart = false;
+  beforeStartFailure?: (input: {
+    readonly personalMapId: string;
+    readonly explorationId: string;
+  }) => Promise<void>;
   private runningExplorationId: string | null = null;
 
   constructor(
@@ -233,6 +294,7 @@ class FakeTrackingProvider implements TrackingProviderPort {
     readonly explorationId: string;
   }): Promise<void> {
     if (this.failStart) {
+      await this.beforeStartFailure?.(input);
       throw new Error("provider start failed");
     }
     this.starts.push(`${input.personalMapId}:${input.explorationId}`);
@@ -309,16 +371,18 @@ test("the headless engine owns a complete canonical mapping lifecycle", async ()
     throw new Error("presentation listener failure");
   });
 
-  const { personalMapId } = await engine.createPersonalMap({
-    name: "My world",
-    createdAtMs: 1_000,
-  });
-  const { explorationId } = await engine.startExploration({
-    personalMapId,
-    name: "First walk",
-    startedAtMs: 2_000,
-    trackingProviderId: "gnss",
-  });
+  const { personalMapId, explorationId } =
+    await engine.createPersonalMapWithFirstExploration({
+      personalMap: {
+        name: "My world",
+        createdAtMs: 1_000,
+      },
+      exploration: {
+        name: "First walk",
+        startedAtMs: 2_000,
+        trackingProviderId: "gnss",
+      },
+    });
 
   const samples = [
     geographicSample("sample-1", 2_500, 35, 139),
@@ -389,8 +453,7 @@ test("the headless engine owns a complete canonical mapping lifecycle", async ()
   assert.notEqual(map.markers[0]?.xMeters, undefined);
   assert.notEqual(map.markers[0]?.yMeters, undefined);
 
-  const listed = await engine.listPersonalMaps();
-  assert.deepEqual(listed, [
+  assert.deepEqual(await engine.listPersonalMaps(), [
     {
       id: personalMapId,
       name: "My world",
@@ -400,7 +463,7 @@ test("the headless engine owns a complete canonical mapping lifecycle", async ()
   ]);
 });
 
-test("a provider start failure compensates the persisted exploration record", async () => {
+test("a failed first provider start removes the new empty PersonalMap and session", async () => {
   const repository = new InMemoryRepository();
   const provider = new FakeTrackingProvider();
   provider.failStart = true;
@@ -412,25 +475,105 @@ test("a provider start failure compensates the persisted exploration record", as
   const events: string[] = [];
   engine.subscribe(({ event }) => events.push(event.type));
 
-  const { personalMapId } = await engine.createPersonalMap({
-    name: "Map",
-    createdAtMs: 1_000,
-  });
-
   await assert.rejects(
-    engine.startExploration({
-      personalMapId,
-      name: "Failed walk",
-      startedAtMs: 2_000,
-      trackingProviderId: "gnss",
+    engine.createPersonalMapWithFirstExploration({
+      personalMap: {
+        name: "Should disappear",
+        createdAtMs: 1_000,
+      },
+      exploration: {
+        name: "Failed first walk",
+        startedAtMs: 2_000,
+        trackingProviderId: provider.id,
+      },
     }),
     /provider start failed/u,
   );
 
+  assert.equal(repository.maps.size, 0);
   assert.equal(repository.explorations.size, 0);
   assert.deepEqual(events, []);
-  const map = await engine.getPersonalMap({ personalMapId });
-  assert.equal(map?.stats.explorationCount, 0);
+});
+
+test("automatic first-start compensation preserves canonical evidence that arrived before failure", async () => {
+  const repository = new InMemoryRepository();
+  const provider = new FakeTrackingProvider();
+  provider.failStart = true;
+  provider.beforeStartFailure = async ({ explorationId }) => {
+    await repository.runInTransaction((writer) =>
+      writer.appendPositionSamples(explorationId, [
+        geographicSample("early-sample", 2_100, 35, 139),
+      ]),
+    );
+  };
+  const engine = createMappingEngine({
+    repository,
+    trackingProviders: [provider],
+    idFactory: deterministicIdFactory(),
+  });
+
+  await assert.rejects(
+    engine.createPersonalMapWithFirstExploration({
+      personalMap: {
+        name: "Recoverable map",
+        createdAtMs: 1_000,
+      },
+      exploration: {
+        name: "Partially started walk",
+        startedAtMs: 2_000,
+        trackingProviderId: provider.id,
+      },
+    }),
+    /canonical evidence was preserved for explicit recovery/u,
+  );
+
+  assert.equal(repository.maps.size, 1);
+  assert.equal(repository.explorations.size, 1);
+  assert.equal(
+    repository.explorations.get("exploration-1")?.samples.length,
+    1,
+  );
+});
+
+test("a provider start failure on an existing map removes only an unobserved new session", async () => {
+  const repository = new InMemoryRepository();
+  const provider = new FakeTrackingProvider();
+  const engine = createMappingEngine({
+    repository,
+    trackingProviders: [provider],
+    idFactory: deterministicIdFactory(),
+  });
+
+  const initial = await engine.createPersonalMapWithFirstExploration({
+    personalMap: { name: "Existing map", createdAtMs: 1_000 },
+    exploration: {
+      name: "Successful walk",
+      startedAtMs: 2_000,
+      trackingProviderId: provider.id,
+    },
+  });
+  await engine.endExploration({
+    ...initial,
+    endedAtMs: 3_000,
+  });
+
+  provider.failStart = true;
+  await assert.rejects(
+    engine.startExploration({
+      personalMapId: initial.personalMapId,
+      name: "Failed continuation",
+      startedAtMs: 4_000,
+      trackingProviderId: provider.id,
+    }),
+    /provider start failed/u,
+  );
+
+  assert.equal(repository.maps.size, 1);
+  assert.equal(repository.explorations.size, 1);
+  const map = await engine.getPersonalMap({
+    personalMapId: initial.personalMapId,
+  });
+  assert.equal(map?.stats.explorationCount, 1);
 });
 
 test("provider declarations reject invalid local-frame arguments before side effects", async () => {
