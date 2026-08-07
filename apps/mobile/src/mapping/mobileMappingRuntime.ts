@@ -152,19 +152,14 @@ export async function startNewPersonalMapExploration(
 ): Promise<StartedExploration> {
   await assertNoActiveExploration();
 
-  const engine = getMobileMappingEngine();
-  const createdAtMs = Date.now();
-  const { personalMapId } = await engine.createPersonalMap({
-    name,
-    createdAtMs,
-  });
-  const { explorationId } = await engine.startExploration({
-    personalMapId,
-    name,
-    startedAtMs: createdAtMs,
+  const startedAtMs = Date.now();
+  return getMobileMappingEngine().createPersonalMapWithFirstExploration({
+    personalMapName: name,
+    explorationName: name,
+    createdAtMs: startedAtMs,
+    startedAtMs,
     trackingProviderId: providerIdForMode(mode),
   });
-  return { personalMapId, explorationId };
 }
 
 export async function continuePersonalMapExploration(
@@ -281,17 +276,15 @@ export async function createDemoPersonalMap(): Promise<StartedExploration> {
 
   const engine = getMobileMappingEngine();
   const startedAtMs = Date.now() - 22 * 60 * 1_000;
-  const { personalMapId } = await engine.createPersonalMap({
-    name: "デモ探索",
-    createdAtMs: startedAtMs,
-  });
-  const { explorationId } = await engine.startExploration({
-    personalMapId,
-    name: "デモ探索",
-    startedAtMs,
-    trackingProviderId: SIMULATION_PROVIDER_ID,
-    localFrameLabel: "demo-local-space",
-  });
+  const { personalMapId, explorationId } =
+    await engine.createPersonalMapWithFirstExploration({
+      personalMapName: "デモ探索",
+      explorationName: "デモ探索",
+      createdAtMs: startedAtMs,
+      startedAtMs,
+      trackingProviderId: SIMULATION_PROVIDER_ID,
+      localFrameLabel: "demo-local-space",
+    });
 
   await engine.ingestPositionSamples({
     personalMapId,
