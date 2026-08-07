@@ -11,6 +11,7 @@ on:
       - "scripts/docker-metro.ps1"
       - "scripts/prepare-field-test-sources.mjs"
       - "scripts/check-tracking-stop-policy.mjs"
+      - "scripts/android-emulator-smoke.py"
       - "apps/mobile/**"
       - "packages/**"
       - "package.json"
@@ -21,7 +22,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: devex-field-test-${{ github.ref }}
+  group: devex-field-test-v3-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -99,4 +100,68 @@ jobs:
           name: personal-exploration-map-field-test
           path: artifacts/field-test/
           if-no-files-found: error
+          retention-days: 14
+
+  emulator-e2e:
+    name: Android emulator user-flow gate
+    needs: field-test-apk
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      APK_PATH: artifacts/field-test/personal-exploration-map-field-test.apk
+      EVIDENCE_DIR: artifacts/emulator-e2e
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Download the exact field-test APK produced by this run
+        uses: actions/download-artifact@v4
+        with:
+          name: personal-exploration-map-field-test
+          path: artifacts/field-test
+      - name: Prepare evidence directory
+        run: |
+          mkdir -p "$EVIDENCE_DIR"
+          cat > "$EVIDENCE_DIR/harness.json" <<'JSON'
+          {
+            "provider": "ReactiveCircus/android-emulator-runner",
+            "version": "2.37.0",
+            "apiLevel": 35,
+            "target": "google_apis",
+            "arch": "x86_64"
+          }
+          JSON
+      - name: Enable KVM group permissions
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run black-box PersonalMap lifecycle on Android 15
+        uses: ReactiveCircus/android-emulator-runner@v2.37.0
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel
+          cores: 2
+          ram-size: 4096M
+          emulator-boot-timeout: 600
+          emulator-options: >-
+            -no-window -gpu swiftshader_indirect -no-snapshot -noaudio
+            -no-boot-anim -camera-back none -camera-front none
+          disable-animations: true
+          script: >-
+            python3 scripts/android-emulator-smoke.py
+            --apk "$APK_PATH"
+            --artifacts "$EVIDENCE_DIR"
+      - name: Upload emulator screenshots, UI hierarchy and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: personal-exploration-map-emulator-e2e
+          path: artifacts/emulator-e2e/
+          if-no-files-found: warn
           retention-days: 14

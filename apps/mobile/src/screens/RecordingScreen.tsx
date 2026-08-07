@@ -89,79 +89,87 @@ export function RecordingScreen({
 
   return (
     <>
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.statusRow}>
-          <View
-            style={[
-              styles.statusDot,
-              runtimeRunning ? styles.statusDotActive : styles.statusDotWarning,
-            ]}
-          />
-          <Text style={styles.statusLabel}>
-            {runtimeRunning ? "探索を記録中" : "記録状態を確認してください"}
+      <View style={styles.screen}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.statusRow}>
+            <View
+              style={[
+                styles.statusDot,
+                runtimeRunning
+                  ? styles.statusDotActive
+                  : styles.statusDotWarning,
+              ]}
+            />
+            <Text style={styles.statusLabel}>
+              {runtimeRunning ? "探索を記録中" : "記録状態を確認してください"}
+            </Text>
+          </View>
+
+          <Text style={styles.timer}>
+            {formatElapsedClock(now - exploration.startedAtMs)}
+          </Text>
+          <Text style={styles.pocketMessage}>
+            {isBackground
+              ? "スマホはしまって大丈夫です。"
+              : "簡易記録中です。画面を閉じないでください。"}
+          </Text>
+
+          {!runtimeRunning ? (
+            <View style={styles.warningCard}>
+              <Text style={styles.warningTitle}>位置記録が動いていません</Text>
+              <Text style={styles.warningBody}>
+                OSによる停止またはアプリ再起動の可能性があります。現在までのデータは保存されています。探索を終了してレビューしてください。
+              </Text>
+            </View>
+          ) : null}
+
+          <View style={styles.metricGrid}>
+            <View style={styles.metricCard}>
+              <Text style={styles.metricValue}>{liveStats.rawSampleCount}</Text>
+              <Text style={styles.metricLabel}>位置サンプル</Text>
+            </View>
+            <View style={styles.metricCard}>
+              <Text style={styles.metricValue}>{liveStats.markerCount}</Text>
+              <Text style={styles.metricLabel}>発見</Text>
+            </View>
+            <View style={styles.metricCard}>
+              <Text style={styles.metricValue}>
+                {accuracy === null ? "—" : `${Math.round(accuracy)}m`}
+              </Text>
+              <Text style={styles.metricLabel}>直近の精度</Text>
+            </View>
+          </View>
+
+          <LiveMapPreview personalMapId={exploration.personalMapId} />
+        </ScrollView>
+
+        <View style={styles.actions}>
+          <View style={styles.actionRow}>
+            <AppButton
+              disabled={stopping}
+              onPress={openMarkerInput}
+              style={styles.markerButton}
+              variant="secondary"
+            >
+              ＋ 発見を記録
+            </AppButton>
+            <AppButton
+              loading={stopping}
+              onPress={onEnd}
+              style={styles.endButton}
+              variant="danger"
+            >
+              探索を終了して地図を見る
+            </AppButton>
+          </View>
+          <Text style={styles.endNote}>
+            終了しても、今回の生データと発見は端末内に残ります。
           </Text>
         </View>
-
-        <Text style={styles.timer}>
-          {formatElapsedClock(now - exploration.startedAtMs)}
-        </Text>
-        <Text style={styles.pocketMessage}>
-          {isBackground
-            ? "スマホはしまって大丈夫です。"
-            : "簡易記録中です。画面を閉じないでください。"}
-        </Text>
-
-        {!runtimeRunning ? (
-          <View style={styles.warningCard}>
-            <Text style={styles.warningTitle}>位置記録が動いていません</Text>
-            <Text style={styles.warningBody}>
-              OSによる停止またはアプリ再起動の可能性があります。現在までのデータは保存されています。探索を終了してレビューしてください。
-            </Text>
-          </View>
-        ) : null}
-
-        <View style={styles.metricGrid}>
-          <View style={styles.metricCard}>
-            <Text style={styles.metricValue}>{liveStats.rawSampleCount}</Text>
-            <Text style={styles.metricLabel}>位置サンプル</Text>
-          </View>
-          <View style={styles.metricCard}>
-            <Text style={styles.metricValue}>{liveStats.markerCount}</Text>
-            <Text style={styles.metricLabel}>発見</Text>
-          </View>
-          <View style={styles.metricCard}>
-            <Text style={styles.metricValue}>
-              {accuracy === null ? "—" : `${Math.round(accuracy)}m`}
-            </Text>
-            <Text style={styles.metricLabel}>直近の精度</Text>
-          </View>
-        </View>
-
-        <LiveMapPreview personalMapId={exploration.personalMapId} />
-
-        <AppButton
-          disabled={stopping}
-          onPress={openMarkerInput}
-          style={styles.markerButton}
-          variant="secondary"
-        >
-          ＋ 発見を記録
-        </AppButton>
-        <AppButton
-          loading={stopping}
-          onPress={onEnd}
-          style={styles.endButton}
-          variant="danger"
-        >
-          探索を終了して地図を見る
-        </AppButton>
-        <Text style={styles.endNote}>
-          終了しても、今回の生データと発見は端末内に残ります。
-        </Text>
-      </ScrollView>
+      </View>
 
       <MarkerModal
         visible={markerVisible}
@@ -173,10 +181,13 @@ export function RecordingScreen({
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+  },
   content: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xl,
-    paddingBottom: spacing.xxl,
+    paddingBottom: spacing.lg,
   },
   statusRow: {
     flexDirection: "row",
@@ -263,17 +274,33 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: spacing.xs,
   },
+  actions: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
+    backgroundColor: palette.background,
+    borderTopWidth: 1,
+    borderTopColor: palette.border,
+  },
+  actionRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
   markerButton: {
-    marginTop: spacing.xl,
+    flex: 0.8,
+    minHeight: 50,
+    paddingHorizontal: spacing.sm,
   },
   endButton: {
-    marginTop: spacing.sm,
+    flex: 1.2,
+    minHeight: 50,
+    paddingHorizontal: spacing.sm,
   },
   endNote: {
     color: palette.mutedInk,
-    fontSize: 11,
-    lineHeight: 17,
+    fontSize: 10,
+    lineHeight: 15,
     textAlign: "center",
-    marginTop: spacing.sm,
+    marginTop: spacing.xs,
   },
 });

@@ -1,6 +1,7 @@
 import * as SQLite from "expo-sqlite";
 import {
   migrateMappingDatabase,
+  serializeAsyncSqliteDatabase,
   type AsyncSqliteDatabase,
   type AsyncSqliteExecutor,
   type SqliteBindValue,
@@ -8,7 +9,7 @@ import {
 
 const DATABASE_NAME = "personal-exploration-map.db";
 
-let databasePromise: Promise<SQLite.SQLiteDatabase> | undefined;
+let databasePromise: Promise<AsyncSqliteDatabase> | undefined;
 
 function wrapExecutor(
   executor: SQLite.SQLiteDatabase,
@@ -55,10 +56,21 @@ function wrapDatabase(database: SQLite.SQLiteDatabase): AsyncSqliteDatabase {
   };
 }
 
-export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
+/**
+ * Returns the single serialized database boundary shared by foreground UI,
+ * background location callbacks, diagnostics, and mapping replay.
+ *
+ * Expo SQLite manages native prepared statements behind each async call. The
+ * application must not enter the same native database object concurrently, so
+ * every top-level operation goes through one queue before reaching Expo.
+ */
+export async function getDatabase(): Promise<AsyncSqliteDatabase> {
   databasePromise ??= SQLite.openDatabaseAsync(DATABASE_NAME).then(
-    async (database) => {
-      await migrateMappingDatabase(wrapDatabase(database));
+    async (rawDatabase) => {
+      const database = serializeAsyncSqliteDatabase(
+        wrapDatabase(rawDatabase),
+      );
+      await migrateMappingDatabase(database);
       return database;
     },
   );
@@ -66,7 +78,7 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
 }
 
 export async function getMappingDatabase(): Promise<AsyncSqliteDatabase> {
-  return wrapDatabase(await getDatabase());
+  return getDatabase();
 }
 
 export async function initializeDatabase(): Promise<void> {

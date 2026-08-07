@@ -94,6 +94,9 @@ IssueまたはPRに次を残す。該当しない場合も理由を書く。
 - 大きなフレームワーク、認証、バックエンド、plugin systemを「将来使うかもしれない」だけで追加しない。
 - 標準アルゴリズムや一般部品を自作する場合は、既存OSSを採用しない理由とライセンス判断を記録する。
 - テストは重要な変換・品質判定・application transaction・アーキテクチャ境界を中心に必要十分に保つ。
+- 実地試験はユーザーコストが高い。Android Emulatorで再現可能な起動・権限済み導線・擬似GNSS・live preview・終了・永続化を先に通す。
+- `Android emulator user-flow gate`が失敗したField-test APKを、ユーザーへ実地試験候補として渡さない。
+- エミュレータ合格を、実GNSS、OEM省電力、電池、ポケットUXの合格と混同しない。
 
 ## Constitution changes
 
@@ -117,7 +120,15 @@ npm test
 npm run typecheck
 ```
 
-モバイル変更は可能な範囲でAndroid実機の以下も記録する。
+モバイルField-test候補は、GitHub Actionsで次をすべて成功させる。
+
+- `Docker mobile check`
+- `Standalone field-test APK`
+- `Android emulator user-flow gate`
+
+エミュレータE2Eの内容と証跡は `docs/ANDROID_EMULATOR_E2E.md` に従う。
+
+エミュレータ合格後、Android実機では代替できない以下を記録する。
 
 - 画面ON / OFF
 - アプリ前面 / 背面
@@ -125,3 +136,6 @@ npm run typecheck
 - 30分以上の継続
 - 通知からの復帰
 - 強制終了後の表示
+- 実GNSS精度・欠落・ジャンプ
+- OEM省電力と電池消費
+- ポケット内の身体的UX
