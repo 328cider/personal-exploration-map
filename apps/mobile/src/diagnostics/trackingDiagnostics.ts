@@ -48,7 +48,7 @@ function createDiagnosticEvent(input: DiagnosticInput): TrackingDiagnosticEvent 
     explorationId: input.context.explorationId,
     providerId: input.context.providerId,
     kind: input.kind,
-    // Capture the observation time before a queued SQLite write begins.
+    // Capture observation time before the queued SQLite write begins.
     occurredAtMs: input.occurredAtMs ?? Date.now(),
     ...(input.payload === undefined ? {} : { payload: input.payload }),
   };
@@ -61,17 +61,17 @@ export async function recordTrackingDiagnosticEvent(
 }
 
 /**
- * Diagnostics must never interrupt canonical position persistence or provider
- * lifecycle. Events are timestamped immediately, then serialized through a
- * private best-effort queue to avoid concurrent SQLite writes on callback hot
- * paths. The returned promise may be awaited by lifecycle code, but callback
- * ingestion deliberately fires it without waiting.
+ * Queue a best-effort diagnostic write and resolve immediately.
+ *
+ * Canonical position persistence and provider lifecycle never wait for this
+ * queue. Events are serialized to avoid concurrent SQLite writes, while Review
+ * explicitly waits for events already queued by the current process.
  */
 export function recordTrackingDiagnosticBestEffort(
   input: DiagnosticInput,
 ): Promise<void> {
   const event = createDiagnosticEvent(input);
-  const write = diagnosticWriteQueue.then(async () => {
+  diagnosticWriteQueue = diagnosticWriteQueue.then(async () => {
     try {
       await diagnosticsStore.append(event);
     } catch {
@@ -79,10 +79,7 @@ export function recordTrackingDiagnosticBestEffort(
       // raw location sample or recoverable tracking session for diagnostics.
     }
   });
-  // Each queued task handles its own persistence failure, so the queue remains
-  // usable even after an individual diagnostic insert cannot be written.
-  diagnosticWriteQueue = write;
-  return write;
+  return Promise.resolve();
 }
 
 export async function recordActiveTrackingDiagnosticBestEffort(input: {
@@ -94,13 +91,13 @@ export async function recordActiveTrackingDiagnosticBestEffort(input: {
   if (context === null) {
     return;
   }
-  await recordTrackingDiagnosticBestEffort({ context, ...input });
+  void recordTrackingDiagnosticBestEffort({ context, ...input });
 }
 
 export async function loadPersonalMapTrackingDiagnostics(
   personalMapId: string,
 ): Promise<readonly ExplorationTrackingReportItem[]> {
-  // Make a review opened immediately after stopping deterministic: wait only
+  // Make a Review opened immediately after stopping deterministic: wait only
   // for diagnostics already queued by this process, never for future events.
   await diagnosticWriteQueue;
 
