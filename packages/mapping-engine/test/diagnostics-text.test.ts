@@ -85,7 +85,7 @@ test("aggregate text excludes ids and absolute timestamps", () => {
   assert.match(text, /accuracy_m_p95=40/u);
   assert.match(text, /sample_gap_at_least_60s=1/u);
   assert.match(text, /callback_duplicate_samples=1/u);
-  assert.match(text, /marker_input_median=4500/u);
+  assert.match(text, /marker_input_ms_median=4500/u);
   assert.match(text, /last_error_message=database busy retry scheduled/u);
   assert.match(text, /lifecycle_1_offset_ms=1000/u);
 
