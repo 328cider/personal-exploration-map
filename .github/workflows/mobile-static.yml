@@ -1,0 +1,36 @@
+name: mobile-static
+
+on:
+  pull_request:
+    paths:
+      - "apps/mobile/**"
+      - "packages/mapping-core/**"
+      - "packages/mapping-engine/**"
+      - "packages/sqlite-adapter/**"
+      - "package.json"
+      - ".github/workflows/mobile-static.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/mobile/**"
+      - "packages/mapping-core/**"
+      - "packages/mapping-engine/**"
+      - "packages/sqlite-adapter/**"
+      - "package.json"
+      - ".github/workflows/mobile-static.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install workspace dependencies without native build scripts
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Type-check the mobile application
+        run: npm run typecheck:mobile
