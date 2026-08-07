@@ -1,0 +1,26 @@
+{
+  "name": "@exploration-map/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start --dev-client",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "prebuild": "expo prebuild",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@exploration-map/mapping-core": "*",
+    "expo": "~57.0.0",
+    "expo-dev-client": "~57.0.7",
+    "expo-location": "~57.0.8",
+    "expo-sqlite": "~57.0.1",
+    "expo-task-manager": "~57.0.5",
+    "react": "19.2.3",
+    "react-native": "0.86.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2"
+  }
+}

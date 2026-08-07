@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "探索マップ",
+    "slug": "personal-exploration-map",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "explorationmap",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.cider328.personalexplorationmap"
+    },
+    "android": {
+      "package": "com.cider328.personalexplorationmap"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "探索中の移動を自分の地図として記録するため、位置情報を使用します。",
+          "locationAlwaysAndWhenInUsePermission": "画面を消してスマホをしまっている間も探索を記録するため、位置情報を使用します。",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      "expo-sqlite"
+    ]
+  }
+}
