@@ -1,15 +1,19 @@
-name: mapping-core
+name: mapping-packages
 
 on:
   pull_request:
     paths:
       - "packages/mapping-core/**"
+      - "packages/mapping-engine/**"
+      - "packages/experience-sdk/**"
       - "package.json"
       - ".github/workflows/core.yml"
   push:
     branches: [main]
     paths:
       - "packages/mapping-core/**"
+      - "packages/mapping-engine/**"
+      - "packages/experience-sdk/**"
       - "package.json"
       - ".github/workflows/core.yml"
 
@@ -24,5 +28,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Run dependency-free mapping-core tests
+      - name: Run dependency-free mapping package tests
         run: npm test
