@@ -32,13 +32,25 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         shell: bash
         run: |
-          CONTENT=$(base64 -w 0 package-lock.json)
+          python - <<'PY'
+          import base64
+          import json
+          import os
+
+          with open("package-lock.json", "rb") as source:
+              content = base64.b64encode(source.read()).decode("ascii")
+          payload = {
+              "message": "chore(renderer): lock react-native-svg",
+              "content": content,
+              "branch": os.environ["HEAD_BRANCH"],
+          }
+          with open("/tmp/package-lock-request.json", "w", encoding="utf-8") as target:
+              json.dump(payload, target)
+          PY
           gh api \
             --method PUT \
             "repos/${REPOSITORY}/contents/package-lock.json" \
-            -f message="chore(renderer): lock react-native-svg" \
-            -f content="${CONTENT}" \
-            -f branch="${HEAD_BRANCH}"
+            --input /tmp/package-lock-request.json
       - uses: actions/upload-artifact@v4
         with:
           name: renderer-package-lock
