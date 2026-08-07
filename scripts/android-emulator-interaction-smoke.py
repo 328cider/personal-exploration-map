@@ -28,6 +28,44 @@ smoke = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(smoke)
 
 
+def fresh_dump_ui(artifacts: Path, name: str) -> tuple[ET.Element, Path]:
+    """Dump to a unique remote path so UI Automator cannot return stale XML."""
+
+    last_error = ""
+    for attempt in range(5):
+        remote_path = f"/sdcard/pem-window-{time.time_ns()}-{attempt}.xml"
+        smoke.adb_shell("rm", "-f", remote_path, check=False, timeout=15)
+        result = smoke.run(
+            [
+                "adb",
+                "shell",
+                "uiautomator",
+                "dump",
+                "--compressed",
+                remote_path,
+            ],
+            check=False,
+            timeout=30,
+        )
+        if result.returncode == 0:
+            xml_text = smoke.adb_shell("cat", remote_path, timeout=30)
+            smoke.adb_shell("rm", "-f", remote_path, check=False, timeout=15)
+            if "<hierarchy" in xml_text:
+                path = artifacts / f"{name}.xml"
+                path.write_text(xml_text, encoding="utf-8")
+                return ET.fromstring(xml_text), path
+        last_error = f"stdout={result.stdout!r} stderr={result.stderr!r}"
+        time.sleep(1)
+    raise smoke.SmokeFailure(f"could not dump fresh UI hierarchy: {last_error}")
+
+
+# The base lifecycle used a fixed remote file name. On long, sequential suites
+# UI Automator can report success while the old file remains, so the screenshot
+# and hierarchy describe different screens. Replace the module-global helper;
+# wait_for_node and screenshot resolve it dynamically.
+smoke.dump_ui = fresh_dump_ui
+
+
 def exact_text_exists(root: ET.Element, expected: str) -> bool:
     return any(
         node.attrib.get("text", "").strip() == expected
