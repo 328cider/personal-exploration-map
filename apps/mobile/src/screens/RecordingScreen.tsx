@@ -8,6 +8,7 @@ import {
 import type { MarkerCategory } from "@exploration-map/mapping-core";
 
 import { AppButton } from "../components/AppButton";
+import { LiveMapPreview } from "../components/LiveMapPreview";
 import { MarkerModal } from "../components/MarkerModal";
 import type {
   ExplorationSummary,
@@ -139,15 +140,7 @@ export function RecordingScreen({
           </View>
         </View>
 
-        <View style={styles.noMapCard}>
-          <Text style={styles.noMapGlyph}>⌁</Text>
-          <View style={styles.noMapText}>
-            <Text style={styles.noMapTitle}>探索中は地図を見なくてよい設計</Text>
-            <Text style={styles.noMapBody}>
-              経路は裏側で保存されています。地図は探索を終えた後に表示します。
-            </Text>
-          </View>
-        </View>
+        <LiveMapPreview personalMapId={exploration.personalMapId} />
 
         <AppButton
           disabled={stopping}
@@ -268,35 +261,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
     textAlign: "center",
-    marginTop: spacing.xs,
-  },
-  noMapCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    marginTop: spacing.lg,
-    padding: spacing.lg,
-    borderRadius: 22,
-    backgroundColor: palette.primarySoft,
-  },
-  noMapGlyph: {
-    color: palette.primary,
-    fontSize: 42,
-    lineHeight: 48,
-  },
-  noMapText: {
-    flex: 1,
-  },
-  noMapTitle: {
-    color: palette.primary,
-    fontSize: 15,
-    lineHeight: 21,
-    fontWeight: "800",
-  },
-  noMapBody: {
-    color: palette.mutedInk,
-    fontSize: 13,
-    lineHeight: 20,
     marginTop: spacing.xs,
   },
   markerButton: {
