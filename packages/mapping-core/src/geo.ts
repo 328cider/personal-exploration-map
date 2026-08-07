@@ -7,6 +7,31 @@ import type {
 
 const EARTH_RADIUS_METERS = 6_371_008.8;
 const DEG_TO_RAD = Math.PI / 180;
+const RAD_TO_DEG = 180 / Math.PI;
+
+/**
+ * Engineering envelope for the small, dependency-free local projection.
+ *
+ * This is not a survey-grade guarantee. It marks the product range in which
+ * the first accepted geographic point can reasonably act as the origin of a
+ * personal exploration map before a dedicated geodesy/CRS library is needed.
+ */
+export const LOCAL_PROJECTION_MAX_ABS_LATITUDE_DEGREES = 80;
+export const LOCAL_PROJECTION_RECOMMENDED_RADIUS_METERS = 20_000;
+
+export function normalizeLongitudeDegrees(longitude: number): number {
+  if (!Number.isFinite(longitude)) {
+    return longitude;
+  }
+  return ((longitude + 180) % 360 + 360) % 360 - 180;
+}
+
+export function shortestLongitudeDeltaDegrees(
+  originLongitude: number,
+  targetLongitude: number,
+): number {
+  return normalizeLongitudeDegrees(targetLongitude - originLongitude);
+}
 
 export function haversineDistanceMeters(
   first: GeographicPosition,
@@ -15,7 +40,9 @@ export function haversineDistanceMeters(
   const latitude1 = first.latitude * DEG_TO_RAD;
   const latitude2 = second.latitude * DEG_TO_RAD;
   const deltaLatitude = (second.latitude - first.latitude) * DEG_TO_RAD;
-  const deltaLongitude = (second.longitude - first.longitude) * DEG_TO_RAD;
+  const deltaLongitude =
+    shortestLongitudeDeltaDegrees(first.longitude, second.longitude) *
+    DEG_TO_RAD;
 
   const sinLatitude = Math.sin(deltaLatitude / 2);
   const sinLongitude = Math.sin(deltaLongitude / 2);
@@ -25,7 +52,8 @@ export function haversineDistanceMeters(
       Math.cos(latitude2) *
       sinLongitude *
       sinLongitude;
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const boundedA = Math.max(0, Math.min(1, a));
+  const c = 2 * Math.atan2(Math.sqrt(boundedA), Math.sqrt(1 - boundedA));
   return EARTH_RADIUS_METERS * c;
 }
 
@@ -35,8 +63,12 @@ export function projectGeographicToLocal(
   originLongitude: number,
 ): { readonly xMeters: number; readonly yMeters: number } {
   const originLatitudeRadians = originLatitude * DEG_TO_RAD;
+  const deltaLongitude = shortestLongitudeDeltaDegrees(
+    originLongitude,
+    position.longitude,
+  );
   const xMeters =
-    (position.longitude - originLongitude) *
+    deltaLongitude *
     DEG_TO_RAD *
     EARTH_RADIUS_METERS *
     Math.cos(originLatitudeRadians);
@@ -52,14 +84,55 @@ export function unprojectLocalToGeographic(
   originLongitude: number,
 ): GeographicPosition {
   const originLatitudeRadians = originLatitude * DEG_TO_RAD;
-  const latitude =
-    originLatitude + yMeters / EARTH_RADIUS_METERS / DEG_TO_RAD;
-  const longitude =
+  const latitude = originLatitude + yMeters / EARTH_RADIUS_METERS * RAD_TO_DEG;
+  const longitude = normalizeLongitudeDegrees(
     originLongitude +
-    xMeters /
-      (EARTH_RADIUS_METERS * Math.cos(originLatitudeRadians)) /
-      DEG_TO_RAD;
+      xMeters /
+        (EARTH_RADIUS_METERS * Math.cos(originLatitudeRadians)) *
+        RAD_TO_DEG,
+  );
   return { kind: "geographic", latitude, longitude };
+}
+
+export function isWithinRecommendedLocalProjectionEnvelope(
+  position: GeographicPosition,
+  originLatitude: number,
+  originLongitude: number,
+  radiusMeters = LOCAL_PROJECTION_RECOMMENDED_RADIUS_METERS,
+): boolean {
+  if (
+    !Number.isFinite(position.latitude) ||
+    !Number.isFinite(position.longitude) ||
+    !Number.isFinite(originLatitude) ||
+    !Number.isFinite(originLongitude) ||
+    !Number.isFinite(radiusMeters) ||
+    radiusMeters < 0
+  ) {
+    return false;
+  }
+
+  if (
+    Math.abs(position.latitude) >=
+      LOCAL_PROJECTION_MAX_ABS_LATITUDE_DEGREES ||
+    Math.abs(originLatitude) >=
+      LOCAL_PROJECTION_MAX_ABS_LATITUDE_DEGREES
+  ) {
+    return false;
+  }
+
+  return (
+    haversineDistanceMeters(
+      {
+        kind: "geographic",
+        latitude: originLatitude,
+        longitude: normalizeLongitudeDegrees(originLongitude),
+      },
+      {
+        ...position,
+        longitude: normalizeLongitudeDegrees(position.longitude),
+      },
+    ) <= radiusMeters
+  );
 }
 
 export function distanceBetweenPositions(
