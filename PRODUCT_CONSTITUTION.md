@@ -46,9 +46,13 @@
 
 1回の記録は `ExplorationSession`、長期的に育つ地図は `PersonalMap` として分離する。セッション間を、実際に移動した証拠なしに直線で接続しない。座標系を統合する場合は、地理座標または明示的なanchorを根拠にする。
 
-### 6. Game mechanics are replaceable experience layers
+### 6. Canonical map writes are controlled; game mechanics are read-only experience layers
 
-Fog、探索率、実績、収集、ストーリー、テーマは任意の上位レイヤーとする。ゲーム都合でraw evidence、accepted/rejected判定、基本経路、ユーザーの発見を変更してはならない。ゲームを無効化してもマッピングアプリとして成立させる。
+canonicalな個人地図への変更は、明示的に制御されたapplication boundaryを通す。UI、renderer、game、experienceは、raw evidence、accepted/rejected判定、基本経路、確認済みmarkerなどのcanonical domain stateを直接変更してはならない。
+
+Fog、探索率、実績、収集、ストーリー、テーマは任意の上位レイヤーとし、読み取り専用の地図・イベントから別管理の状態、overlay、演出を生成する。ゲーム起点で地図修正が必要な場合は、ユーザー確認を経た明示的な地図commandとして扱う。ゲームを無効化してもマッピングアプリとして成立させる。
+
+制御境界の具体的なpackage名、API、技術スタックは憲章へ固定せず、Accepted ADRの範囲で変更できる。
 
 ### 7. Adopt commodity capabilities before rebuilding them
 
@@ -84,11 +88,12 @@ IssueまたはPRで、少なくとも次を明示する。
 1. **User problem** — どの探索上の問題を解くか
 2. **Passive-first UX** — ポケット利用を維持できるか、操作と中断時間は増えるか
 3. **Map truth** — raw evidence、derived map、manual correction、inference、game overlayのどれを変更するか
-4. **Build / Adopt / Benchmark** — 既存アプリ、OSS、標準、研究で代替できないか
-5. **Game boundary** — ゲームなしでもマッピングが成立するか
-6. **Privacy and safety** — 位置履歴、共有、歩行中操作、危険誘導への影響
-7. **Validation** — 成功条件、失敗条件、ロールバックまたは停止判断
-8. **Constitution impact** — 憲章に適合するか、変更を要求するか
+4. **Map-write authority** — canonical stateを誰が変更し、どの明示的な境界を通すか
+5. **Build / Adopt / Benchmark** — 既存アプリ、OSS、標準、研究で代替できないか
+6. **Game boundary** — ゲームなしでもマッピングが成立し、game/experienceがread-onlyか
+7. **Privacy and safety** — 位置履歴、共有、歩行中操作、危険誘導への影響
+8. **Validation** — 成功条件、失敗条件、ロールバックまたは停止判断
+9. **Constitution impact** — 憲章に適合するか、変更を要求するか
 
 ## Constitution change protocol
 
@@ -110,9 +115,10 @@ IssueまたはPRで、少なくとも次を明示する。
 
 - Expo、React Native、ネイティブ実装などの技術スタック
 - 位置フィルタ、座標変換、描画、保存の具体的OSS
+- application boundaryのpackage名、API、内部構成
 - 画面構成、文言、テーマ、マーカー候補
 - 現在のマイルストーンとIssueの優先順位
 - PDRの採用範囲または不採用判断
 - ゲーム拡張の種類
 
-重要なのは特定技術を守ることではなく、上記の製品目的、地図の真実、受動UX、交換可能な境界を守ることである。
+重要なのは特定技術を守ることではなく、上記の製品目的、地図の真実、受動UX、制御された書き込み権限、交換可能な境界を守ることである。
