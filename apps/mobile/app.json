@@ -11,7 +11,10 @@
       "bundleIdentifier": "com.cider328.personalexplorationmap"
     },
     "android": {
-      "package": "com.cider328.personalexplorationmap"
+      "package": "com.cider328.personalexplorationmap",
+      "permissions": [
+        "POST_NOTIFICATIONS"
+      ]
     },
     "plugins": [
       [
