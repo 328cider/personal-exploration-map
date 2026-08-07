@@ -137,7 +137,11 @@ export function MarkerModal({ visible, onClose, onSave }: MarkerModalProps) {
 
 const styles = StyleSheet.create({
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     backgroundColor: "rgba(23, 32, 29, 0.38)",
   },
   sheet: {
