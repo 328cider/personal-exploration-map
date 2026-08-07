@@ -6,6 +6,17 @@
 
 これは既存地図の訪問履歴アプリでも、測量用GISでも、カメラを構えて作るフロアスキャンアプリでもありません。地図の正本は既存の世界地図ではなく、ユーザー自身の探索記録です。
 
+## 開発時の正本
+
+長期間あいた後や新機能を追加する前は、次の順序で確認します。
+
+1. [`PRODUCT_CONSTITUTION.md`](PRODUCT_CONSTITUTION.md) — 恒久的な製品目的、地図の真実、受動UX、ゲーム境界、OSS再利用方針
+2. [`CURRENT_DIRECTION.md`](CURRENT_DIRECTION.md) — 現在のマイルストーンと短期優先順位
+3. [`docs/adr/`](docs/adr/) — 長期設計判断
+4. [`AGENTS.md`](AGENTS.md) — 開発者・エージェントの実行手順
+
+短期方針、Issue、PR、実装は製品憲章を暗黙に上書きできません。憲章変更には、所有者承認、専用Issue、Build / Buy再評価、新規ADR、移行影響評価が必要です。
+
 ## 現在の判断
 
 既存製品で十分なのは次の用途です。
@@ -70,6 +81,7 @@ PDR  ─────────┼──────▶│ raw evidence     │
 Node.js 22.13以上が必要です。マッピング・コアのテストは外部依存なしで動きます。
 
 ```bash
+node scripts/check-product-governance.mjs
 npm test
 npm run typecheck:core
 ```
@@ -89,4 +101,4 @@ npm run mobile:android
 - バックグラウンドGNSS、SQLite保存、クイックマーカー、白紙地図レビューのモバイル縦切りを実装
 - 屋内PDRはスタブではなく、検証前提のポートとして分離
 
-次の作業は [CURRENT_DIRECTION.md](CURRENT_DIRECTION.md) に集約します。
+次の作業は [CURRENT_DIRECTION.md](CURRENT_DIRECTION.md) に集約します。ただし、恒久的な境界は [PRODUCT_CONSTITUTION.md](PRODUCT_CONSTITUTION.md) が優先します。
