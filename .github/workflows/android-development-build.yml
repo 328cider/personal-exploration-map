@@ -2,15 +2,6 @@ name: android-development-build
 
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - "apps/mobile/**"
-      - "packages/**"
-      - "scripts/**"
-      - "package.json"
-      - "package-lock.json"
-      - ".nvmrc"
-      - ".github/workflows/android-development-build.yml"
 
 permissions:
   contents: read
@@ -38,6 +29,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+          cache: gradle
       - uses: android-actions/setup-android@v3
       - name: Install committed dependency graph
         run: npm ci --no-audit --no-fund
