@@ -33,7 +33,27 @@ export function replayExploration(
   const samples = [...input.samples].sort(
     (first, second) => first.recordedAtMs - second.recordedAtMs,
   );
-  for (const sample of samples) {
+  const samplesBeforeOrAtEnd =
+    input.endedAtMs === undefined
+      ? samples
+      : samples.filter((sample) => sample.recordedAtMs <= input.endedAtMs!);
+  const samplesAfterEnd =
+    input.endedAtMs === undefined
+      ? []
+      : samples.filter((sample) => sample.recordedAtMs > input.endedAtMs!);
+
+  for (const sample of samplesBeforeOrAtEnd) {
+    current = appendPositionSample(current, sample, policy).session;
+  }
+
+  if (input.endedAtMs !== undefined) {
+    current = endExploration(current, input.endedAtMs).session;
+  }
+
+  // A platform callback can arrive after the user stopped an exploration.
+  // Preserve that raw observation, but replay it against the completed session
+  // so it remains excluded from the canonical derived track.
+  for (const sample of samplesAfterEnd) {
     current = appendPositionSample(current, sample, policy).session;
   }
 
@@ -53,10 +73,6 @@ export function replayExploration(
         ? {}
         : { sourcePosition: marker.sourcePosition }),
     }).session;
-  }
-
-  if (input.endedAtMs !== undefined) {
-    current = endExploration(current, input.endedAtMs).session;
   }
 
   return current;
