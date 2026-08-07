@@ -8,12 +8,29 @@ import type {
   ReplayExplorationInput,
 } from "@exploration-map/mapping-core";
 
-export const MAPPING_ENGINE_API_VERSION = "4" as const;
+export const MAPPING_ENGINE_API_VERSION = "5" as const;
 
 export interface CreatePersonalMapCommand {
   readonly name: string;
   readonly createdAtMs: number;
   readonly requestedId?: string;
+}
+
+/**
+ * Creates a PersonalMap and its first ExplorationSession as one application
+ * use case. The two canonical records are written in one transaction, and the
+ * whole provisional aggregate is conditionally compensated if provider start
+ * fails before any evidence exists.
+ */
+export interface CreatePersonalMapWithFirstExplorationCommand {
+  readonly personalMapName: string;
+  readonly explorationName: string;
+  readonly createdAtMs: number;
+  readonly startedAtMs: number;
+  readonly trackingProviderId: string;
+  readonly localFrameLabel?: string;
+  readonly requestedPersonalMapId?: string;
+  readonly requestedExplorationId?: string;
 }
 
 export interface StartExplorationCommand {
@@ -96,6 +113,13 @@ export interface MappingEngine {
     command: CreatePersonalMapCommand,
   ): Promise<{ readonly personalMapId: string }>;
 
+  createPersonalMapWithFirstExploration(
+    command: CreatePersonalMapWithFirstExplorationCommand,
+  ): Promise<{
+    readonly personalMapId: string;
+    readonly explorationId: string;
+  }>;
+
   startExploration(
     command: StartExplorationCommand,
   ): Promise<{ readonly explorationId: string }>;
@@ -154,6 +178,18 @@ export interface MappingRepositoryWriter {
   createExploration(record: StoredExploration): Promise<void>;
 
   deleteExploration(explorationId: string): Promise<void>;
+
+  /**
+   * Deletes a newly-created PersonalMap only when the named exploration is its
+   * sole child, is still recording, and has no position samples or markers.
+   *
+   * This is automatic compensation, not user-initiated deletion. Returning
+   * false means evidence or another session exists and must be preserved.
+   */
+  deletePersonalMapIfOnlyEmptyExploration(
+    personalMapId: string,
+    explorationId: string,
+  ): Promise<boolean>;
 
   appendPositionSamples(
     explorationId: string,
