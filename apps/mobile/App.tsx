@@ -2,12 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   Linking,
   SafeAreaView,
   StatusBar,
   StyleSheet,
   Text,
   View,
+  type AppStateStatus,
 } from "react-native";
 import type {
   MarkerCategory,
@@ -16,6 +18,12 @@ import type {
 import type { PersonalMapListItem } from "@exploration-map/mapping-engine";
 
 import {
+  loadPersonalMapTrackingDiagnostics,
+  recordActiveTrackingDiagnosticBestEffort,
+  recordTrackingDiagnosticBestEffort,
+  type ExplorationTrackingReportItem,
+} from "./src/diagnostics/trackingDiagnostics";
+import {
   addConfirmedMarker,
   continuePersonalMapExploration,
   createDemoPersonalMap,
@@ -23,6 +31,7 @@ import {
   getMobileTrackingStatus,
   listMobilePersonalMaps,
   loadMobilePersonalMap,
+  recordMarkerInputTiming,
   startNewPersonalMapExploration,
   stopOrphanedMobileTracking,
   type StartedExploration,
@@ -87,6 +96,9 @@ export default function App() {
     useState<PersonalMapListItem | null>(null);
   const [reviewSnapshot, setReviewSnapshot] =
     useState<PersonalMapSnapshot | null>(null);
+  const [reviewDiagnostics, setReviewDiagnostics] = useState<
+    readonly ExplorationTrackingReportItem[]
+  >([]);
 
   const refreshHome = useCallback(async () => {
     const items = await listMobilePersonalMaps();
@@ -110,9 +122,12 @@ export default function App() {
     setBusy(true);
     setErrorMessage(null);
     try {
-      const [snapshot, items] = await Promise.all([
+      const [snapshot, items, diagnostics] = await Promise.all([
         loadMobilePersonalMap(personalMapId),
         listMobilePersonalMaps(),
+        __DEV__
+          ? loadPersonalMapTrackingDiagnostics(personalMapId)
+          : Promise.resolve([] as readonly ExplorationTrackingReportItem[]),
       ]);
       const personalMap = items.find((item) => item.id === personalMapId);
       if (snapshot === null || personalMap === undefined) {
@@ -121,6 +136,7 @@ export default function App() {
       setPersonalMaps(items);
       setReviewPersonalMap(personalMap);
       setReviewSnapshot(snapshot);
+      setReviewDiagnostics(diagnostics);
       setScreen({ kind: "review", personalMapId });
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : String(error));
@@ -134,14 +150,14 @@ export default function App() {
     void (async () => {
       try {
         await initializeDatabase();
-        const [items, active, context] = await Promise.all([
+        const [items, active, context, runtime] = await Promise.all([
           listMobilePersonalMaps(),
           getActiveExploration(),
           getActiveTrackingContext(),
+          getMobileTrackingStatus(),
         ]);
 
         if (active === null || context === null) {
-          const runtime = await getMobileTrackingStatus();
           if (runtime.running || runtime.explorationId !== null) {
             await stopOrphanedMobileTracking();
           }
@@ -157,6 +173,15 @@ export default function App() {
           context.explorationId === active.id &&
           context.personalMapId === active.personalMapId
         ) {
+          await recordTrackingDiagnosticBestEffort({
+            context,
+            kind: "app.session.recovered",
+            payload: {
+              runtimeRunning: runtime.running,
+              taskManagerAvailable: runtime.taskManagerAvailable,
+              mode: runtime.mode,
+            },
+          });
           setActiveExploration(active);
           setScreen({ kind: "recording", ...context });
           await refreshRecording(active.id);
@@ -175,6 +200,21 @@ export default function App() {
       mounted = false;
     };
   }, [refreshRecording]);
+
+  useEffect(() => {
+    let previousState: AppStateStatus = AppState.currentState;
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      void recordActiveTrackingDiagnosticBestEffort({
+        kind: "app.state.changed",
+        payload: {
+          previousState,
+          state: nextState,
+        },
+      });
+      previousState = nextState;
+    });
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     if (screen.kind !== "recording") {
@@ -291,6 +331,14 @@ export default function App() {
     await refreshRecording(context.explorationId);
   }
 
+  async function handleMarkerInputMetric(
+    context: StartedExploration,
+    outcome: "completed" | "cancelled",
+    durationMs: number,
+  ) {
+    await recordMarkerInputTiming(context, outcome, durationMs);
+  }
+
   async function handleOpenPersonalMap(personalMapId: string) {
     setErrorMessage(null);
     try {
@@ -327,6 +375,7 @@ export default function App() {
   async function returnHome() {
     setReviewPersonalMap(null);
     setReviewSnapshot(null);
+    setReviewDiagnostics([]);
     await refreshHome();
     setScreen({ kind: "home" });
   }
@@ -417,6 +466,9 @@ export default function App() {
           runtimeRunning={runtimeRunning}
           stopping={busy}
           onAddMarker={(input) => handleAddMarker(screen, input)}
+          onMarkerInputMetric={(outcome, durationMs) =>
+            handleMarkerInputMetric(screen, outcome, durationMs)
+          }
           onEnd={() => void handleEndExploration(screen)}
         />
       ) : null}
@@ -427,6 +479,7 @@ export default function App() {
         <ReviewScreen
           personalMap={reviewPersonalMap}
           snapshot={reviewSnapshot}
+          diagnostics={reviewDiagnostics}
           onContinue={continueReview}
           onHome={() => void returnHome()}
         />
