@@ -1,6 +1,10 @@
 name: renderer-lockfile
 
 on:
+  pull_request:
+    paths:
+      - "apps/mobile/package.json"
+      - ".github/workflows/renderer-lockfile.yml"
   push:
     branches: [agent/svg-renderer]
     paths:
