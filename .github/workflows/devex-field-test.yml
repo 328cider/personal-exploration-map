@@ -13,6 +13,7 @@ on:
       - "scripts/check-tracking-stop-policy.mjs"
       - "scripts/android-emulator-smoke.py"
       - "scripts/android-emulator-interaction-smoke.py"
+      - "scripts/run-android-emulator-e2e.sh"
       - "apps/mobile/**"
       - "packages/**"
       - "package.json"
@@ -23,7 +24,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: devex-field-test-v3-${{ github.ref }}
+  group: devex-field-test-v4-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -154,12 +155,7 @@ jobs:
             -no-window -gpu swiftshader_indirect -no-snapshot -noaudio
             -no-boot-anim -camera-back none -camera-front none
           disable-animations: true
-          script: |
-            python3 scripts/android-emulator-smoke.py \
-              --apk "$APK_PATH" \
-              --artifacts "$EVIDENCE_DIR"
-            python3 scripts/android-emulator-interaction-smoke.py \
-              --artifacts "$EVIDENCE_DIR"
+          script: bash scripts/run-android-emulator-e2e.sh "$APK_PATH" "$EVIDENCE_DIR"
       - name: Upload emulator screenshots, UI hierarchy and logs
         if: always()
         uses: actions/upload-artifact@v4
