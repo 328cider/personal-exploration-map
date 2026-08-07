@@ -1,4 +1,6 @@
-import type { TrackingMode } from "../storage/explorationRepository";
+import type { TrackingProviderPort } from "@exploration-map/mapping-engine";
+
+export type MobileTrackingMode = "background" | "foreground";
 
 export interface TrackingPermissionState {
   readonly foregroundGranted: boolean;
@@ -7,16 +9,16 @@ export interface TrackingPermissionState {
   readonly canAskBackgroundAgain: boolean;
 }
 
-export interface TrackingRuntimeStatus {
-  readonly mode: TrackingMode | null;
+export interface MobileTrackingRuntimeStatus {
+  readonly mode: MobileTrackingMode | null;
   readonly running: boolean;
   readonly taskManagerAvailable: boolean;
+  readonly providerId: string | null;
+  readonly explorationId: string | null;
 }
 
-export interface TrackingProvider {
-  readonly id: string;
-  readonly coordinateKind: "geographic" | "local";
-  start(mode: Exclude<TrackingMode, "demo">): Promise<void>;
-  stop(): Promise<void>;
-  status(): Promise<TrackingRuntimeStatus>;
+export interface GnssTrackingProviderSet {
+  readonly providers: readonly TrackingProviderPort[];
+  status(): Promise<MobileTrackingRuntimeStatus>;
+  stopOrphanedTracking(): Promise<void>;
 }
