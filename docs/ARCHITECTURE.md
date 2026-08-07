@@ -4,7 +4,7 @@
 
 位置推定、地図の真実、application transaction、保存、表示、ゲーム体験を分離する。最も不確実な屋内PDRが失敗した場合や、将来ゲームアプリを増やした場合でも、PersonalMapの正本とraw evidenceを作り直さない構造にする。
 
-機能配置の詳細な判断基準は [`FEATURE_PLACEMENT.md`](FEATURE_PLACEMENT.md)、恒久判断は [ADR 0006](adr/0006-headless-mapping-engine-and-experience-boundary.md) を参照する。
+機能配置の詳細な判断基準は [`FEATURE_PLACEMENT.md`](FEATURE_PLACEMENT.md)、恒久判断は [ADR 0006](adr/0006-headless-mapping-engine-and-experience-boundary.md) と [ADR 0007](adr/0007-control-canonical-map-write-authority.md) を参照する。
 
 ## Layer model
 
@@ -39,7 +39,7 @@ flowchart LR
   subgraph Adapters[Platform adapters]
     GNSS[Expo GNSS]
     PDR[Pocket PDR experimental]
-    SQLite[(SQLite)]
+    SQLite[(SQLite adapter)]
     Files[GPX / GeoJSON files]
   end
 
@@ -106,7 +106,7 @@ apps ───────────────▶ mapping-engine ───�
 
 ### `packages/mapping-engine`
 
-explorer appとgame appが呼ぶheadless application facade。地図への唯一の書き込み窓口とする。
+explorer appとgame appが呼ぶheadless application facade。canonicalな個人地図への明示的な書き込み境界とする。
 
 ```ts
 interface MappingEngine {
@@ -121,14 +121,32 @@ interface MappingEngine {
 }
 ```
 
-engineはmutableなExplorationSessionやcore mutation関数をappへ渡さない。commandごとにinvariant、persistence、event publicationを一貫させる。
+engineはmutableなExplorationSessionやcore mutation関数をappへ渡さない。commandごとにinvariant、persistence、tracking、event publicationを一貫させる。
 
-現在はpublic contractとportを定義し、Issue #1のSQLite・UI移行で実装を接続する。
+実装上の規則:
 
-### Platform adapters
+- canonical repository transactionが完了してからMappingEventを公開する
+- UI / game listenerの失敗でcommit済みwriteを巻き戻さない
+- duplicate platform callbackはrepositoryでidempotentにする
+- tracking provider開始失敗時は作成途中のsession recordを補償削除する
+- 終了後に遅延到着したcallbackはrawに保持してもderived trackへ戻さない
+
+### `packages/sqlite-adapter`
+
+`mapping-engine`のrepository portを実装するlocal-first adapter。
+
+- Expo SQLiteと構造互換の最小async interfaceを使う
+- transaction callbackへ渡されたexclusive transaction objectだけでwriteを実行する
+- raw observationsと確認済みmarkersをcanonical recordとして保存する
+- PersonalMap snapshotは毎回replay inputから再生成する
+- DB v1からv2へ、既存exploration、raw samples、markers、app stateを保持して移行する
+- 旧explorationは同じIDのPersonalMapへ昇格し、将来のsessionを追加できるようにする
+
+Nodeの実SQLiteを使い、migration、foreign-key integrity、rollback、再起動後のreplay、複数sessionのsegment保持を検証する。Expo固有のdatabase wrapperは`apps/mobile`に置き、generic adapterへExpoを依存させない。
+
+### Other platform adapters
 
 - Expo Location / TaskManager
-- SQLite repository
 - future PDR sensor collector
 - manual / replay provider
 - GPX / GeoJSON writer
@@ -181,8 +199,9 @@ experienceにはmap command channelを与えない。ゲーム起点の地図修
 - start / pocket / quick marker / end UX
 - mapping-engineのcommand/query呼び出し
 - rendererと任意experienceのcomposition
+- Expo SQLite / Location / TaskManager adapterのcomposition root
 
-既存コードはcoreとSQLiteを直接組み合わせているため、Issue #1の永続化変更と同時にengine facadeへ段階的に移行する。
+DB migrationとcanonical SQLite repositoryはengine境界へ接続済みである。既存画面フローの直接repository呼び出しは互換期間だけ残し、Issue #1の後続でengine commandへ置き換える。
 
 将来のgame appはまず同一monorepoの`apps/game-*`として追加する。二つ目の実利用者ができるまで、remote plugin loaderやnpm公開を先行実装しない。
 
@@ -249,6 +268,27 @@ OS callback
 ```
 
 SQLiteはraw recordsを正本として保存する。derived snapshotをcacheする場合も再生成可能にする。
+
+## Database evolution
+
+```text
+v1
+Exploration = one displayed map
+
+v2
+PersonalMap 1 ── * ExplorationSession
+                   ├─ raw position samples
+                   └─ confirmed markers
+```
+
+v1からの移行では、各旧explorationを同IDのPersonalMapへ昇格する。これにより既存参照とapp stateを保ったまま、次回以降の探索sessionを同じPersonalMapへ追加できる。
+
+schema migrationは次を満たすまで完了とみなさない。
+
+- `PRAGMA user_version`が期待版になる
+- `PRAGMA foreign_key_check`が空になる
+- raw samplesとmarkersの件数が保持される
+- PersonalMap削除時にsession、sample、markerがcascadeする
 
 ## Game-initiated corrections
 
