@@ -1,8 +1,11 @@
-import { StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import { Share, StyleSheet, Text, View } from "react-native";
+import { formatTrackingDiagnosticsSummary } from "@exploration-map/mapping-engine";
 
 import type { ExplorationTrackingReportItem } from "../diagnostics/trackingDiagnostics";
 import { palette, spacing } from "../theme";
 import { formatDateTime, formatDuration } from "../utils/format";
+import { AppButton } from "./AppButton";
 
 interface TrackingDiagnosticsPanelProps {
   readonly reports: readonly ExplorationTrackingReportItem[];
@@ -39,6 +42,21 @@ function transitionLabel(kind: string): string {
   }
 }
 
+function shareText(
+  reports: readonly ExplorationTrackingReportItem[],
+): string {
+  const sections = reports.map(
+    ({ report }, index) =>
+      `[exploration_${index + 1}]\n${formatTrackingDiagnosticsSummary(report)}`,
+  );
+  return [
+    "Personal Exploration Map / development diagnostics",
+    "privacy=aggregate_only_no_coordinates_no_map_names_no_ids_no_absolute_times",
+    `exploration_count=${reports.length}`,
+    ...sections,
+  ].join("\n\n");
+}
+
 function DiagnosticValue({
   label,
   value,
@@ -57,8 +75,28 @@ function DiagnosticValue({
 export function TrackingDiagnosticsPanel({
   reports,
 }: TrackingDiagnosticsPanelProps) {
+  const [sharing, setSharing] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
+
   if (reports.length === 0) {
     return null;
+  }
+
+  async function handleShare(): Promise<void> {
+    setSharing(true);
+    setShareError(null);
+    try {
+      await Share.share({
+        title: "受動記録の座標なし診断集計",
+        message: shareText(reports),
+      });
+    } catch (error) {
+      setShareError(
+        error instanceof Error ? error.message : "共有画面を開けませんでした。",
+      );
+    } finally {
+      setSharing(false);
+    }
   }
 
   return (
@@ -68,6 +106,20 @@ export function TrackingDiagnosticsPanel({
       <Text style={styles.description}>
         診断イベントは地図の正本ではありません。採否・距離・経路はraw位置情報から再計算しています。
       </Text>
+      <AppButton
+        loading={sharing}
+        onPress={() => void handleShare()}
+        variant="secondary"
+        style={styles.shareButton}
+      >
+        座標なし集計を共有
+      </AppButton>
+      <Text style={styles.shareNote}>
+        緯度経度、ローカル座標、地図名、ID、marker文、地図画像、絶対時刻は含みません。共有先と内容はOSの共有画面で確認できます。
+      </Text>
+      {shareError === null ? null : (
+        <Text style={styles.shareError}>{shareError}</Text>
+      )}
 
       {reports.map(({ explorationId, name, providerId, report }, index) => (
         <View key={explorationId} style={styles.card}>
@@ -192,6 +244,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     marginTop: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  shareButton: {
+    marginBottom: spacing.sm,
+  },
+  shareNote: {
+    color: palette.mutedInk,
+    fontSize: 10,
+    lineHeight: 16,
+    marginBottom: spacing.md,
+  },
+  shareError: {
+    color: palette.danger,
+    fontSize: 11,
+    lineHeight: 17,
     marginBottom: spacing.md,
   },
   card: {
