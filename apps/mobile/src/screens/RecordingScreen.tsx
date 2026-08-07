@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -44,7 +44,7 @@ export function RecordingScreen({
 }: RecordingScreenProps) {
   const [now, setNow] = useState(Date.now());
   const [markerVisible, setMarkerVisible] = useState(false);
-  const [markerOpenedAtMs, setMarkerOpenedAtMs] = useState<number | null>(null);
+  const markerOpenedAtMs = useRef<number | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -55,19 +55,20 @@ export function RecordingScreen({
   const accuracy = liveStats.latestAccuracyMeters;
 
   function openMarkerInput() {
-    setMarkerOpenedAtMs(Date.now());
+    markerOpenedAtMs.current = Date.now();
     setMarkerVisible(true);
   }
 
   function closeMarkerInput() {
-    if (markerOpenedAtMs !== null) {
+    const openedAtMs = markerOpenedAtMs.current;
+    markerOpenedAtMs.current = null;
+    setMarkerVisible(false);
+    if (openedAtMs !== null) {
       void onMarkerInputMetric(
         "cancelled",
-        Math.max(0, Date.now() - markerOpenedAtMs),
+        Math.max(0, Date.now() - openedAtMs),
       );
     }
-    setMarkerOpenedAtMs(null);
-    setMarkerVisible(false);
   }
 
   async function saveMarker(input: {
@@ -75,12 +76,13 @@ export function RecordingScreen({
     readonly label: string;
     readonly note?: string;
   }) {
+    const openedAtMs = markerOpenedAtMs.current;
     const durationMs =
-      markerOpenedAtMs === null
-        ? 0
-        : Math.max(0, Date.now() - markerOpenedAtMs);
+      openedAtMs === null ? 0 : Math.max(0, Date.now() - openedAtMs);
     await onAddMarker(input);
-    setMarkerOpenedAtMs(null);
+    // MarkerModal calls onClose after onSave resolves. Clear synchronously so
+    // that close is not also recorded as a cancellation.
+    markerOpenedAtMs.current = null;
     void onMarkerInputMetric("completed", durationMs);
   }
 
