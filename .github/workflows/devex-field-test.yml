@@ -14,6 +14,7 @@ on:
       - "scripts/android-emulator-smoke.py"
       - "scripts/android-emulator-coverage-modes.py"
       - "scripts/android-emulator-interaction-smoke.py"
+      - "scripts/android-emulator-interaction-runner.py"
       - "scripts/run-android-emulator-e2e.sh"
       - "apps/mobile/**"
       - "packages/**"
@@ -25,7 +26,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: devex-field-test-v6-${{ github.ref }}
+  group: devex-field-test-v7-${{ github.ref }}
   cancel-in-progress: true
 
 env:
