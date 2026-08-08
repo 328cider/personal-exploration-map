@@ -28,7 +28,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: devex-field-test-v10-${{ github.ref }}
+  group: devex-field-test-v11-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -123,7 +123,7 @@ jobs:
     name: Android emulator user-flow and USB extraction gate
     needs: field-test-apk
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
     env:
       APK_PATH: artifacts/field-test/personal-exploration-map-field-test.apk
       EVIDENCE_DIR: artifacts/emulator-e2e
@@ -157,7 +157,7 @@ jobs:
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Run black-box lifecycle, diagnostics, notification and marker checks on Android 15
+      - name: Run black-box lifecycle and the real USB collection script on Android 15
         uses: ReactiveCircus/android-emulator-runner@v2.37.0
         with:
           api-level: 35
@@ -175,20 +175,36 @@ jobs:
             set -eu
             bash scripts/run-android-emulator-e2e.sh "$APK_PATH" "$EVIDENCE_DIR"
 
-            adb shell am force-stop "$FIELD_TEST_PACKAGE"
-            adb shell run-as "$FIELD_TEST_PACKAGE" id > "$EVIDENCE_DIR/run-as.txt"
-            grep -q "uid=" "$EVIDENCE_DIR/run-as.txt"
+            pwsh -NoProfile -File scripts/pull-field-test-bundle.ps1 \
+              -OutputRoot "$EVIDENCE_DIR/device-bundles" \
+              -PackageName "$FIELD_TEST_PACKAGE"
 
-            adb exec-out run-as "$FIELD_TEST_PACKAGE" tar -cf - databases > "$EVIDENCE_DIR/app-databases.tar"
+            bundle_dir="$(find "$EVIDENCE_DIR/device-bundles" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+            test -n "$bundle_dir"
+            test -s "$bundle_dir/app/app-private-data.tar"
+            test -s "$bundle_dir/coordinate-free-diagnostics.txt"
+            test -s "$bundle_dir/manifest.json"
+            test -s "$bundle_dir/SHA256SUMS.txt"
+            test -f "$bundle_dir.zip"
+
+            grep -q "device_model=" "$bundle_dir/coordinate-free-diagnostics.txt"
+            grep -q "session_started_at_iso_utc=" "$bundle_dir/coordinate-free-diagnostics.txt"
+            grep -q "start_battery_percent=" "$bundle_dir/coordinate-free-diagnostics.txt"
+            if grep -Eiq "latitude|longitude" "$bundle_dir/coordinate-free-diagnostics.txt"; then
+              echo "Coordinate-free summary unexpectedly contains coordinate field names." >&2
+              exit 1
+            fi
+
             mkdir -p "$EVIDENCE_DIR/extracted-app-data"
-            tar -xf "$EVIDENCE_DIR/app-databases.tar" -C "$EVIDENCE_DIR/extracted-app-data"
+            tar -xf "$bundle_dir/app/app-private-data.tar" -C "$EVIDENCE_DIR/extracted-app-data"
 
             python3 - <<'PY'
             import json
             import pathlib
             import sqlite3
 
-            root = pathlib.Path("artifacts/emulator-e2e/extracted-app-data")
+            evidence = pathlib.Path("artifacts/emulator-e2e")
+            root = evidence / "extracted-app-data"
             database = next(root.rglob("personal-exploration-map.db"))
             connection = sqlite3.connect(database)
             rows = connection.execute(
@@ -214,12 +230,12 @@ jobs:
             assert payloads, "environment payloads are missing"
             assert required.issubset(payloads[0]), sorted(payloads[0])
             assert payloads[0]["isDebuggable"] is True, payloads[0]
-            pathlib.Path("artifacts/emulator-e2e/environment-events.json").write_text(
+            (evidence / "environment-events.json").write_text(
                 json.dumps(payloads, indent=2, ensure_ascii=False) + "\n",
                 encoding="utf-8",
             )
             PY
-      - name: Upload emulator screenshots, UI hierarchy and logs
+      - name: Upload emulator screenshots, UI hierarchy and USB evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
