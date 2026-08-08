@@ -13,11 +13,12 @@ import {
 } from "../apps/mobile/src/components/exploredSpaceGeometry.ts";
 
 const PANEL_WIDTH = 390;
-const PANEL_HEIGHT = 292;
+const PANEL_CARD_HEIGHT = 276;
+const ROW_HEIGHT = 330;
 const MAP_WIDTH = 350;
 const MAP_HEIGHT = 214;
 const OUTER_PADDING = 24;
-const MODES: readonly MapDisplayMode[] = ["corridor", "cells", "track"];
+const MODES: readonly MapDisplayMode[] = ["uncertainty", "cells", "track"];
 
 interface Fixture {
   readonly id: string;
@@ -32,10 +33,11 @@ interface FixtureModeResult {
   readonly mode: MapDisplayMode;
   readonly pointCount: number;
   readonly renderedPointCount: number;
-  readonly corridors: number;
+  readonly uncertaintyBands: number;
   readonly cells: number;
   readonly cellSizeMeters: number | null;
-  readonly maximumCellVisits: number;
+  readonly averageCellConfidence: number;
+  readonly maximumSupportingSessions: number;
 }
 
 function point(
@@ -126,7 +128,7 @@ function outAndBackFixture(): Fixture {
   return {
     id: "out-and-back",
     title: "Out and back",
-    question: "Does overlap read as revisiting rather than a wider road?",
+    question: "Does overlap read as one session rather than many visits?",
     segments: [{ id: "out-and-back-session", points: [...outbound, ...inbound] }],
   };
 }
@@ -144,7 +146,7 @@ function plazaSweepFixture(): Fixture {
   return {
     id: "plaza-sweep",
     title: "Open-area sweep",
-    question: "Does walking around a space become area rather than only lines?",
+    question: "Do nearby traversals accumulate without inventing a polygon?",
     segments: [
       {
         id: "plaza-session",
@@ -158,7 +160,7 @@ function sparseMixedAccuracyFixture(): Fixture {
   return {
     id: "sparse-mixed-accuracy",
     title: "Sparse / mixed accuracy",
-    question: "Is uncertainty visible without implying a confirmed boundary?",
+    question: "Does uncertainty widen without painting more passage cells?",
     segments: [
       {
         id: "sparse-session",
@@ -226,7 +228,7 @@ function overlappingSessionsFixture(): Fixture {
   return {
     id: "overlapping-sessions",
     title: "Revisited path",
-    question: "Does a second observation strengthen evidence without being required?",
+    question: "Does a later session strengthen evidence without being required?",
     segments: [
       { id: "visit-one", points: first },
       { id: "visit-two", points: second },
@@ -265,6 +267,13 @@ function boundsFor(segments: readonly ExploredSpaceSegment[]): ExploredSpaceBoun
   );
 }
 
+function averageCellConfidence(geometry: ExploredSpaceGeometry): number {
+  return (
+    geometry.cells.reduce((sum, cell) => sum + cell.confidence, 0) /
+    Math.max(1, geometry.cells.length)
+  );
+}
+
 function escapeXml(value: string): string {
   return value
     .replaceAll("&", "&amp;")
@@ -274,8 +283,12 @@ function escapeXml(value: string): string {
     .replaceAll("'", "&apos;");
 }
 
-function polylinePoints(points: readonly { readonly x: number; readonly y: number }[]): string {
-  return points.map((item) => `${item.x.toFixed(2)},${item.y.toFixed(2)}`).join(" ");
+function polylinePoints(
+  points: readonly { readonly x: number; readonly y: number }[],
+): string {
+  return points
+    .map((item) => `${item.x.toFixed(2)},${item.y.toFixed(2)}`)
+    .join(" ");
 }
 
 function renderGrid(): string {
@@ -291,13 +304,13 @@ function renderGrid(): string {
   return lines.join("");
 }
 
-function renderCorridors(geometry: ExploredSpaceGeometry): string {
-  return geometry.corridors
-    .map((corridor) => {
-      const centerX = corridor.left + corridor.length / 2;
-      const centerY = corridor.top + corridor.width / 2;
-      const degrees = (corridor.angleRadians * 180) / Math.PI;
-      return `<rect x="${corridor.left.toFixed(2)}" y="${corridor.top.toFixed(2)}" width="${corridor.length.toFixed(2)}" height="${corridor.width.toFixed(2)}" rx="${(corridor.width / 2).toFixed(2)}" fill="#206a4d" opacity="${corridor.opacity.toFixed(3)}" transform="rotate(${degrees.toFixed(3)} ${centerX.toFixed(2)} ${centerY.toFixed(2)})"/>`;
+function renderUncertaintyBands(geometry: ExploredSpaceGeometry): string {
+  return geometry.uncertaintyBands
+    .map((band) => {
+      const centerX = band.left + band.length / 2;
+      const centerY = band.top + band.width / 2;
+      const degrees = (band.angleRadians * 180) / Math.PI;
+      return `<rect x="${band.left.toFixed(2)}" y="${band.top.toFixed(2)}" width="${band.length.toFixed(2)}" height="${band.width.toFixed(2)}" rx="${(band.width / 2).toFixed(2)}" fill="#206a4d" opacity="${band.opacity.toFixed(3)}" transform="rotate(${degrees.toFixed(3)} ${centerX.toFixed(2)} ${centerY.toFixed(2)})"/>`;
     })
     .join("");
 }
@@ -341,33 +354,37 @@ function renderPanel(
     padding: 24,
   });
   const offsetX = OUTER_PADDING + column * PANEL_WIDTH;
-  const offsetY = 94 + row * PANEL_HEIGHT;
+  const offsetY = 116 + row * ROW_HEIGHT;
   const renderedPointCount = geometry.segments.reduce(
     (sum, segment) => sum + segment.points.length,
     0,
   );
-  const maximumCellVisits = geometry.cells.reduce(
-    (maximum, cell) => Math.max(maximum, cell.visits),
+  const maximumSupportingSessions = geometry.cells.reduce(
+    (maximum, cell) => Math.max(maximum, cell.supportingSessionCount),
     0,
   );
 
   const modeLabel =
-    mode === "corridor" ? "Explored corridor" : mode === "cells" ? "Coverage cells" : "Thin track";
+    mode === "uncertainty"
+      ? "Location uncertainty"
+      : mode === "cells"
+        ? "Conservative passage cells"
+        : "Point-estimate track";
   const layer =
-    mode === "corridor"
-      ? renderCorridors(geometry)
+    mode === "uncertainty"
+      ? renderUncertaintyBands(geometry)
       : mode === "cells"
         ? renderCells(geometry)
         : "";
   const metric =
-    mode === "corridor"
-      ? `${geometry.corridors.length} corridor primitives`
+    mode === "uncertainty"
+      ? `${geometry.uncertaintyBands.length} uncertainty bands`
       : mode === "cells"
-        ? `${geometry.cells.length} cells · ${Math.round(geometry.cellSizeMeters ?? 0)}m`
+        ? `${geometry.cells.length} cells · ${Math.round(geometry.cellSizeMeters ?? 0)}m · confidence ${averageCellConfidence(geometry).toFixed(2)}`
         : `${renderedPointCount} rendered points`;
 
   const svg = `<g transform="translate(${offsetX} ${offsetY})">
-    <rect x="0" y="0" width="${PANEL_WIDTH - 18}" height="${PANEL_HEIGHT - 16}" rx="18" fill="#ffffff" stroke="#dce2dd"/>
+    <rect x="0" y="0" width="${PANEL_WIDTH - 18}" height="${PANEL_CARD_HEIGHT}" rx="18" fill="#ffffff" stroke="#dce2dd"/>
     <text x="16" y="25" font-family="sans-serif" font-size="14" font-weight="700" fill="#17201d">${escapeXml(modeLabel)}</text>
     <text x="16" y="45" font-family="sans-serif" font-size="11" fill="#5b6963">${escapeXml(metric)}</text>
     <g transform="translate(11 54)">
@@ -386,10 +403,11 @@ function renderPanel(
       mode,
       pointCount: geometry.pointCount,
       renderedPointCount,
-      corridors: geometry.corridors.length,
+      uncertaintyBands: geometry.uncertaintyBands.length,
       cells: geometry.cells.length,
       cellSizeMeters: geometry.cellSizeMeters,
-      maximumCellVisits,
+      averageCellConfidence: Number(averageCellConfidence(geometry).toFixed(4)),
+      maximumSupportingSessions,
     },
   };
 }
@@ -404,25 +422,37 @@ function validateMatrix(results: readonly FixtureModeResult[]): void {
     }
   }
 
-  const separated = FIXTURES.find((fixture) => fixture.id === "separated-sessions")!;
-  const expectedCorridors = separated.segments.reduce(
+  const separated = FIXTURES.find(
+    (fixture) => fixture.id === "separated-sessions",
+  )!;
+  const expectedBands = separated.segments.reduce(
     (sum, segment) => sum + Math.max(0, segment.points.length - 1),
     0,
   );
   const separatedResult = results.find(
-    (result) => result.fixtureId === separated.id && result.mode === "corridor",
+    (result) => result.fixtureId === separated.id && result.mode === "uncertainty",
   );
-  if (separatedResult?.corridors !== expectedCorridors) {
+  if (separatedResult?.uncertaintyBands !== expectedBands) {
     throw new Error(
-      `Separated sessions should have ${expectedCorridors} corridors without a bridge; got ${separatedResult?.corridors}.`,
+      `Separated sessions should have ${expectedBands} uncertainty bands without a bridge; got ${separatedResult?.uncertaintyBands}.`,
+    );
+  }
+
+  const outAndBack = results.find(
+    (result) => result.fixtureId === "out-and-back" && result.mode === "cells",
+  );
+  if (outAndBack?.maximumSupportingSessions !== 1) {
+    throw new Error(
+      "Dense or repeated sampling inside one session must not count as independent revisits.",
     );
   }
 
   const revisit = results.find(
-    (result) => result.fixtureId === "overlapping-sessions" && result.mode === "cells",
+    (result) =>
+      result.fixtureId === "overlapping-sessions" && result.mode === "cells",
   );
-  if (revisit === undefined || revisit.maximumCellVisits < 2) {
-    throw new Error("Revisited observations did not strengthen any coverage cell.");
+  if (revisit === undefined || revisit.maximumSupportingSessions < 2) {
+    throw new Error("A later ExplorationSession did not strengthen any cell.");
   }
 
   const sparseFixture = FIXTURES.find(
@@ -435,11 +465,44 @@ function validateMatrix(results: readonly FixtureModeResult[]): void {
     height: MAP_HEIGHT,
     padding: 24,
   });
-  const corridorWidths = new Set(
-    sparseGeometry.corridors.map((corridor) => corridor.width.toFixed(1)),
+  const uncertaintyWidths = new Set(
+    sparseGeometry.uncertaintyBands.map((band) => band.width.toFixed(1)),
   );
-  if (corridorWidths.size < 2) {
-    throw new Error("Mixed accuracy did not produce visibly different corridor widths.");
+  if (uncertaintyWidths.size < 2) {
+    throw new Error(
+      "Mixed accuracy did not produce visibly different uncertainty widths.",
+    );
+  }
+
+  const allAccurateSegments = sparseFixture.segments.map((segment) => ({
+    id: `${segment.id}-all-accurate`,
+    points: segment.points.map((item) => ({
+      ...item,
+      sampleId: `${item.sampleId}-accurate`,
+      horizontalAccuracyMeters: 4,
+    })),
+  }));
+  const accurateGeometry = buildExploredSpaceGeometry({
+    segments: allAccurateSegments,
+    bounds: boundsFor(allAccurateSegments),
+    width: MAP_WIDTH,
+    height: MAP_HEIGHT,
+    padding: 24,
+  });
+  const sparseCellIds = sparseGeometry.cells.map((cell) => cell.id);
+  const accurateCellIds = accurateGeometry.cells.map((cell) => cell.id);
+  if (JSON.stringify(sparseCellIds) !== JSON.stringify(accurateCellIds)) {
+    throw new Error(
+      "Horizontal accuracy changed the conservative coverage footprint.",
+    );
+  }
+  if (
+    averageCellConfidence(sparseGeometry) >=
+    averageCellConfidence(accurateGeometry)
+  ) {
+    throw new Error(
+      "Poor horizontal accuracy did not reduce conservative cell confidence.",
+    );
   }
 }
 
@@ -448,13 +511,13 @@ function renderMatrix(): {
   readonly results: readonly FixtureModeResult[];
 } {
   const width = OUTER_PADDING * 2 + PANEL_WIDTH * MODES.length;
-  const height = 116 + PANEL_HEIGHT * FIXTURES.length;
+  const height = 138 + ROW_HEIGHT * FIXTURES.length;
   const panels: string[] = [];
   const results: FixtureModeResult[] = [];
 
   for (let row = 0; row < FIXTURES.length; row += 1) {
     const fixture = FIXTURES[row]!;
-    const rowY = 94 + row * PANEL_HEIGHT;
+    const rowY = 116 + row * ROW_HEIGHT;
     panels.push(
       `<text x="${OUTER_PADDING}" y="${rowY - 36}" font-family="sans-serif" font-size="18" font-weight="800" fill="#17201d">${escapeXml(fixture.title)}</text>`,
       `<text x="${OUTER_PADDING}" y="${rowY - 16}" font-family="sans-serif" font-size="12" fill="#5b6963">${escapeXml(fixture.question)}</text>`,
@@ -472,7 +535,7 @@ function renderMatrix(): {
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <rect width="100%" height="100%" fill="#f4f5f1"/>
   <text x="${OUTER_PADDING}" y="34" font-family="sans-serif" font-size="24" font-weight="900" fill="#17201d">Explored-space fixture matrix</text>
-  <text x="${OUTER_PADDING}" y="58" font-family="sans-serif" font-size="13" fill="#5b6963">Deterministic renderer evidence — not canonical map truth</text>
+  <text x="${OUTER_PADDING}" y="58" font-family="sans-serif" font-size="13" fill="#5b6963">Uncertainty and passage evidence are separate renderer derivations</text>
   ${panels.join("\n")}
 </svg>
 `;
@@ -480,13 +543,19 @@ function renderMatrix(): {
 }
 
 async function main(): Promise<void> {
-  const outputDirectory = resolve(process.argv[2] ?? "artifacts/explored-space-fixtures");
+  const outputDirectory = resolve(
+    process.argv[2] ?? "artifacts/explored-space-fixtures",
+  );
   await mkdir(outputDirectory, { recursive: true });
   const matrix = renderMatrix();
-  await writeFile(resolve(outputDirectory, "fixture-matrix.svg"), matrix.svg, "utf8");
+  await writeFile(
+    resolve(outputDirectory, "fixture-matrix.svg"),
+    matrix.svg,
+    "utf8",
+  );
   await writeFile(
     resolve(outputDirectory, "fixture-matrix.json"),
-    JSON.stringify(
+    `${JSON.stringify(
       {
         generatedAt: "deterministic",
         fixtureCount: FIXTURES.length,
@@ -495,7 +564,7 @@ async function main(): Promise<void> {
       },
       null,
       2,
-    ) + "\n",
+    )}\n`,
     "utf8",
   );
   console.log(
