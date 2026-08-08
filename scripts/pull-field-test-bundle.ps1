@@ -108,10 +108,12 @@ function Resolve-Adb {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     New-Item -ItemType Directory -Force -Path $toolRoot | Out-Null
     $zipPath = Join-Path $toolRoot "platform-tools-latest-windows.zip"
-    Invoke-WebRequest \
-        -Uri "https://dl.google.com/android/repository/platform-tools-latest-windows.zip" \
-        -OutFile $zipPath \
-        -UseBasicParsing
+    $download = @{
+        Uri = "https://dl.google.com/android/repository/platform-tools-latest-windows.zip"
+        OutFile = $zipPath
+        UseBasicParsing = $true
+    }
+    Invoke-WebRequest @download
     Expand-Archive -Path $zipPath -DestinationPath $toolRoot -Force
     Remove-Item $zipPath -Force
     if (-not (Test-Path $adbPath)) {
@@ -124,17 +126,19 @@ $adb = Resolve-Adb
 $deviceListPath = [System.IO.Path]::GetTempFileName()
 try {
     Start-CapturedProcess -FileName $adb -Arguments @("devices", "-l") -StdoutPath $deviceListPath | Out-Null
-    $deviceLines = Get-Content $deviceListPath | Where-Object {
+    $deviceLines = @(Get-Content $deviceListPath | Where-Object {
         $_ -match '^\S+\s+device(?:\s|$)'
-    }
+    })
 }
 finally {
     Remove-Item $deviceListPath -Force -ErrorAction SilentlyContinue
 }
 
 if ($Serial.Length -gt 0) {
-    $selected = $deviceLines | Where-Object { $_ -match ('^' + [Regex]::Escape($Serial) + '\s') }
-    if ($null -eq $selected) {
+    $selected = @($deviceLines | Where-Object {
+        $_ -match ('^' + [Regex]::Escape($Serial) + '\s')
+    })
+    if ($selected.Count -eq 0) {
         throw "Authorized Android device '$Serial' was not found."
     }
     $deviceSerial = $Serial
@@ -167,14 +171,11 @@ if ((Get-Content $runAsPath -Raw) -notmatch 'uid=') {
 }
 
 $appTarPath = Join-Path $appDirectory "app-private-data.tar"
-Start-CapturedProcess \
-    -FileName $adb \
-    -Arguments ($adbPrefix + @(
-        "exec-out", "run-as", $PackageName,
-        "tar", "-cf", "-", "databases", "shared_prefs", "files", "no_backup"
-    )) \
-    -StdoutPath $appTarPath \
-    -Binary | Out-Null
+$privateDataArguments = $adbPrefix + @(
+    "exec-out", "run-as", $PackageName,
+    "tar", "-cf", "-", "."
+)
+Start-CapturedProcess -FileName $adb -Arguments $privateDataArguments -StdoutPath $appTarPath -Binary | Out-Null
 
 $textCommands = @(
     @{ Name = "adb-version.txt"; Args = @("version") },
@@ -192,11 +193,13 @@ $textCommands = @(
 )
 
 foreach ($command in $textCommands) {
-    Start-CapturedProcess \
-        -FileName $adb \
-        -Arguments $command.Args \
-        -StdoutPath (Join-Path $systemDirectory $command.Name) \
-        -AllowFailure | Out-Null
+    $capture = @{
+        FileName = $adb
+        Arguments = $command.Args
+        StdoutPath = (Join-Path $systemDirectory $command.Name)
+        AllowFailure = $true
+    }
+    Start-CapturedProcess @capture | Out-Null
 }
 
 $manifest = [ordered]@{
@@ -209,12 +212,12 @@ $manifest = [ordered]@{
     autoUpload = $false
     warning = "This bundle contains raw location and app-private data. Keep it local and do not attach it to a public issue."
 }
-Write-Utf8File \
-    (Join-Path $outputDirectory "manifest.json") \
-    ($manifest | ConvertTo-Json -Depth 5)
+$manifestPath = Join-Path $outputDirectory "manifest.json"
+Write-Utf8File $manifestPath ($manifest | ConvertTo-Json -Depth 5)
 
+$resolvedOutput = (Resolve-Path $outputDirectory).Path
 $hashLines = Get-ChildItem -Path $outputDirectory -File -Recurse | Sort-Object FullName | ForEach-Object {
-    $relative = $_.FullName.Substring((Resolve-Path $outputDirectory).Path.Length + 1).Replace("\", "/")
+    $relative = $_.FullName.Substring($resolvedOutput.Length + 1).Replace("\", "/")
     $hash = (Get-FileHash -Algorithm SHA256 -Path $_.FullName).Hash.ToLowerInvariant()
     "$hash  $relative"
 }
