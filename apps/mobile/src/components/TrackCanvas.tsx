@@ -30,8 +30,8 @@ const DISPLAY_MODES: readonly {
   readonly value: MapDisplayMode;
   readonly label: string;
 }[] = [
-  { value: "corridor", label: "探索範囲" },
-  { value: "cells", label: "セル" },
+  { value: "uncertainty", label: "不確実性" },
+  { value: "cells", label: "通過セル" },
   { value: "track", label: "軌跡" },
 ];
 
@@ -72,21 +72,21 @@ function modeDescription(
   cellSizeMeters: number | null,
 ): string {
   switch (mode) {
-    case "corridor":
-      return "面は位置精度から推定した探索範囲です。道路・敷地・部屋の境界ではありません。";
+    case "uncertainty":
+      return "帯は採用済み位置の中心推定がどこにあり得るかを示します。幅が広いほど位置が曖昧で、探索済み面積・道路幅・境界を意味しません。";
     case "cells":
       return cellSizeMeters === null
-        ? "位置情報が集まると、観測範囲を探索セルとして表示します。"
-        : `観測範囲を約${Math.round(cellSizeMeters)}m単位で集約しています。再訪は色の濃さに反映されます。`;
+        ? "位置情報が集まると、中心推定経路の近傍を保守的な通過セルとして表示します。"
+        : `中心推定経路の近傍を約${Math.round(cellSizeMeters)}m単位で保守的にセル化しています。位置精度は色の濃さに反映し、セル面積は広げません。別の探索で再観測されると少し濃くなります。`;
     case "track":
-      return "採用済み位置の中心線です。GPSロガーとの比較用に残しています。";
+      return "採用済み位置の中心推定を結んだ線です。GPSロガーとの比較用に残しています。";
   }
 }
 
 export function TrackCanvas({ height = 360, snapshot }: TrackCanvasProps) {
   const [width, setWidth] = useState(0);
   const [displayMode, setDisplayMode] =
-    useState<MapDisplayMode>("corridor");
+    useState<MapDisplayMode>("uncertainty");
   const sourceSegments = useMemo(() => snapshotSegments(snapshot), [snapshot]);
   const geometry = useMemo(
     () =>
@@ -176,7 +176,7 @@ export function TrackCanvas({ height = 360, snapshot }: TrackCanvasProps) {
                 accessibilityElementsHidden
                 importantForAccessibility="no-hide-descendants"
                 style={[
-                  styles.coverageCell,
+                  styles.passageCell,
                   {
                     left: cell.left,
                     top: cell.top,
@@ -189,22 +189,22 @@ export function TrackCanvas({ height = 360, snapshot }: TrackCanvasProps) {
             ))
           : null}
 
-        {displayMode === "corridor"
-          ? geometry.corridors.map((corridor) => (
+        {displayMode === "uncertainty"
+          ? geometry.uncertaintyBands.map((band) => (
               <View
-                key={`corridor-${corridor.id}`}
+                key={`uncertainty-${band.id}`}
                 accessibilityElementsHidden
                 importantForAccessibility="no-hide-descendants"
                 style={[
-                  styles.corridor,
+                  styles.uncertaintyBand,
                   {
-                    left: corridor.left,
-                    top: corridor.top,
-                    width: corridor.length,
-                    height: corridor.width,
-                    borderRadius: corridor.width / 2,
-                    opacity: corridor.opacity,
-                    transform: [{ rotateZ: `${corridor.angleRadians}rad` }],
+                    left: band.left,
+                    top: band.top,
+                    width: band.length,
+                    height: band.width,
+                    borderRadius: band.width / 2,
+                    opacity: band.opacity,
+                    transform: [{ rotateZ: `${band.angleRadians}rad` }],
                   },
                 ]}
               />
@@ -311,12 +311,12 @@ export function TrackCanvas({ height = 360, snapshot }: TrackCanvasProps) {
         </View>
       </View>
 
-      <View accessibilityLabel="推定探索範囲の説明" style={styles.legend}>
+      <View accessibilityLabel="地図表示の説明" style={styles.legend}>
         <Text style={styles.legendTitle}>
-          {displayMode === "corridor"
-            ? "推定探索範囲"
+          {displayMode === "uncertainty"
+            ? "位置の不確実性"
             : displayMode === "cells"
-              ? `探索セル ${geometry.cells.length}個`
+              ? `推定通過セル ${geometry.cells.length}個`
               : "採用済み軌跡"}
         </Text>
         <Text style={styles.legendBody}>
@@ -386,11 +386,11 @@ const styles = StyleSheet.create({
     backgroundColor: palette.border,
     opacity: 0.55,
   },
-  corridor: {
+  uncertaintyBand: {
     position: "absolute",
     backgroundColor: palette.primary,
   },
-  coverageCell: {
+  passageCell: {
     position: "absolute",
     backgroundColor: palette.primary,
     borderWidth: StyleSheet.hairlineWidth,
