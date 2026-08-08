@@ -11,5 +11,5 @@ python3 scripts/android-emulator-smoke.py \
 python3 scripts/android-emulator-coverage-modes.py \
   --artifacts "$EVIDENCE_DIR"
 
-python3 scripts/android-emulator-interaction-smoke.py \
+python3 scripts/android-emulator-interaction-runner.py \
   --artifacts "$EVIDENCE_DIR"
