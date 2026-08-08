@@ -1,0 +1,123 @@
+name: emulator-harness-only
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/emulator-harness-only.yml"
+      - "scripts/android-emulator-smoke.py"
+      - "scripts/android-emulator-coverage-modes.py"
+      - "scripts/android-emulator-interaction-smoke.py"
+      - "scripts/android-emulator-interaction-runner.py"
+      - "scripts/run-android-emulator-e2e.sh"
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: emulator-harness-only-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  APK_PATH: artifacts/field-test/personal-exploration-map-field-test.apk
+  EVIDENCE_DIR: artifacts/emulator-e2e
+
+jobs:
+  emulator-e2e:
+    name: Android emulator harness-only gate
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Find the newest compatible Field-test APK from this PR branch
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_BRANCH: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          selected=""
+          while IFS= read -r run_id; do
+            artifact_count="$(
+              gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/artifacts" \
+                --jq '[.artifacts[] | select(.name == "personal-exploration-map-field-test" and .expired == false)] | length'
+            )"
+            if [ "$artifact_count" -gt 0 ]; then
+              selected="$run_id"
+              break
+            fi
+          done < <(
+            gh api \
+              "repos/$GITHUB_REPOSITORY/actions/workflows/devex-field-test.yml/runs?event=pull_request&branch=$HEAD_BRANCH&status=completed&per_page=30" \
+              --jq '.workflow_runs[].id'
+          )
+
+          if [ -z "$selected" ]; then
+            echo "No non-expired Field-test APK artifact exists for branch $HEAD_BRANCH." >&2
+            echo "Run the full devex-field-test workflow after an app/package change." >&2
+            exit 1
+          fi
+
+          echo "run_id=$selected" >> "$GITHUB_OUTPUT"
+          echo "Reusing Field-test APK from workflow run $selected"
+
+      - name: Download the previously built and signed APK
+        uses: actions/download-artifact@v4
+        with:
+          name: personal-exploration-map-field-test
+          path: artifacts/field-test
+          run-id: ${{ steps.source.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Record harness source
+        run: |
+          mkdir -p "$EVIDENCE_DIR"
+          cat > "$EVIDENCE_DIR/harness.json" <<JSON
+          {
+            "provider": "ReactiveCircus/android-emulator-runner",
+            "version": "2.37.0",
+            "apiLevel": 35,
+            "target": "google_apis",
+            "arch": "x86_64",
+            "apkWorkflowRunId": "${{ steps.source.outputs.run_id }}",
+            "mode": "harness-only"
+          }
+          JSON
+
+      - name: Enable KVM group permissions
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run lifecycle, coverage, notification and marker checks on Android 15
+        uses: ReactiveCircus/android-emulator-runner@v2.37.0
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel
+          cores: 2
+          ram-size: 4096M
+          emulator-boot-timeout: 600
+          emulator-options: >-
+            -no-window -gpu swiftshader_indirect -no-snapshot -noaudio
+            -no-boot-anim -camera-back none -camera-front none
+          disable-animations: true
+          script: bash scripts/run-android-emulator-e2e.sh "$APK_PATH" "$EVIDENCE_DIR"
+
+      - name: Upload emulator screenshots, hierarchy and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: personal-exploration-map-emulator-harness-only
+          path: artifacts/emulator-e2e/
+          if-no-files-found: warn
+          retention-days: 14
