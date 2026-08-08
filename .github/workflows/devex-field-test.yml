@@ -28,7 +28,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: devex-field-test-v9-${{ github.ref }}
+  group: devex-field-test-v10-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -172,11 +172,11 @@ jobs:
             -no-boot-anim -camera-back none -camera-front none
           disable-animations: true
           script: |
-            set -euo pipefail
+            set -eu
             bash scripts/run-android-emulator-e2e.sh "$APK_PATH" "$EVIDENCE_DIR"
 
             adb shell am force-stop "$FIELD_TEST_PACKAGE"
-            adb shell run-as "$FIELD_TEST_PACKAGE" id | tee "$EVIDENCE_DIR/run-as.txt"
+            adb shell run-as "$FIELD_TEST_PACKAGE" id > "$EVIDENCE_DIR/run-as.txt"
             grep -q "uid=" "$EVIDENCE_DIR/run-as.txt"
 
             adb exec-out run-as "$FIELD_TEST_PACKAGE" tar -cf - databases > "$EVIDENCE_DIR/app-databases.tar"
