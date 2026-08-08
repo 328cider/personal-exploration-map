@@ -14,6 +14,7 @@ import android.os.SystemClock
 import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import java.io.File
 import java.security.MessageDigest
 import java.util.Locale
 import java.util.TimeZone
@@ -28,6 +29,17 @@ class FieldTestDiagnosticsModule : Module() {
 
     AsyncFunction("captureEnvironmentSnapshotAsync") {
       captureEnvironmentSnapshot(context)
+    }
+
+    AsyncFunction("writeFieldTestTextFileAsync") { fileName: String, content: String ->
+      val safeName = fileName.replace(Regex("[^A-Za-z0-9._-]"), "_")
+      require(safeName.isNotBlank()) { "Field-test export file name is empty." }
+      val directory = File(context.filesDir, "field-test-exports")
+      check(directory.exists() || directory.mkdirs()) {
+        "Could not create the field-test export directory."
+      }
+      File(directory, safeName).writeText(content, Charsets.UTF_8)
+      "field-test-exports/$safeName"
     }
   }
 }
