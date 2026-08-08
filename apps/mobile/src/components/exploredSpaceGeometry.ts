@@ -32,6 +32,12 @@ export interface ProjectedSegment {
   readonly points: readonly ScreenPoint[];
 }
 
+/**
+ * Screen-space location-uncertainty band around the accepted point estimate.
+ *
+ * Width is derived from horizontal accuracy. It is not an explored polygon,
+ * road width, lot boundary, visibility radius, or canonical map geometry.
+ */
 export interface CorridorPrimitive {
   readonly id: string;
   readonly left: number;
@@ -42,6 +48,13 @@ export interface CorridorPrimitive {
   readonly opacity: number;
 }
 
+/**
+ * Conservative cells near the accepted point-estimate path.
+ *
+ * Horizontal accuracy changes cell confidence, not the amount of area painted.
+ * `visits` counts supporting ExplorationSession segments, so dense sampling in
+ * one session cannot masquerade as repeated exploration.
+ */
 export interface CoverageCellPrimitive {
   readonly id: string;
   readonly left: number;
@@ -74,6 +87,8 @@ const MIN_RADIUS_METERS = 4;
 const MAX_RADIUS_METERS = 30;
 const DEFAULT_GNSS_RADIUS_METERS = 12;
 const DEFAULT_PDR_RADIUS_METERS = 4;
+const MIN_ACCURACY_QUALITY = 0.25;
+const COVERAGE_CORE_RADIUS_METERS = 2.5;
 const MAX_RENDERED_POINTS = 1_200;
 const MAX_CELLS = 1_400;
 
@@ -81,6 +96,10 @@ function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
+/**
+ * Returns the bounded horizontal uncertainty radius used only for rendering
+ * the location-uncertainty band.
+ */
 export function exploredRadiusMeters(point: ExploredSpacePoint): number {
   const measured = point.horizontalAccuracyMeters;
   if (measured !== undefined && Number.isFinite(measured) && measured > 0) {
@@ -89,6 +108,27 @@ export function exploredRadiusMeters(point: ExploredSpacePoint): number {
   return point.source === "pdr" || point.source === "manual"
     ? DEFAULT_PDR_RADIUS_METERS
     : DEFAULT_GNSS_RADIUS_METERS;
+}
+
+/**
+ * Converts location uncertainty to a bounded evidence-quality multiplier.
+ * Poor accuracy reduces confidence instead of increasing explored area.
+ */
+export function locationAccuracyQuality(point: ExploredSpacePoint): number {
+  const radius = exploredRadiusMeters(point);
+  const normalized =
+    (radius - MIN_RADIUS_METERS) /
+    Math.max(1, MAX_RADIUS_METERS - MIN_RADIUS_METERS);
+  return clamp(1 - normalized * 0.75, MIN_ACCURACY_QUALITY, 1);
+}
+
+export function coverageEvidenceConfidence(
+  point: ExploredSpacePoint,
+): number {
+  return (
+    clamp(point.confidence, 0, 1) *
+    locationAccuracyQuality(point)
+  );
 }
 
 function allPoints(
@@ -248,6 +288,10 @@ function buildCorridors(
         0,
         1,
       );
+      const accuracyQuality = Math.min(
+        locationAccuracyQuality(previous.source),
+        locationAccuracyQuality(point.source),
+      );
       return [
         {
           id: `${segment.id}:${previous.source.sampleId}:${point.source.sampleId}`,
@@ -256,7 +300,7 @@ function buildCorridors(
           length,
           angleRadians: Math.atan2(deltaY, deltaX),
           width,
-          opacity: 0.07 + confidence * 0.09,
+          opacity: 0.025 + confidence * accuracyQuality * 0.1,
         },
       ];
     }),
@@ -269,6 +313,12 @@ interface MutableCell {
   visits: number;
   confidenceSum: number;
   maximumConfidence: number;
+}
+
+interface SegmentCellEvidence {
+  readonly xIndex: number;
+  readonly yIndex: number;
+  confidence: number;
 }
 
 function chooseCellSizeMeters(
@@ -288,26 +338,44 @@ function chooseCellSizeMeters(
   );
 }
 
-function markCoverageDisc(
-  cells: Map<string, MutableCell>,
+/**
+ * Adds conservative path-core evidence for one ExplorationSession segment.
+ *
+ * The radius is intentionally independent of horizontal accuracy. Accuracy is
+ * represented separately by the uncertainty corridor and by confidence.
+ */
+function markCoverageCore(
+  cells: Map<string, SegmentCellEvidence>,
   xMeters: number,
   yMeters: number,
-  radiusMeters: number,
   confidence: number,
   cellSizeMeters: number,
 ): void {
-  const minimumX = Math.floor((xMeters - radiusMeters) / cellSizeMeters);
-  const maximumX = Math.floor((xMeters + radiusMeters) / cellSizeMeters);
-  const minimumY = Math.floor((yMeters - radiusMeters) / cellSizeMeters);
-  const maximumY = Math.floor((yMeters + radiusMeters) / cellSizeMeters);
+  const coreRadiusMeters = Math.min(
+    COVERAGE_CORE_RADIUS_METERS,
+    cellSizeMeters * 0.45,
+  );
+  const minimumX = Math.floor(
+    (xMeters - coreRadiusMeters) / cellSizeMeters,
+  );
+  const maximumX = Math.floor(
+    (xMeters + coreRadiusMeters) / cellSizeMeters,
+  );
+  const minimumY = Math.floor(
+    (yMeters - coreRadiusMeters) / cellSizeMeters,
+  );
+  const maximumY = Math.floor(
+    (yMeters + coreRadiusMeters) / cellSizeMeters,
+  );
   const halfDiagonal = (cellSizeMeters * Math.SQRT2) / 2;
+
   for (let xIndex = minimumX; xIndex <= maximumX; xIndex += 1) {
     for (let yIndex = minimumY; yIndex <= maximumY; yIndex += 1) {
       const centerX = (xIndex + 0.5) * cellSizeMeters;
       const centerY = (yIndex + 0.5) * cellSizeMeters;
       if (
         Math.hypot(centerX - xMeters, centerY - yMeters) >
-        radiusMeters + halfDiagonal
+        coreRadiusMeters + halfDiagonal
       ) {
         continue;
       }
@@ -317,24 +385,43 @@ function markCoverageDisc(
         cells.set(id, {
           xIndex,
           yIndex,
-          visits: 1,
-          confidenceSum: confidence,
-          maximumConfidence: confidence,
+          confidence,
         });
       } else {
-        existing.visits += 1;
-        existing.confidenceSum += confidence;
-        existing.maximumConfidence = Math.max(
-          existing.maximumConfidence,
-          confidence,
-        );
+        existing.confidence = Math.max(existing.confidence, confidence);
       }
+    }
+  }
+}
+
+function mergeSegmentCoverage(
+  cells: Map<string, MutableCell>,
+  segmentEvidence: ReadonlyMap<string, SegmentCellEvidence>,
+): void {
+  for (const [id, evidence] of segmentEvidence) {
+    const existing = cells.get(id);
+    if (existing === undefined) {
+      cells.set(id, {
+        xIndex: evidence.xIndex,
+        yIndex: evidence.yIndex,
+        visits: 1,
+        confidenceSum: evidence.confidence,
+        maximumConfidence: evidence.confidence,
+      });
+    } else {
+      existing.visits += 1;
+      existing.confidenceSum += evidence.confidence;
+      existing.maximumConfidence = Math.max(
+        existing.maximumConfidence,
+        evidence.confidence,
+      );
     }
   }
 }
 
 function buildCoverageCells(
   sourceSegments: readonly ExploredSpaceSegment[],
+  coverageBounds: ExploredSpaceBounds,
   projection: Projection,
 ): {
   readonly cells: readonly CoverageCellPrimitive[];
@@ -344,19 +431,18 @@ function buildCoverageCells(
     (sum, segment) => sum + segment.points.length,
     0,
   );
-  const cellSizeMeters = chooseCellSizeMeters(projection.bounds, pointCount);
+  const cellSizeMeters = chooseCellSizeMeters(coverageBounds, pointCount);
   const cells = new Map<string, MutableCell>();
 
   for (const segment of sourceSegments) {
+    const segmentEvidence = new Map<string, SegmentCellEvidence>();
     for (let index = 0; index < segment.points.length; index += 1) {
       const point = segment.points[index]!;
-      const confidence = clamp(point.confidence, 0, 1);
-      const radius = exploredRadiusMeters(point);
-      markCoverageDisc(
-        cells,
+      const confidence = coverageEvidenceConfidence(point);
+      markCoverageCore(
+        segmentEvidence,
         point.xMeters,
         point.yMeters,
-        radius,
         confidence,
         cellSizeMeters,
       );
@@ -370,21 +456,22 @@ function buildCoverageCells(
         next.yMeters - point.yMeters,
       );
       const interpolationSteps = Math.min(
-        24,
-        Math.max(0, Math.ceil(distance / (cellSizeMeters * 0.75)) - 1),
+        48,
+        Math.max(0, Math.ceil(distance / (cellSizeMeters * 0.5)) - 1),
       );
+      const nextConfidence = coverageEvidenceConfidence(next);
       for (let step = 1; step <= interpolationSteps; step += 1) {
         const ratio = step / (interpolationSteps + 1);
-        markCoverageDisc(
-          cells,
+        markCoverageCore(
+          segmentEvidence,
           point.xMeters + (next.xMeters - point.xMeters) * ratio,
           point.yMeters + (next.yMeters - point.yMeters) * ratio,
-          Math.max(radius, exploredRadiusMeters(next)),
-          Math.min(confidence, clamp(next.confidence, 0, 1)),
+          Math.min(confidence, nextConfidence),
           cellSizeMeters,
         );
       }
     }
+    mergeSegmentCoverage(cells, segmentEvidence);
   }
 
   let ordered = [...cells.values()].sort(
@@ -418,13 +505,16 @@ function buildCoverageCells(
         0,
         1,
       );
-      const revisitBoost = Math.min(0.09, Math.log2(cell.visits + 1) * 0.025);
+      const revisitBoost = Math.min(
+        0.12,
+        Math.max(0, cell.visits - 1) * 0.06,
+      );
       return {
         id: `${cell.xIndex}:${cell.yIndex}`,
         left: topLeft.x,
         top: topLeft.y,
         size: screenCellSize,
-        opacity: 0.12 + confidence * 0.14 + revisitBoost,
+        opacity: 0.06 + confidence * 0.28 + revisitBoost,
         visits: cell.visits,
         confidence,
       };
@@ -471,7 +561,11 @@ export function buildExploredSpaceGeometry(input: {
     };
   }
   const segments = projectSegments(input.segments, projection);
-  const coverage = buildCoverageCells(input.segments, projection);
+  const coverage = buildCoverageCells(
+    input.segments,
+    input.bounds,
+    projection,
+  );
   return {
     projection,
     segments,
