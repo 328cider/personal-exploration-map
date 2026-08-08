@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: explored-space-fixtures-v2-${{ github.ref }}
+  group: explored-space-fixtures-v3-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -37,18 +37,6 @@ jobs:
           node --experimental-strip-types
           scripts/render-explored-space-fixtures.ts
           artifacts/explored-space-fixtures
-      - name: Normalize evidence-only header spacing
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          path = Path("artifacts/explored-space-fixtures/fixture-matrix.svg")
-          lines = [
-              line
-              for line in path.read_text(encoding="utf-8").splitlines()
-              if "Deterministic renderer evidence" not in line
-          ]
-          path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-          PY
       - name: Inspect generated evidence
         run: |
           test -s artifacts/explored-space-fixtures/fixture-matrix.svg
