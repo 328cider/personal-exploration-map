@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Black-box comparison of explored-space display modes.
+"""Black-box comparison of location uncertainty, passage cells, and centerline.
 
 This script runs after android-emulator-smoke.py in the same emulator session.
 The first script leaves the app on a persisted PersonalMap Review. Here we only
@@ -169,31 +169,32 @@ def main() -> int:
         )
         wait_for_node(
             artifacts,
-            "推定探索範囲",
+            "位置の不確実性",
             prefix="coverage-default",
         )
-        screenshot(artifacts, "09-coverage-corridor")
+        screenshot(artifacts, "09-location-uncertainty")
 
         select_mode(
             artifacts,
-            "地図表示 セル",
-            "探索セル",
-            "10-coverage-cells",
+            "地図表示 通過セル",
+            "推定通過セル",
+            "10-passage-cells",
         )
         select_mode(
             artifacts,
             "地図表示 軌跡",
-            "採用済み軌跡",
-            "11-thin-track-baseline",
+            "採用済み位置の中心線",
+            "11-point-estimate-track",
         )
         select_mode(
             artifacts,
-            "地図表示 探索範囲",
-            "推定探索範囲",
-            "12-coverage-corridor-restored",
+            "地図表示 不確実性",
+            "位置の不確実性",
+            "12-location-uncertainty-restored",
         )
         (artifacts / "coverage-modes-result.json").write_text(
-            '{"status":"passed","modes":["corridor","cells","track"]}\n',
+            '{"status":"passed","semantics":"uncertainty-separated-from-coverage",'
+            '"modes":["uncertainty","cells","track"]}\n',
             encoding="utf-8",
         )
         print("[coverage-modes] passed", flush=True)
