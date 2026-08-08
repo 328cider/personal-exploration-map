@@ -29,13 +29,13 @@ SPEC.loader.exec_module(smoke)
 
 
 def fresh_dump_ui(artifacts: Path, name: str) -> tuple[ET.Element, Path]:
-    """Dump to a unique remote path so UI Automator cannot return stale XML."""
+    """Dump to a unique remote path and tolerate delayed file visibility."""
 
     last_error = ""
     for attempt in range(5):
         remote_path = f"/sdcard/pem-window-{time.time_ns()}-{attempt}.xml"
         smoke.adb_shell("rm", "-f", remote_path, check=False, timeout=15)
-        result = smoke.run(
+        dump_result = smoke.run(
             [
                 "adb",
                 "shell",
@@ -47,19 +47,31 @@ def fresh_dump_ui(artifacts: Path, name: str) -> tuple[ET.Element, Path]:
             check=False,
             timeout=30,
         )
-        if result.returncode == 0:
-            xml_text = smoke.adb_shell("cat", remote_path, timeout=30)
-            smoke.adb_shell("rm", "-f", remote_path, check=False, timeout=15)
-            if "<hierarchy" in xml_text:
-                path = artifacts / f"{name}.xml"
-                path.write_text(xml_text, encoding="utf-8")
-                return ET.fromstring(xml_text), path
-        last_error = f"stdout={result.stdout!r} stderr={result.stderr!r}"
+        cat_result = smoke.run(
+            ["adb", "shell", "cat", remote_path],
+            check=False,
+            timeout=30,
+        )
+        smoke.adb_shell("rm", "-f", remote_path, check=False, timeout=15)
+        if (
+            dump_result.returncode == 0
+            and cat_result.returncode == 0
+            and "<hierarchy" in cat_result.stdout
+        ):
+            path = artifacts / f"{name}.xml"
+            path.write_text(cat_result.stdout, encoding="utf-8")
+            return ET.fromstring(cat_result.stdout), path
+        last_error = (
+            f"dump_stdout={dump_result.stdout!r} "
+            f"dump_stderr={dump_result.stderr!r} "
+            f"cat_stdout={cat_result.stdout!r} "
+            f"cat_stderr={cat_result.stderr!r}"
+        )
         time.sleep(1)
     raise smoke.SmokeFailure(f"could not dump fresh UI hierarchy: {last_error}")
 
 
-# The base lifecycle used a fixed remote file name. On long, sequential suites
+# The base lifecycle uses a fixed remote file name. On long, sequential suites
 # UI Automator can report success while the old file remains, so the screenshot
 # and hierarchy describe different screens. Replace the module-global helper;
 # wait_for_node and screenshot resolve it dynamically.
