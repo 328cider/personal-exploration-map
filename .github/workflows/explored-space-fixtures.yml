@@ -1,0 +1,51 @@
+name: explored-space-fixtures
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/explored-space-fixtures.yml"
+      - "scripts/render-explored-space-fixtures.ts"
+      - "apps/mobile/src/components/exploredSpaceGeometry.ts"
+      - "apps/mobile/src/components/exploredSpaceGeometry.test.ts"
+      - "docs/EXPLORED_SPACE_RENDERING.md"
+      - "docs/EXPLORED_SPACE_FIXTURE_MATRIX.md"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: explored-space-fixtures-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fixture-matrix:
+    name: Simulated explored-space route matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Run renderer geometry unit tests
+        run: >-
+          node --experimental-strip-types --test
+          apps/mobile/src/components/exploredSpaceGeometry.test.ts
+      - name: Generate deterministic SVG and metrics
+        run: >-
+          node --experimental-strip-types
+          scripts/render-explored-space-fixtures.ts
+          artifacts/explored-space-fixtures
+      - name: Inspect generated evidence
+        run: |
+          test -s artifacts/explored-space-fixtures/fixture-matrix.svg
+          test -s artifacts/explored-space-fixtures/fixture-matrix.json
+          cat artifacts/explored-space-fixtures/fixture-matrix.json
+      - name: Upload simulated route evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: personal-exploration-map-explored-space-fixtures
+          path: artifacts/explored-space-fixtures/
+          if-no-files-found: error
+          retention-days: 30
