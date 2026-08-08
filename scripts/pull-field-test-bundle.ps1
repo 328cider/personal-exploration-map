@@ -177,6 +177,13 @@ $privateDataArguments = $adbPrefix + @(
 )
 Start-CapturedProcess -FileName $adb -Arguments $privateDataArguments -StdoutPath $appTarPath -Binary | Out-Null
 
+$summaryPath = Join-Path $outputDirectory "coordinate-free-diagnostics.txt"
+$summaryArguments = $adbPrefix + @(
+    "exec-out", "run-as", $PackageName,
+    "cat", "files/field-test-exports/latest-coordinate-free-diagnostics.txt"
+)
+Start-CapturedProcess -FileName $adb -Arguments $summaryArguments -StdoutPath $summaryPath -AllowFailure | Out-Null
+
 $textCommands = @(
     @{ Name = "adb-version.txt"; Args = @("version") },
     @{ Name = "device-date.txt"; Args = $adbPrefix + @("shell", "date", "+%Y-%m-%dT%H:%M:%S%z") },
@@ -208,6 +215,7 @@ $manifest = [ordered]@{
     packageName = $PackageName
     deviceSerialSha256 = Get-Sha256Text $deviceSerial
     appPrivateArchive = "app/app-private-data.tar"
+    coordinateFreeSummary = "coordinate-free-diagnostics.txt"
     containsRawLocation = $true
     autoUpload = $false
     warning = "This bundle contains raw location and app-private data. Keep it local and do not attach it to a public issue."
@@ -230,5 +238,6 @@ if ($RestartApp) {
     Start-CapturedProcess -FileName $adb -Arguments ($adbPrefix + @("shell", "monkey", "-p", $PackageName, "1")) -StdoutPath (Join-Path $systemDirectory "restart-app.txt") -AllowFailure | Out-Null
 }
 
-Write-Host "Bundle created: $zipPath"
+Write-Host "Coordinate-free summary: $summaryPath"
+Write-Host "Raw local bundle: $zipPath"
 Write-Warning "The ZIP contains raw coordinates. Keep it local unless you intentionally share it through a private channel."
