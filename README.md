@@ -15,7 +15,8 @@
 3. [`docs/adr/`](docs/adr/) — 長期設計判断
 4. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — packageと依存方向
 5. [`docs/FEATURE_PLACEMENT.md`](docs/FEATURE_PLACEMENT.md) — 新機能をcore / engine / adapter / renderer / gameへ分ける規則
-6. [`AGENTS.md`](AGENTS.md) — 開発者・エージェントの実行手順
+6. [`docs/PDR_TECHNOLOGY_GATE.md`](docs/PDR_TECHNOLOGY_GATE.md) — GPS-denied軌跡推定を始める条件、実験境界、Go / Narrow / Stop基準
+7. [`AGENTS.md`](AGENTS.md) — 開発者・エージェントの実行手順
 
 短期方針、Issue、PR、実装は製品憲章を暗黙に上書きできません。憲章変更には、所有者承認、専用Issue、Build / Buy再評価、新規ADR、移行影響評価が必要です。
 
@@ -32,7 +33,7 @@
 
 1. 白紙またはローカル座標の**個人地図**が正本
 2. 探索中はスマホをポケットに入れる**受動記録**
-3. 一度歩いただけで、その場で経路が地図になる
+3. 一度歩いただけで、その場で地図になる
 4. GPSが使える場所と使えない場所を同じデータモデルで扱う
 5. 意味づけは必要なときだけ、短い操作で追加する
 6. ゲーム要素は地図コアを汚さない交換可能な拡張
@@ -46,11 +47,13 @@
 1. `新しい地図を探索する`を押す
 2. スマホをポケットにしまう
 3. 移動がバックグラウンドで記録される
-4. 必要なときだけ`発見を記録`する
-5. `探索を終了`すると、PersonalMapへ1つのExplorationSessionとして追加される
-6. Homeでは日付別ログではなくPersonalMapを一覧する
-7. Reviewでは複数sessionを偽接続せず別segmentとして表示する
-8. `この地図の続きを探索`から同じPersonalMapを育てる
+4. 必要なときだけアプリを開き、育っているPersonalMapを確認する
+5. 必要なときだけ`発見を記録`する
+6. `探索を終了して地図を見る`で、PersonalMapへ1つのExplorationSessionとして追加する
+7. Homeでは日付別ログではなくPersonalMapを一覧する
+8. Reviewでは複数sessionを偽接続せず別segmentとして表示する
+9. `探索範囲 / セル / 軌跡`を切り替え、移動履歴と探索済み空間を比較する
+10. `この地図の続きを探索`から同じPersonalMapを育てる
 
 屋内の高精度自動マッピングは、製品完成を前提にせず、独立した技術検証にします。最初にバックグラウンドGNSSを使える環境で価値を検証し、GPSなしのポケット内測位はGo / Narrow / Stop判定を経て追加します。
 
@@ -63,7 +66,7 @@ packages/mapping-engine/      Appが呼ぶheadless command / query facade
 packages/sqlite-adapter/      Raw evidenceを保存するlocal-first repository adapter
 packages/experience-sdk/      Game向けread-only snapshot / event境界
 docs/                         製品、UX、設計、検証計画、ADR
-scripts/                      ガバナンスと依存方向の検査
+scripts/                      ガバナンス、境界検査、Android emulator E2E
 ```
 
 ## 設計上の境界
@@ -105,42 +108,56 @@ PersonalMap
 
 DBにはraw observationsと確認済みmarkerを保存し、PersonalMap snapshotはreplayして再生成します。旧DBの`Exploration = 地図1枚`データは、同じIDのPersonalMapへ無損失で昇格させます。
 
-## 再現可能なローカル検証
+## WindowsでのDocker-only検証
 
-Node.jsは`.nvmrc`、dependency graphは`package-lock.json`を正本にします。repository rootで実行します。
+Windows hostへNode.js、npm、JDK、Android SDK、Android Studioを必須導入しません。Docker Desktopが動作しているrepository rootで実行します。
 
-```bash
-npm ci
-npm run check
-npm run typecheck:mobile
-npm run check:expo
+```powershell
+git switch main
+git pull --ff-only
+docker compose build
+docker compose run --rm check
 ```
 
-全体をまとめて確認する場合:
+短いdevelopment確認でMetroが必要な場合だけ、Docker内で起動します。
 
-```bash
-npm run mobile:check
+```powershell
+.\scripts\docker-metro.ps1
 ```
 
-通常のsetupでは`npm install`へ置き換えず、dependency変更を意図するPRだけがmanifestとlockfileを同時に更新します。
+実地試験にはMetroを使わず、GitHub Actionsで生成したJS bundle内蔵のField-test APKを使用します。詳細は [`docs/DOCKER_AND_FIELD_TEST.md`](docs/DOCKER_AND_FIELD_TEST.md) を参照してください。
 
-## Android development build
+## Android Field-test APKと必須エミュレータゲート
 
-バックグラウンド位置記録はExpo Goではなく、app固有のdevelopment buildで検証します。
+`devex-field-test` workflowは、committed lockfileから次を実行します。
 
-```bash
-npm ci
-npm run mobile:check
-npm run mobile:android
-```
+1. Docker mobile check
+2. Expo prebuild
+3. Gradle release APK build
+4. JS bundle内包、署名、SHA-256確認
+5. Android 15 / API 35 emulatorへ同じAPKをclean install
+6. 黒箱ユーザーフローE2E
 
-Windows、Android Studio、USB debugging、GitHub Actionsのdebug APK、Issue #3の実機runについては [`docs/ANDROID_DEVELOPMENT.md`](docs/ANDROID_DEVELOPMENT.md) を参照してください。
+エミュレータでは次を確認します。
 
-GitHub Actionsの`android-development-build`は、committed lockfileからExpo prebuildとGradle `assembleDebug`を行い、debug APKを短期間のartifactとして保存します。build成功は、画面OFF・電池・OEM差まで保証しないため、実端末の判定は別途行います。
+- 起動、Home、権限説明、探索開始
+- 擬似GNSSでのlive PersonalMap成長
+- background・画面OFF相当と復帰
+- 探索終了からReview
+- force-stop後の永続化
+- 探索範囲 / セル / 軌跡の切替
+- foreground-service notificationの表示内容
+- notificationから記録中画面への復帰
+- 発見modal、marker保存、発見数更新、Reviewへの永続化
+- Fatal、React Native JS、Expo SQLite native statement errorがないこと
+
+エミュレータ不合格のAPKを実地試験候補として渡しません。エミュレータ合格は実GNSS、長時間画面OFF、OEM省電力、電池、ポケット内UXまで保証しないため、それらだけを実端末で確認します。詳細は [`docs/ANDROID_EMULATOR_E2E.md`](docs/ANDROID_EMULATOR_E2E.md) を参照してください。
+
+テストハーネスだけを変更した場合は、`emulator-harness-only` workflowが同一PRで生成済みの署名APKを再利用し、不要なGradle再ビルドを避けます。
 
 ## Tracking diagnostics
 
-Development buildのPersonalMap Reviewには、受動記録を判断するための端末内診断を表示します。
+Field-test buildのPersonalMap Reviewには、受動記録を判断するための端末内診断を表示します。
 
 - raw / accepted / rejectedと理由
 - horizontal accuracy
@@ -150,7 +167,22 @@ Development buildのPersonalMap Reviewには、受動記録を判断するため
 - app background / foreground / recovery
 - marker入力時間
 
-診断eventはmap truthではありません。採否と経路はraw observationsから再計算し、診断保存失敗でraw位置記録を止めません。実機runは [`docs/experiments/templates/background-gnss-run.md`](docs/experiments/templates/background-gnss-run.md) に記録します。
+診断eventはmap truthではありません。採否と経路はraw observationsから再計算し、診断保存失敗でraw位置記録を止めません。座標、地図名、marker本文、絶対時刻を含めない集計だけを共有できます。実機runは [`docs/experiments/templates/background-gnss-run.md`](docs/experiments/templates/background-gnss-run.md) に記録します。
+
+## PDR / GPS-deniedの扱い
+
+詳細調査の結論を [`docs/PDR_TECHNOLOGY_GATE.md`](docs/PDR_TECHNOLOGY_GATE.md) とIssue #5へ固定しています。
+
+- 一般的なIMU-only GPS代替はStop寄り
+- 100〜300m、アンカー間、短いGNSS欠落補完はNarrow候補
+- 最も合理的な候補は`sparse GNSS + manual anchor + uncertainty-aware PDR`
+- 最初にAndroidへ学習モデルを入れない
+- Kotlin native raw sensor loggerとimmutable / replayable evidenceから始める
+- 同じraw logをStep Detector、classical PDR、RoNIN、EqNIO、sparse-GNSS hybridへreplayする
+- high-rate IMUをmapping-coreやJS bridgeへ直接流さない
+- learned model、map matching、smoothingはderived inferenceであり、PersonalMap truthを上書きしない
+
+Issue #5はIssue #3と#4にblockedです。GNSS M0とマッピング単体の価値が未確認のまま、PDRを既定機能にしません。
 
 ## 現在の到達点
 
@@ -165,9 +197,14 @@ Development buildのPersonalMap Reviewには、受動記録を判断するため
 - foreground / background / marker / end / demoのmobile writeをmapping-engineへ統一
 - HomeとReviewをPersonalMap-firstへ変更
 - 複数sessionを偽接続せず別segmentとして描画
+- foreground-only live map previewを追加
+- 探索範囲 / セル / 軌跡の比較表示を追加
 - frame互換性をprovider開始前にmapping-engineで強制
 - game contractをmapping-coreからread-only experience-sdkへ分離
 - background GNSSの端末内diagnosticsとrun templateを実装
-- 屋内PDRは検証前提のportとして分離
+- Android Field-test APKのビルド、署名、黒箱E2Eを自動化
+- emulator E2EからExpo SQLite raceと操作到達性の問題を検出・修正
+- notification、marker、終了、再起動保持を実地試験前に自動検証
+- PDRを製品実装ではなくreplay-first技術ゲートとして正本化
 
 次の作業は [CURRENT_DIRECTION.md](CURRENT_DIRECTION.md) に集約します。ただし、恒久的な境界は [PRODUCT_CONSTITUTION.md](PRODUCT_CONSTITUTION.md) が優先します。
