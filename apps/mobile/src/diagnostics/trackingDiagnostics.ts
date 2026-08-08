@@ -1,5 +1,6 @@
 import {
   createExplorationTrackingDiagnostics,
+  formatTrackingDiagnosticsSummary,
   type ExplorationTrackingDiagnostics,
   type TrackingDiagnosticEvent,
   type TrackingDiagnosticEventKind,
@@ -7,7 +8,10 @@ import {
 } from "@exploration-map/mapping-engine";
 import { createSqliteTrackingDiagnosticsStore } from "@exploration-map/sqlite-adapter";
 
-import { captureFieldTestEnvironmentSnapshot } from "../../modules/field-test-diagnostics";
+import {
+  captureFieldTestEnvironmentSnapshot,
+  writeFieldTestTextFile,
+} from "../../modules/field-test-diagnostics";
 import {
   getActiveTrackingContext,
   type ActiveTrackingContext,
@@ -107,6 +111,38 @@ async function appendEnvironmentSnapshot(
   }
 }
 
+function coordinateFreeSummary(
+  reports: readonly ExplorationTrackingReportItem[],
+): string {
+  return [
+    "Personal Exploration Map / USB field-test diagnostics",
+    "privacy=no_coordinates_no_map_names_no_ids_no_marker_text_no_map_images",
+    "contains=device_time_battery_permissions_and_aggregate_tracking_metrics",
+    `exploration_count=${reports.length}`,
+    ...reports.map(
+      ({ report }, index) =>
+        `[exploration_${index + 1}]\n${formatTrackingDiagnosticsSummary(report)}`,
+    ),
+  ].join("\n\n");
+}
+
+async function persistCoordinateFreeSummary(
+  reports: readonly ExplorationTrackingReportItem[],
+): Promise<void> {
+  if (!environmentCaptureEnabled || reports.length === 0) {
+    return;
+  }
+  const content = coordinateFreeSummary(reports);
+  const latestStartedAtMs = reports.at(-1)?.report.startedAtMs ?? Date.now();
+  await Promise.all([
+    writeFieldTestTextFile("latest-coordinate-free-diagnostics.txt", content),
+    writeFieldTestTextFile(
+      `diagnostics-${Math.round(latestStartedAtMs)}.txt`,
+      content,
+    ),
+  ]).catch(() => undefined);
+}
+
 export async function recordTrackingDiagnosticEvent(
   input: DiagnosticInput,
 ): Promise<boolean> {
@@ -188,5 +224,6 @@ export async function loadPersonalMapTrackingDiagnostics(
       }),
     });
   }
+  await persistCoordinateFreeSummary(reports);
   return reports;
 }
