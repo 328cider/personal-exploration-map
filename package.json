@@ -13,11 +13,12 @@
     "node": ">=22.13.0 <23"
   },
   "scripts": {
-    "test": "npm run test:core && npm run test:engine && npm run test:experience && npm run test:sqlite",
+    "test": "npm run test:core && npm run test:engine && npm run test:experience && npm run test:sqlite && npm run test:mobile-renderer",
     "test:core": "npm run test --workspace @exploration-map/mapping-core",
     "test:engine": "npm run test --workspace @exploration-map/mapping-engine",
     "test:experience": "npm run test --workspace @exploration-map/experience-sdk",
     "test:sqlite": "npm run test --workspace @exploration-map/sqlite-adapter",
+    "test:mobile-renderer": "node --experimental-strip-types --test apps/mobile/src/components/exploredSpaceGeometry.test.ts",
     "typecheck": "npm run typecheck:core && npm run typecheck:engine && npm run typecheck:experience && npm run typecheck:sqlite",
     "typecheck:core": "npm run typecheck --workspace @exploration-map/mapping-core",
     "typecheck:engine": "npm run typecheck --workspace @exploration-map/mapping-engine",
