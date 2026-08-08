@@ -1,254 +1,214 @@
 # Current Direction
 
-更新日: 2026-08-08
+更新日: 2026-08-09
 
 > この文書は短期的な開発方針であり、恒久的な製品目的と境界は [`PRODUCT_CONSTITUTION.md`](PRODUCT_CONSTITUTION.md) を正本とする。両者が矛盾する場合は憲章を優先し、この文書を修正する。
 
 ## 現在のマイルストーン
 
-**M0: Passive Mapping Vertical Slice — Android実機での成立性と製品差分の判定**
+**M0: Passive Mapping Vertical Slice — Android実機S0と製品差分の判定**
 
-次の体験を、バックグラウンドGNSSが利用できるAndroid実機で成立させる。
+現在は、エミュレータで確認可能な基本動作を通過し、Android実機でしか分からない項目へ移る段階である。
+
+目標体験:
 
 - 一回押して探索開始
-- 画面OFF・ポケット内で継続記録
-- 必要時だけクイックマーカー
-- 必要な時にアプリを開くとPersonalMapが一定間隔で育って見える
-- 終了後、既存地図なしのPersonalMapを表示
-- アプリ再起動後も探索が残る
-- 異常位置をraw evidenceから削除せず、derived mapだけから除外
-- 次回、同じPersonalMapへ独立したExplorationSessionとして続きを追加
+- 通常は画面OFF・ポケット内で受動記録
+- 必要時だけ短い発見入力
+- 意図して開くとPersonalMapが育って見える
+- 探索終了後にReviewへ進める
+- 再起動後も地図と発見が残る
+- 同じPersonalMapへ独立したExplorationSessionとして続きを追加
 - session間を未観測の直線で接続しない
-- 欠落、精度、callback、復帰、中断時間を端末内で計測できる
-- thin trackだけでなく、探索範囲・セルとして空間が育つ表現を比較できる
+- raw evidenceと不確実性を保持し、推定を確定地物として描かない
 
-Passive-firstはmap-invisibleを意味しない。通常状態は画面OFF・ポケット内だが、ユーザーが意図して開いた時には探索進捗が見えることをM0の一部とする。
+Passive-firstはmap-invisibleを意味しない。探索中の主役は現実空間だが、ユーザーが意図して開いた時には進捗を確認できる。
 
-M0では「APKが動く」だけでなく、Google Maps Timelineや一般GPS loggerとは異なる**探索済み空間が育つ価値**が認識できるかを判定する。
+## 今回のField-test候補
+
+PR #56をmainへmerge済み。
+
+- merged commit: `74b70715da59c74bab585b2b3c0d2a3fd919c5f7`
+- source head: `0ad4e847d6c3bca290c5781547d924cfde618c92`
+- workflow run: `31264093837`
+- APK SHA-256: `b61f3b3f68e16f21099cc4f4f474743399b89d5af56b1bb1c53ccee1dc09358d`
+- Metro不要、スマホ単体で動作
+- 手順: [`docs/REAL_DEVICE_S0_HANDOFF.md`](docs/REAL_DEVICE_S0_HANDOFF.md)
+
+既存Field-test版をアンインストールせず、同じ署名のAPKを上書きする。
 
 ## 現在の到達点
 
 ### Product / governance
 
 - `PRODUCT_CONSTITUTION.md`を恒久的な正本として運用
-- Issue / PRテンプレート、AGENTS、CIでPassive-first UX、map truth、canonical write、OSS再利用、game境界を確認
-- `CURRENT_DIRECTION.md`は憲章を上書きできない短期文書として分離
-- ADR番号の重複とfilename / H1不一致をproduct-governance CIで拒否
-- Android Field-test候補は、エミュレータの黒箱E2Eに失敗した状態でユーザーへ渡さない
+- Issue / PR template、AGENTS、CIでPassive-first UX、map truth、canonical write、OSS再利用、game境界を確認
+- UI、renderer、game、experienceはcanonical mapを直接変更できない
+- 実地試験はユーザーコストが高いため、エミュレータで検出できる問題を実地へ持ち込まない
 
 ### Mapping architecture
 
-- `mapping-core`: raw evidence、quality、frame、ExplorationSession、PersonalMap aggregate
-- `mapping-engine`: canonical command / queryを実行するheadless application boundary
-- `sqlite-adapter`: PersonalMap / ExplorationSessionを保存し、raw evidenceからreplay
-- platform adapters: foreground / background GNSSをengineへ接続
-- renderer: PersonalMapSnapshotをread-only表示
-- `experience-sdk`: game state、overlay、cueだけを生成するread-only境界
+```text
+apps/mobile
+  ↓ command / query
+mapping-engine
+  ↓
+mapping-core
+  ↕ repository / tracking ports
+sqlite-adapter / GNSS / future PDR adapters
 
-### User experience
+read-only PersonalMap
+  ├─ renderer
+  └─ experience-sdk / future game
+```
+
+- raw evidence、accepted / rejected、frame、ExplorationSession、PersonalMap aggregateを分離
+- canonical writeはmapping-engineへ集約
+- geographic / local、異なるlocal frameを根拠なく混ぜない
+- gameはread-onlyで、地図変更はユーザー確認後の明示commandのみ
+
+### PersonalMap-first UX
 
 - Homeの主語を日付別GPSログからPersonalMapへ変更
-- 複数ExplorationSessionを別segmentとして1枚の地図に表示
-- `この地図の続きを探索`を追加
-- 続きの権限画面で追加対象のPersonalMapを明示
-- local-coordinate PersonalMapへ未アンカーGNSSを追加しない
-- 探索中のread-only PersonalMap previewをforeground時だけ約8秒間隔で更新
-- background中はpreview pollingを行わず、画面注視を前提にしない
-- `＋ 発見を記録`と`探索を終了して地図を見る`を画面下部へ固定
-- 発見はカテゴリと任意メモだけで保存でき、写真を必須にしない
-- 場所カテゴリ別モードやゲーム本体は追加していない
+- 複数sessionを別segmentとして一枚の地図へ表示
+- `この地図の続きを探索`を実装
+- live previewはforeground時だけ約8秒間隔で更新
+- backgroundではpreview pollingを行わない
+- `＋ 発見を記録`と`探索を終了して地図を見る`を固定表示
+- provider停止やdiagnostics失敗でcanonical終了を阻害しない
+- 初回provider開始失敗時はevidenceのないprovisional mapだけを補償削除
 
-### Explored-space rendering
+### 位置の不確実性と通過表示
 
-- `探索範囲`: horizontal accuracyとconfidenceから推定範囲をread-only描画
-- `セル`: 観測範囲をadaptive cellへ集約し、一回目から表示
-- `軌跡`: GPS logger型の比較baselineとして保持
-- 3表示をlive previewとReviewで切替可能
-- corridor / cellはrenderer-derivedであり、raw evidence、accepted route、session境界を変更しない
-- 道路、敷地、部屋、通行可能領域の確定形状とは表示しない
-- session間を補間しない
-- 10,000点fixtureでgeometry生成とprimitive数を計測
+Issue #54を完了した。
 
-実装は成立したが、実際の場所でTimeline以上の価値を持つかはIssue #42で未判定。
+```text
+accepted point estimate
+  ├─ 位置の不確実性
+  ├─ 保守的な推定通過セル
+  └─ 採用済み位置の中心線
+```
 
-### Boundary hardening
+- horizontal accuracyは不確実性帯の幅・透明度へ反映
+- accuracyが悪くても通過セル面積を広げない
+- poor accuracyはcell confidenceを下げる
+- 同一session内の高密度sampleや往復を再訪回数と数えない
+- `supportingSessionCount`は独立ExplorationSession数
+- 一回目から表示し、再訪を登録条件にしない
+- uncertainty、cell、centerlineはrenderer-derivedでありcanonical mapではない
+- 道路、敷地、部屋、通行可能領域、正式な探索済みpolygonとは扱わない
 
-- UI、renderer、game、experienceはcanonical mapを直接変更できない
-- `TrackingProviderPort`は`geographic` / `local` capabilityを宣言
-- PersonalMapとのframe互換性を、DB writeとprovider startより前にmapping-engineで検査
-- geographic / local、異なるlocal frameを暗黙混在させない
-- mobile側の確認はUX補助、engine側が最終防衛線
-- 新規PersonalMapと初回ExplorationSessionを1 use caseで作成
-- 初回provider開始失敗時は、唯一の空sessionである場合だけprovisional PersonalMapを補償削除
-- raw evidenceまたは別sessionが存在する場合は自動削除しない
-- provider停止失敗はoperational diagnosticとして残し、canonical ExplorationSession完了を阻害しない
-- diagnosticsまたはReview表示の失敗で、完了済み探索をrecording画面に閉じ込めない
+fixture matrixでは、poor accuracyの5点が旧279 cellを生成していた問題を53 cellへ保守化し、all-accurate counterpartと同一cell ID集合になることをassertした。
 
-### Reproducible Android build
+### Reproducible build / Docker
 
-- Node `22.23.2`を`.nvmrc`へ固定
-- npm `10.9.8`と`package-lock.json`を正本化
-- Expo SDK 57が要求するReact Native `0.86.2`へ整合
-- 通常CIは`npm ci`でcommitted dependency graphを再現
-- `expo install --check`、Expo Doctor、mobile TypeScriptが成功
-- Expo Android prebuildが成功
-- GitHub ActionsでJS bundle内蔵・Metro不要のField-test APKを生成
-- APK bundle、署名、SHA-256を検査
-- Docker DesktopだけでNode/npm検査と任意のMetroを実行可能
+- Node `22.23.2`、npm `10.9.8`、`package-lock.json`を固定
+- Expo SDK 57 / React Native `0.86.2`
 - Windows hostへNode、npm、JDK、Android SDK、Android Studioを必須導入しない
-- emulator harnessだけの変更では、同一PRで生成済みの署名APKを再利用し、不要なGradle再ビルドを避ける
-
-build成功は、実GNSS、長時間screen-off、電池、OEM差を証明しない。実機挙動はIssue #3で別に判定する。
+- Docker Desktopで全checkを実行可能
+- GitHub ActionsでJS bundle内蔵・署名済みField-test APKを生成
+- app / renderer変更時は必ず同一runで新しいAPKをbuildしてE2Eへ渡す
+- harness-only変更だけが既存署名APKを再利用できる
 
 ### Mandatory Android emulator gate
 
-Android 15 / API 35へ、配布候補と同じField-test APKをclean installし、次を黒箱検証済み。
+同じField-test APKをAndroid 15 / API 35へclean installし、次をgreenにした。
 
-- cold startとHome
-- 権限説明から探索開始
-- 擬似GNSSによるlive PersonalMap成長
-- background・画面OFF相当での追加位置取得
-- foreground復帰と記録中session復元
-- 探索終了からReviewへの遷移
-- force-stop / relaunch後のPersonalMap保持
-- 探索範囲 / セル / 軌跡の切替
-- foreground-service notificationのpackage、title、body
-- notificationから記録中画面への復帰
-- 発見modalの表示
-- default `気になる`markerの保存
-- 記録画面の発見数更新
-- Reviewへのmarker永続化
-- Fatal、React Native JS、Expo SQLite native statement errorがないこと
+- cold start / Home
+- background記録開始
+- 擬似GNSSによるlive map成長
+- screen-off / background相当と復帰
+- 探索終了からReview
+- force-stop / relaunch後の永続化
+- `位置の不確実性 / 通過セル / 軌跡`切替
+- foreground-service notificationのpackage / title / body
+- notification tapから記録中画面へ復帰
+- 発見modal、default marker保存、live count更新、Review永続化
+- Fatal、React Native JS、既知Expo SQLite native statement raceなし
 
-このゲートの構築中に、Expo SQLiteへの並行進入によるnative statement raceと、記録画面の操作がスクロール下へ埋まる問題を実地試験前に検出・修正した。
-
-エミュレータはUI、基本lifecycle、保存、擬似位置を保証する。実GNSS、OEM省電力、電池、身体的UXの代替にはしない。
-
-### OSS reuse
-
-- 部品別のBuild / Adopt / Benchmarkとlicenseを`docs/OSS_REUSE_AUDIT.md`へ記録
-- 局所投影の推奨範囲と反日付変更線処理をテスト化
-- renderer、簡略化、export、PDRは既存OSS・標準を比較してから実装
-- explored-spaceのM0表示は正式なGIS polygon / unionではなくscreen-space比較に限定
-- polygon export、面積、複数地図unionが要件になった場合はTurf / GEOS系を再評価し、独自GIS処理を増やさない
+このgateは基本UI、lifecycle、保存、擬似位置を検証する。実GNSS、OEM省電力、電池、発熱、身体的UXを代替しない。
 
 ### Tracking diagnostics
 
-Issue #3の計測基盤はmainへ反映済み。
+Issue #3向け計測基盤はmainへ反映済み。
 
-- DBの`tracking_diagnostic_events`
-- provider start / stop requested / success / failure
-- foreground / background callback received / persisted / failed
-- callback batch size、duplicate、accepted / rejected counts
-- AppState foreground / background transition
-- process restart後のsession recovery
-- marker入力completed / cancelledと中断時間
-- raw observationsをmapping-coreでreplayするgap / accuracy / rejection集計
-- PersonalMap Reviewのdevelopment / Field-test diagnostics
+- raw / accepted / rejectedと理由
+- accuracyとsample gap分布
+- callback received / persisted / duplicate / failed
+- provider start / stop
+- foreground / background / recovery
+- marker入力時間
 - 座標、地図名、marker本文、絶対時刻を含めない集計共有
-- device、battery、permission、OEM条件を記録するrun template
 
-diagnostic eventはcanonical map truthではない。best-effort queueで保存し、raw位置記録やprovider lifecycleを待たせない。採否は常にraw evidenceから再計算する。詳細はADR 0010に従う。
+Diagnostic eventはmap truthではない。best-effortで保存し、raw記録を待たせない。採否はraw evidenceからreplayする。
 
-## 初回実機feedbackへの対応
+## 実機S0でのみ確認する項目
 
-最初のField-test runで次のP0問題が確認された。
+- 実際の位置権限導線
+- 本物のGNSS精度、欠落、multipath、ジャンプ
+- 画面OFF・ポケット内でのcallback継続
+- foreground-service notificationの端末差
+- OEMのbackground killと省電力設定
+- 電池消費と発熱
+- 発見入力の身体的・認知的負荷
+- 実際の場所を三表示から思い出せるか
+- Timelineや一般GPS loggerより「自分の探索で地図が育つ」と感じるか
 
-- `探索を終了`でエラーが出てReviewへ進めなかった
-- 地図を終了まで隠すUXでは、マッピングが進む体験を感じられなかった
-- 細いGNSS軌跡は粗く見え、Google Maps Timelineや一般GPS loggerとの差別化が不足していた
-
-対応済み:
-
-- Issue #40: provider停止・diagnostics・Review失敗で終了不能にしない
-- Issue #41: foreground時だけ成長中PersonalMapを一定間隔で表示
-- Issue #42の比較実装: thin track、accuracy-aware explored corridor、coverage cells
-- Android emulator E2E: 終了、復帰、marker、notification、永続化を実地試験前に保証
-
-最初のrunはGo / Narrow / Stop測定完了として数えない。Issue #42は実際の場所での差別化判定までopenとする。
-
-## PDR / GPS-denied技術ゲート
-
-ユーザー提供の詳細調査を`docs/PDR_TECHNOLOGY_GATE.md`へ反映済み。Issue #5も同文書に同期した。
-
-現在の判断:
-
-- 任意端末・任意持ち方・長距離のIMU-only GPS代替はStop寄り
-- 100〜300m、入口・出口などのアンカー間、短いGNSS欠落補完はNarrow候補
-- 最も合理的な候補は`sparse GNSS + manual anchor + uncertainty-aware PDR`
-- Issue #5開始時にAndroidへ学習モデルを入れない
-- 最初にKotlin native raw sensor loggerとimmutable / replayable evidenceを作る
-- 同じraw logをAndroid Step Detector baseline、classical PDR、RoNIN、EqNIO、sparse-GNSS hybridへreplayする
-- high-rate IMUをmapping-coreやJS bridgeへ直接流さない
-- learned code / weightsはproduct packageから隔離し、licenseと端末一般化を別に判定する
-- map matchingはoptional inferenceでありPersonalMap truthにしない
-
-Issue #5はIssue #3と#4にblocked。GNSS M0とマッピング単体価値が未成立のままPDR実装へ逃げない。
-
-## 現在の未検証部分
-
-build、静的検査、エミュレータ上のUI / lifecycle / storageは成立している。次は実端末でしか確認できない項目。
-
-- Androidの実際のforeground / background権限導線
-- 実端末のforeground-service notificationと復帰差
-- 画面OFF・ポケット内で30〜60分記録が続くこと
-- OS・端末メーカーによる停止、復帰、recents dismissal、battery saver
-- 実GNSSの欠落率、位置精度、異常ジャンプ
-- 電池消費、発熱
-- foregroundへ戻った時に成長中地図が十分早く更新されること
-- 発見入力の身体的・認知的中断時間
-- explored-space表現が実際の探索でthin trackやTimeline以上の価値を持つこと
-
-したがって、現時点で「実機MVP完成」または「Google Maps Timelineとの差別化成立」とは判定しない。
+したがって、現時点では「実機MVP完成」や「Google Maps Timelineとの差別化成立」とはまだ判定しない。
 
 ## 次の順序
 
-1. **Issue #42 / 内部比較**: 矩形、loop、往復、広場、疎なGNSS、精度混在、複数sessionを擬似経路で比較し、corridor / cellの誤認と見え方を詰める
-2. **Issue #42 / UX調整**: エミュレータ証跡をもとに、表示説明、濃さ、cell粒度、live previewの情報量を調整
-3. 変更後のField-test APKでDocker、署名、Android Emulator lifecycle / coverage / notification / marker gateをすべて再実行
-4. **Issue #3 / 短い実機S0**: 内部ゲート完了後、1回の短い探索だけで権限、実GNSS、screen-off、notification、終了、marker、再起動を確認
-5. 同じ実地データ上で探索範囲 / セル / 軌跡を切替え、追加歩行なしにIssue #42を比較
-6. **Issue #3 / baseline・core test**: 必要性が確認された場合に限り、foregroundとbackgroundの30分以上runを比較
-7. **Issue #3 / resilience**: permission変更、battery saver、recents dismissal、OEM差を追加測定
-8. **Issue #4**: 基本不具合を実地へ持ち込まない状態で、実探索によるPassive-first UXとPersonalMap価値をGo / Narrow / Stop判定
-9. **Issue #19**: 実測でView rendererが問題になった場合だけ、最新mainからSVG / Skiaを再評価
-10. **Issue #22**: GPX / GeoJSON / lossless bundleを実装
-11. Issue #3と#4の後、**Issue #5**でraw sensor loggerとoffline PDR技術ゲートを開始
-12. PDR判定後にGPSなし探索とanchor transformの製品統合範囲を決める
+1. **Issue #3 / S0**: 5〜10分の安全な既知routeを一回だけ記録
+2. 同じraw evidenceで`不確実性 / 通過セル / 軌跡`を切替比較
+3. S0 Pass後、30分以上のforeground・画面ON baseline
+4. 同等条件でbackground・画面OFF・ポケットrun
+5. 途中marker、notification復帰、process recreation、recents dismissal、battery saver、OEM差
+6. Issue #3をGo / Narrow / Stop判定
+7. Issue #4で複数runのPassive-first UXとPersonalMap価値を判定
+8. export、renderer性能などM0後続を必要性順に実装
+9. Issue #3と#4の後だけIssue #5 PDR gateへ進む
+
+表示ごとに歩き直さない。一回のraw runから全表示を再生成する。
+
+## PDR / GPS-denied
+
+ユーザー提供調査を`docs/PDR_TECHNOLOGY_GATE.md`とIssue #5へ反映済み。
+
+- 全面的なIMU-only GPS代替はStop寄り
+- 100〜300m、anchor間、短いGNSS欠落補完はNarrow候補
+- 最初はKotlin native raw sensor loggerとimmutable / replayable evidence
+- 同じlogをStep Detector baseline、classical PDR、RoNIN、EqNIO、sparse-GNSS hybridへoffline replay
+- high-rate IMUをmapping-coreやJS bridgeへ直接流さない
+- learned modelを比較前にAndroidへ統合しない
+- PDR出力、factor graph、map matchingはderived revision / optional inferenceでありraw truthを上書きしない
+
+PDRはGNSS M0の不具合や差別化不足を隠すために先行導入しない。
 
 ## 今はやらないこと
 
-- 正確な壁、部屋、道幅の自動推定
-- カメラ常時起動、AR、LiDARスキャン
-- ソーシャル、ランキング、広告、クラウド同期
-- 収集、実績、物語などのゲーム本体
-- OpenStreetMap等への編集投稿
-- 「山」「街」「建物」など用途別モードの増殖
-- 二つ目のappがない段階での動的plugin loaderやnpm package公開
-- 精度未検証PDRの既定有効化
-- Android ML modelの先行統合
-- Expo JS listenerだけによる100〜200Hz screen-off sensor保存
-- 生加速度の単純二重積分
-- 磁気方位の無条件採用
-- 自動telemetry / analytics service
-- Google道路へmap matchingした結果をPersonalMapの正本にすること
-- 基本UI、終了、marker、notification、保存のデバッグをユーザーの実地歩行へ委ねること
+- 正確な壁、部屋、道路幅の自動推定
+- camera常時起動、AR、LiDARを基本UXにする
+- cloud同期、social、ranking、広告
+- game本体をmapping coreへ混ぜる
+- existing mapへの強制snapをPersonalMap truthにする
+- accuracy円を探索済み面積として保存・集計する
+- emulatorで再現できるbugを実地試験へ回す
+- PDRやMLを価値検証前に既定有効化する
 
 ## 変更してはいけない原則
 
-以下は要約であり、完全な定義と変更手続きは `PRODUCT_CONSTITUTION.md` に従う。
+以下は要約であり、完全な定義と変更手続きは`PRODUCT_CONSTITUTION.md`に従う。
 
-- 一回目で地図を作る。再訪は登録条件ではなく補正材料。
+- 一回目で地図を作る。再訪は登録条件ではない。
 - 探索中の主役は現実空間であり、画面ではない。
-- Passive-firstはmap-invisibleではない。意図して開いた時は進捗を確認できる。
-- マップの正本はユーザーの探索証拠。
-- ExplorationSessionは証拠の単位、PersonalMapは複数sessionから育つ集約。
+- Passive-firstはmap-invisibleではない。
+- 地図の正本はユーザーの探索証拠。
+- ExplorationSessionは証拠の単位、PersonalMapは育つ集約。
 - 既存地図は任意の補助レイヤー。
-- 不確かな推定を、確かな地物や接続として描かない。
-- canonicalな地図変更は明示的なapplication boundaryを通す。
-- UI、renderer、game、experienceはcanonical mapを直接変更しない。
-- game / experienceはread-onlyで、地図修正はユーザー確認後の明示commandにする。
-- diagnosticsはmap truthと分離し、raw evidenceから採否を再計算する。
-- 独自価値のない一般部品はOSS・標準・platformを先に調査する。
+- 不確かな推定を確定地物、接続、面積として扱わない。
+- canonical writeは制御されたapplication boundaryを通す。
+- game / experienceはread-only。
+- diagnosticsとderived inferenceをmap truthから分離する。
+- 独自価値のない一般部品はOSS、標準、platformを先に調査する。
 - 位置履歴は高感度かつユーザー所有で、local-firstを既定にする。
-- 実地試験はユーザーコストが高い。エミュレータで検出できる問題を実地へ持ち込まない。
+- 実地試験は高コストであり、内部検証可能な問題を持ち込まない。
