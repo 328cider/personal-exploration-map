@@ -35,4 +35,8 @@ export interface FieldTestEnvironmentSnapshot {
 
 export interface FieldTestDiagnosticsNativeModule {
   captureEnvironmentSnapshotAsync(): Promise<FieldTestEnvironmentSnapshot>;
+  writeFieldTestTextFileAsync(
+    fileName: string,
+    content: string,
+  ): Promise<string>;
 }
