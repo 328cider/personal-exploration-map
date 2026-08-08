@@ -31,6 +31,23 @@ corridor / coverage cells / thin track
 
 renderer、game、experienceはこの表示を根拠にcanonical mapを書き換えない。
 
+## Build / Adopt判断
+
+位置取得、SQLite、Android emulator lifecycleは既存platform / OSSへ任せる。
+
+今回のcorridorとcellは、汎用GIS buffer engineを再実装するものではない。TrackPointがすでにメートル単位のPersonalMap local frameへ投影されており、必要なのは画面上の比較表示だけである。
+
+`Turf buffer`やGEOS系ライブラリも候補になるが、M0では採用しない。
+
+- 正式なGeoJSON polygonやpolygon unionを生成しない
+- corridorをcanonical geometryとして保存・exportしない
+- 道路・敷地・部屋の境界を演算しない
+- dependencyと複雑なpolygon edge caseを増やす価値がまだない
+
+したがって、M0はscreen-space capsuleとlocal-frame cell集約に限定する。将来、探索範囲polygonのexport、面積計算、複数端末間unionが製品要件になった場合は、独自polygon処理を増やさず、既存GIS OSSを再評価する。
+
+描画primitive自体の大量View問題は別論点であり、`react-native-svg`等の既存rendererへの移行候補を引き続き比較する。
+
 ## 比較する3表示
 
 ### 1. 探索範囲（既定）
@@ -50,7 +67,7 @@ accepted trackの周囲に半透明corridorを描く。
 観測範囲をローカル座標上のセルへ集約する。
 
 - 一回目から即時にセルを表示
-- 再訪は登録条件ではなく、visit数とconfidenceによる濃さの改善に使う
+- 再訪は登録条件ではなく、観測の重なりとconfidenceによる濃さの改善に使う
 - 1つのExplorationSession内だけ補間し、session間を補間しない
 - セルサイズは範囲と点数に応じて6〜60mで自動調整
 - 描画セル数は最大1,400個
