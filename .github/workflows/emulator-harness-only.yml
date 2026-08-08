@@ -5,6 +5,7 @@ on:
     paths:
       - ".github/workflows/emulator-harness-only.yml"
       - "scripts/android-emulator-smoke.py"
+      - "scripts/android-emulator-smoke-runner.py"
       - "scripts/android-emulator-coverage-modes.py"
       - "scripts/android-emulator-interaction-smoke.py"
       - "scripts/android-emulator-interaction-runner.py"
@@ -13,10 +14,9 @@ on:
 permissions:
   contents: read
   actions: read
-  pull-requests: read
 
 concurrency:
-  group: emulator-harness-only-v2-${{ github.ref }}
+  group: emulator-harness-only-v3-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -32,74 +32,74 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Confirm this PR changes only the emulator harness
-        id: scope
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          set -euo pipefail
-          changed_files="$(
-            gh api --paginate \
-              "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" \
-              --jq '.[].filename'
-          )"
-          printf '%s\n' "$changed_files"
-
-          if grep -Eq '^(apps/mobile/|packages/|package\.json$|package-lock\.json$|\.nvmrc$)' <<<"$changed_files"; then
-            echo "eligible=false" >> "$GITHUB_OUTPUT"
-            echo "App or dependency files changed; the full devex-field-test APK run is authoritative."
-          else
-            echo "eligible=true" >> "$GITHUB_OUTPUT"
-            echo "Only harness-side files changed; a compatible signed APK may be reused."
-          fi
-
-      - name: Report full-APK handoff
-        if: steps.scope.outputs.eligible != 'true'
-        run: >-
-          echo "Harness-only emulator execution skipped because this PR changes the app or dependency graph."
-
-      - uses: actions/setup-java@v5
-        if: steps.scope.outputs.eligible == 'true'
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Find the newest compatible Field-test APK from this PR branch
-        if: steps.scope.outputs.eligible == 'true'
+      - name: Find a signed APK compatible with the current app tree
         id: source
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_BRANCH: ${{ github.head_ref }}
+          BASE_BRANCH: ${{ github.base_ref }}
+          CURRENT_HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          selected=""
-          while IFS= read -r run_id; do
+          selected_run=""
+          selected_sha=""
+
+          candidate_runs() {
+            for branch in "$HEAD_BRANCH" "$BASE_BRANCH"; do
+              gh api \
+                "repos/$GITHUB_REPOSITORY/actions/workflows/devex-field-test.yml/runs?event=pull_request&branch=$branch&status=completed&per_page=30" \
+                --jq '.workflow_runs[] | [.id, .head_sha] | @tsv'
+            done
+          }
+
+          while IFS=$'\t' read -r run_id run_sha; do
+            [ -n "$run_id" ] || continue
             artifact_count="$(
               gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/artifacts" \
                 --jq '[.artifacts[] | select(.name == "personal-exploration-map-field-test" and .expired == false)] | length'
             )"
-            if [ "$artifact_count" -gt 0 ]; then
-              selected="$run_id"
-              break
-            fi
-          done < <(
-            gh api \
-              "repos/$GITHUB_REPOSITORY/actions/workflows/devex-field-test.yml/runs?event=pull_request&branch=$HEAD_BRANCH&status=completed&per_page=30" \
-              --jq '.workflow_runs[].id'
-          )
+            [ "$artifact_count" -gt 0 ] || continue
 
-          if [ -z "$selected" ]; then
-            echo "No non-expired Field-test APK artifact exists for branch $HEAD_BRANCH." >&2
-            echo "Run the full devex-field-test workflow after an app/package change." >&2
+            compare_status="$(
+              gh api "repos/$GITHUB_REPOSITORY/compare/$run_sha...$CURRENT_HEAD" \
+                --jq '.status' 2>/dev/null || true
+            )"
+            if [ "$compare_status" != "ahead" ] && [ "$compare_status" != "identical" ]; then
+              continue
+            fi
+
+            changed_files="$(
+              gh api "repos/$GITHUB_REPOSITORY/compare/$run_sha...$CURRENT_HEAD" \
+                --jq '.files[]?.filename' 2>/dev/null || true
+            )"
+            printf 'Candidate APK run %s at %s; changes since build:\n%s\n' \
+              "$run_id" "$run_sha" "$changed_files"
+
+            if grep -Eq '^(apps/mobile/|packages/|package\.json$|package-lock\.json$|\.nvmrc$|scripts/prepare-field-test-sources\.mjs$)' <<<"$changed_files"; then
+              continue
+            fi
+
+            selected_run="$run_id"
+            selected_sha="$run_sha"
+            break
+          done < <(candidate_runs)
+
+          if [ -z "$selected_run" ]; then
+            echo "No signed APK matches the current app/package tree." >&2
+            echo "The full devex-field-test workflow must produce one first." >&2
             exit 1
           fi
 
-          echo "run_id=$selected" >> "$GITHUB_OUTPUT"
-          echo "Reusing Field-test APK from workflow run $selected"
+          echo "run_id=$selected_run" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$selected_sha" >> "$GITHUB_OUTPUT"
+          echo "Reusing signed Field-test APK from run $selected_run at $selected_sha"
 
-      - name: Download the previously built and signed APK
-        if: steps.scope.outputs.eligible == 'true'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Download the compatible signed APK
         uses: actions/download-artifact@v4
         with:
           name: personal-exploration-map-field-test
@@ -108,7 +108,6 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Record harness source
-        if: steps.scope.outputs.eligible == 'true'
         run: |
           mkdir -p "$EVIDENCE_DIR"
           cat > "$EVIDENCE_DIR/harness.json" <<JSON
@@ -119,12 +118,13 @@ jobs:
             "target": "google_apis",
             "arch": "x86_64",
             "apkWorkflowRunId": "${{ steps.source.outputs.run_id }}",
-            "mode": "harness-only"
+            "apkHeadSha": "${{ steps.source.outputs.head_sha }}",
+            "currentHeadSha": "${{ github.event.pull_request.head.sha }}",
+            "mode": "harness-only-compatible-apk"
           }
           JSON
 
       - name: Enable KVM group permissions
-        if: steps.scope.outputs.eligible == 'true'
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -132,7 +132,6 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Run lifecycle, coverage, notification and marker checks on Android 15
-        if: steps.scope.outputs.eligible == 'true'
         uses: ReactiveCircus/android-emulator-runner@v2.37.0
         with:
           api-level: 35
@@ -149,7 +148,7 @@ jobs:
           script: bash scripts/run-android-emulator-e2e.sh "$APK_PATH" "$EVIDENCE_DIR"
 
       - name: Upload emulator screenshots, hierarchy and logs
-        if: always() && steps.scope.outputs.eligible == 'true'
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: personal-exploration-map-emulator-harness-only
