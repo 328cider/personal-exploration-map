@@ -13,6 +13,7 @@ on:
 permissions:
   contents: read
   actions: read
+  pull-requests: read
 
 concurrency:
   group: emulator-harness-only-${{ github.ref }}
@@ -23,9 +24,48 @@ env:
   EVIDENCE_DIR: artifacts/emulator-e2e
 
 jobs:
+  classify:
+    name: Classify emulator-only change
+    runs-on: ubuntu-latest
+    outputs:
+      harness_only: ${{ steps.classify.outputs.harness_only }}
+    steps:
+      - name: Require every changed file to be harness-only
+        id: classify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          harness_only=true
+          while IFS= read -r path; do
+            case "$path" in
+              .github/workflows/emulator-harness-only.yml|\
+              scripts/android-emulator-smoke.py|\
+              scripts/android-emulator-coverage-modes.py|\
+              scripts/android-emulator-interaction-smoke.py|\
+              scripts/android-emulator-interaction-runner.py|\
+              scripts/run-android-emulator-e2e.sh)
+                echo "Harness-only: $path"
+                ;;
+              *)
+                harness_only=false
+                echo "Exact APK rebuild required by: $path"
+                ;;
+            esac
+          done < <(
+            gh api --paginate \
+              "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" \
+              --jq '.[].filename'
+          )
+          echo "harness_only=$harness_only" >> "$GITHUB_OUTPUT"
+
   emulator-e2e:
     name: Android emulator harness-only gate
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    needs: classify
+    if: >-
+      needs.classify.outputs.harness_only == 'true' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
