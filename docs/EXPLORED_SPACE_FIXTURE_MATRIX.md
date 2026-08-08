@@ -4,16 +4,16 @@
 
 ## 目的
 
-実地試験はユーザーの移動・時間・端末操作コストが高い。探索範囲やセルの基本的な形状問題をユーザーの歩行でデバッグしないため、rendererへ再現可能なlocal-coordinate fixtureを与え、`探索範囲 / セル / 軌跡`を同じ入力から比較する。
+実地試験はユーザーの移動・時間・端末操作コストが高い。位置の不確実性、推定通過セル、中心線の形状と意味をユーザーの歩行でデバッグしないため、rendererへ再現可能なlocal-coordinate fixtureを与える。
 
-このmatrixは実GNSS、Android background lifecycle、電池、身体的UXを評価しない。以下を内部で先に検出する。
+このmatrixは実GNSS、Android background lifecycle、電池、身体的UX、Google Maps Timelineとの差別化を証明しない。次を内部で先に検出する。
 
 - loopやturnが読めない
 - 往復経路を道路幅のように誤認させる
-- 広場状の探索が線にしか見えない
-- 精度の悪い点が確定境界のように見える
+- 広場状の移動が線にしか見えない
+- poor accuracyが探索済み面積を増やす
+- 同一sessionのsample densityを再訪と数える
 - 離れたExplorationSessionを偽接続する
-- 再訪が登録条件になっている
 - primitive数が無制限に増える
 
 ## Fixture
@@ -21,30 +21,32 @@
 | ID | 形状 | 主な問い |
 |---|---|---|
 | `rectangle-loop` | 四辺の矩形loop | 4回のturnとstart=end topologyを認識できるか |
-| `out-and-back` | 一本道の往復 | 重なりが再訪に見え、太い道路の確定形状に見えないか |
-| `plaza-sweep` | 広場を蛇行して面状に探索 | 線の履歴ではなく探索した空間として読めるか |
-| `sparse-mixed-accuracy` | 点が疎でaccuracy / confidenceが混在 | 不確実性を見せつつ境界を断定しないか |
-| `separated-sessions` | 離れた2つのExplorationSession | session間に偽のcorridorや線を作らないか |
-| `overlapping-sessions` | ほぼ同じ場所を2回探索 | 一回目から成立し、再訪は観測の濃さだけを改善するか |
+| `out-and-back` | 一つのsession内で一本道を往復 | 重なりを再訪sessionと誤集計しないか |
+| `plaza-sweep` | 広場を蛇行して面状に移動 | conservative cellsで空間的な蓄積が読めるか |
+| `sparse-mixed-accuracy` | 点が疎でaccuracy / confidenceが混在 | uncertaintyは広がるがcoverage footprintは増えないか |
+| `separated-sessions` | 離れた2つのExplorationSession | session間に偽のband、cell、lineを作らないか |
+| `overlapping-sessions` | ほぼ同じ場所を別sessionで2回探索 | 一回目から成立し、別sessionだけがsupportを強めるか |
 
 ## 比較表示
 
-各fixtureを次の3列で出力する。
+各fixtureを同じ入力から次の3列で出力する。
 
-1. `Explored corridor`
-   - horizontal accuracyとconfidence由来の推定探索範囲
-   - accepted route中心線を併記
-2. `Coverage cells`
-   - adaptive cellへ観測範囲を集約
-   - overlapping observationをvisit数と濃さへ反映
-3. `Thin track`
-   - 一般GPS logger型の比較baseline
+1. `Location uncertainty`
+   - horizontal accuracy由来の薄いband
+   - accuracyが悪いほど広く、かつ薄い
+   - accepted point-estimate centerlineを併記
+2. `Conservative passage cells`
+   - point-estimate pathの近くを固定coreで集約
+   - accuracyはcell footprintではなくconfidenceへ反映
+   - `supportingSessionCount`はsupporting ExplorationSession数
+3. `Point-estimate track`
+   - accepted centerlineの比較baseline
 
 出力はrenderer-derived evidenceであり、canonical PersonalMapではない。
 
 ## 実装境界
 
-`scripts/render-explored-space-fixtures.ts`は、製品と同じ`buildExploredSpaceGeometry`をimportする。fixture専用にcorridor / cellアルゴリズムを複製しない。
+`scripts/render-explored-space-fixtures.ts`は、製品と同じ`buildExploredSpaceGeometry`をimportする。fixture専用にuncertainty / cellアルゴリズムを複製しない。
 
 ```text
 fixture local observations
@@ -68,9 +70,65 @@ SVG matrix + JSON metrics
 - すべてのfixtureが一回の入力から描画される
 - rendered centerlineは1,201点以下
 - cellは1,400個以下
-- separated sessionsのcorridor数は各session内のedge数の合計と一致する
-- overlapping sessionsは少なくとも1つのcellを複数回観測する
-- mixed accuracyは異なるcorridor幅を生成する
+- separated sessionsのuncertainty band数は各session内edge数の合計と一致する
+- out-and-backの`maximumSupportingSessions`は1のまま
+- overlapping sessionsでは少なくとも1つのcellが2 sessionから支持される
+- mixed accuracyは異なるuncertainty幅を生成する
+- mixed accuracyとall-accurate counterpartのcell ID集合は一致する
+- mixed accuracyの平均cell confidenceはall-accurate counterpartより低い
+
+## Issue #54適用後の結果
+
+6 fixture × 3表示、計18 panelを生成し、全assertionが成功した。
+
+| Fixture | Points | Uncertainty bands | Cells | Cell size | Avg cell confidence | Max session visits |
+|---|---:|---:|---:|---:|---:|---:|
+| rectangle loop | 31 | 30 | 100 | 6m | 0.8481 | 1 |
+| out and back | 21 | 20 | 38 | 6m | 0.8221 | 1 |
+| plaza sweep | 89 | 88 | 250 | 6m | 0.7962 | 1 |
+| sparse mixed accuracy | 5 | 4 | 53 | 6m | 0.3590 | 1 |
+| separated sessions | 25 | 23 | 54 | 6m | 0.8250 | 1 |
+| overlapping sessions | 26 | 24 | 45 | 6m | 0.7872 | 2 |
+
+### 旧実装との差
+
+| Fixture | 旧cells | 新cells | 旧max visits | 新max session visits |
+|---|---:|---:|---:|---:|
+| rectangle loop | 149 | 100 | 9 | 1 |
+| out and back | 78 | 38 | 12 | 1 |
+| plaza sweep | 413 | 250 | 11 | 1 |
+| sparse mixed accuracy | 279 | 53 | 17 | 1 |
+| separated sessions | 100 | 54 | 8 | 1 |
+| overlapping sessions | 79 | 45 | 14 | 2 |
+
+旧`visits`はaccuracy円とsample densityを数えていたため、同一sessionでも大きな値になっていた。新`supportingSessionCount`はcellを支持するExplorationSession数であり、往復や高密度sampleを再訪sessionと偽装しない。
+
+`sparse-mixed-accuracy`は279 cellから53 cellへ減少した。より重要なのは数の減少そのものではなく、同じ座標をすべて高精度にしたcounterpartとcell ID集合が一致し、poor accuracyがcoverage footprintを増やさなくなったことである。accuracyの悪化は平均cell confidence低下として残る。
+
+## 成立した点
+
+- rectangle、turn、loopはcenterlineで認識できる
+- plaza sweepはconservative cellsで空間的な蓄積が見える
+- separated sessionsはband、cell、lineのいずれでも偽接続されない
+- 一回目からcellが生成され、再訪を登録条件にしない
+- 同一sessionのout-and-backは`supportingSessionCount=1`
+- 別sessionのoverlapだけが`supportingSessionCount=2`
+- mixed accuracyはuncertainty幅へ現れ、cell面積へ現れない
+- primitive数は設定した上限内に収まる
+
+## 残る表示上の課題
+
+### Uncertainty bandのカプセル列
+
+rectangleやplazaではscreen-space capsuleが規則的に連なり、連続した確率分布というより円の列に見える場合がある。意味上はcoverageから分離できたが、最終的な視覚品質は完成扱いにしない。
+
+### Passage cellの粒度
+
+cell sizeが粗すぎるとturnやgapを消し、細かすぎるとゲーム塗りに見える。現在の6〜60m adaptive ruleはM0比較用であり、正式な探索面積やFog unlock規則ではない。
+
+### 再訪強度
+
+別sessionによるsupport増加はopacityへ反映するが、それをユーザーへ強調する価値があるかは未確定である。再訪は登録条件にせず、必要以上に「周回ゲーム」の見た目へ寄せない。
 
 ## Artifact
 
@@ -79,70 +137,16 @@ GitHub Actions `explored-space-fixtures`は次を保存する。
 - `fixture-matrix.svg`
 - `fixture-matrix.json`
 
-SVGは視覚レビュー、JSONはprimitive数・cell size・visit数の比較に使用する。
+SVGは視覚レビュー、JSONはprimitive数、cell size、平均confidence、supporting session数の比較に使用する。
 
-## 初回matrixの結果
+## 次の判定
 
-初回runは6 fixture × 3表示、計18 panelを生成し、全assertionが成功した。
+内部fixtureとAndroid Emulator E2Eがgreenになった後、1回の短い実routeだけを記録し、同じraw evidenceで三表示を切り替える。表示ごとに歩き直さない。
 
-主な数値:
+次のいずれかならredesignする。
 
-| Fixture | Points | Corridors | Cells | Cell size | Max visits |
-|---|---:|---:|---:|---:|---:|
-| rectangle loop | 31 | 30 | 149 | 6m | 9 |
-| out and back | 21 | 20 | 78 | 6m | 12 |
-| plaza sweep | 89 | 88 | 413 | 6m | 11 |
-| sparse mixed accuracy | 5 | 4 | 279 | 6m | 17 |
-| separated sessions | 25 | 23 | 100 | 6m | 8 |
-| overlapping sessions | 26 | 24 | 79 | 6m | 14 |
-
-### 成立した点
-
-- rectangle、turn、loopは中心線で認識できる
-- plaza sweepはcell表示で面状の蓄積が見える
-- separated sessionsはline、corridor、cellのいずれでも偽接続されない
-- 一回目からcellが生成され、再訪は登録条件になっていない
-- overlapping observationsはcell visit数を増やす
-- mixed accuracyは異なるcorridor幅を生成する
-- primitive数は設定した上限内に収まる
-
-### 発見した問題
-
-#### Corridorのカプセル列
-
-rectangleやplazaでは、screen-space capsuleが規則的に連なり、連続した探索面より「円の列」に見える。位置の不確実性は表現できるが、完成した地図表現とは扱えない。
-
-#### Accuracyとcoverageの意味が混ざっている
-
-`sparse-mixed-accuracy`はわずか5点から279 cellを生成した。horizontal accuracyは「真の位置がどこにあるかの不確実性」であり、その円内すべてを探索した証拠ではない。
-
-現在のcellはaccuracy円内の全cellへvisitを加えるため、精度が悪いほど探索済み面積が増えたように見える。これは`不確かな推定を事実にしない`原則と衝突する可能性がある。
-
-この問題はIssue #54で、次の分離として扱う。
-
-```text
-estimated path / point estimate
-+ location uncertainty distribution
-+ conservative or probabilistic explored coverage
-```
-
-PR #53は比較基盤を追加するものであり、現在のcoverage semanticsを完成扱いにしない。
-
-#### 再訪強度の可読性
-
-out-and-backとoverlapping sessionsではvisit数は増えているが、画面上の濃さ差は小さい。再訪が登録条件ではないことを維持しつつ、観測の重なりをユーザーへ示す必要が本当にあるかも含めて再評価する。
-
-## 判定への使い方
-
-このmatrixだけでGoogle Maps Timelineとの差別化を証明しない。役割は候補を絞り、実地試験へ持ち込む表示上・意味上の明らかな問題を減らすことである。
-
-内部レビューで次が起きた場合は、実地試験前に調整する。
-
-- corridorがカプセルの列にしか見えず、面として理解できない
-- cellが粗すぎてturnやgapを消す
-- cellがゲーム塗りにしか見えず、観測根拠を理解できない
-- loopや往復のtopologyを破壊する
-- mixed accuracyが道路幅または探索済み面積の変化に見える
-- separated sessionsの間が埋まる
-
-Issue #54でuncertaintyとcoverageを分離し、内部fixtureとAndroid emulator E2Eの両方がgreenになった後、1回の短い実地データで表示を切り替えて評価する。表示ごとに歩き直さない。
+- uncertaintyが探索済み面積または道路幅に見える
+- passage cellが観測根拠のないゲーム塗りに見える
+- loopや往復のtopologyを壊す
+- separated sessionsの間を埋める
+- centerline以外の表示がGoogle Maps Timelineとの差を生まない
