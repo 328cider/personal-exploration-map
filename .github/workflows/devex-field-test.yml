@@ -28,7 +28,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: devex-field-test-v8-${{ github.ref }}
+  group: devex-field-test-v9-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -42,6 +42,11 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+      - name: Parse the Windows USB collection script
+        shell: pwsh
+        run: |
+          $source = [System.IO.File]::ReadAllText("scripts/pull-field-test-bundle.ps1")
+          [void][ScriptBlock]::Create($source)
       - name: Build pinned development image
         run: docker compose build
       - name: Run committed dependency graph and mobile checks
@@ -167,11 +172,53 @@ jobs:
             -no-boot-anim -camera-back none -camera-front none
           disable-animations: true
           script: |
+            set -euo pipefail
             bash scripts/run-android-emulator-e2e.sh "$APK_PATH" "$EVIDENCE_DIR"
-            adb shell run-as "$FIELD_TEST_PACKAGE" sh -c 'test -f databases/personal-exploration-map.db'
-            adb shell run-as "$FIELD_TEST_PACKAGE" sh -c 'cat databases/personal-exploration-map.db' > "$EVIDENCE_DIR/extracted-database.db"
-            test -s "$EVIDENCE_DIR/extracted-database.db"
-            adb shell run-as "$FIELD_TEST_PACKAGE" sh -c "sqlite3 databases/personal-exploration-map.db \"SELECT COUNT(*) FROM tracking_diagnostic_events WHERE kind IN ('environment.session.started','environment.session.ended');\"" > "$EVIDENCE_DIR/environment-event-count.txt" || true
+
+            adb shell am force-stop "$FIELD_TEST_PACKAGE"
+            adb shell run-as "$FIELD_TEST_PACKAGE" id | tee "$EVIDENCE_DIR/run-as.txt"
+            grep -q "uid=" "$EVIDENCE_DIR/run-as.txt"
+
+            adb exec-out run-as "$FIELD_TEST_PACKAGE" tar -cf - databases > "$EVIDENCE_DIR/app-databases.tar"
+            mkdir -p "$EVIDENCE_DIR/extracted-app-data"
+            tar -xf "$EVIDENCE_DIR/app-databases.tar" -C "$EVIDENCE_DIR/extracted-app-data"
+
+            python3 - <<'PY'
+            import json
+            import pathlib
+            import sqlite3
+
+            root = pathlib.Path("artifacts/emulator-e2e/extracted-app-data")
+            database = next(root.rglob("personal-exploration-map.db"))
+            connection = sqlite3.connect(database)
+            rows = connection.execute(
+                "SELECT kind, payload_json FROM tracking_diagnostic_events "
+                "WHERE kind IN ('environment.session.started','environment.session.ended') "
+                "ORDER BY occurred_at"
+            ).fetchall()
+            connection.close()
+            kinds = [row[0] for row in rows]
+            assert "environment.session.started" in kinds, kinds
+            assert "environment.session.ended" in kinds, kinds
+            payloads = [json.loads(row[1]) for row in rows if row[1]]
+            required = {
+                "manufacturer",
+                "model",
+                "androidVersion",
+                "batteryLevelPercent",
+                "elapsedRealtimeMs",
+                "backgroundLocationGranted",
+                "notificationGranted",
+                "isDebuggable",
+            }
+            assert payloads, "environment payloads are missing"
+            assert required.issubset(payloads[0]), sorted(payloads[0])
+            assert payloads[0]["isDebuggable"] is True, payloads[0]
+            pathlib.Path("artifacts/emulator-e2e/environment-events.json").write_text(
+                json.dumps(payloads, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            PY
       - name: Upload emulator screenshots, UI hierarchy and logs
         if: always()
         uses: actions/upload-artifact@v4
