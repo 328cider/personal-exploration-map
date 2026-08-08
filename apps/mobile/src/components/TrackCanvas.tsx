@@ -30,8 +30,8 @@ const DISPLAY_MODES: readonly {
   readonly value: MapDisplayMode;
   readonly label: string;
 }[] = [
-  { value: "corridor", label: "探索範囲" },
-  { value: "cells", label: "セル" },
+  { value: "uncertainty", label: "不確実性" },
+  { value: "cells", label: "通過セル" },
   { value: "track", label: "軌跡" },
 ];
 
@@ -72,21 +72,21 @@ function modeDescription(
   cellSizeMeters: number | null,
 ): string {
   switch (mode) {
-    case "corridor":
-      return "面は位置精度から推定した探索範囲です。道路・敷地・部屋の境界ではありません。";
+    case "uncertainty":
+      return "薄い帯は、実際の位置がこの付近だった可能性を示します。探索済み面積、道路幅、敷地や部屋の境界ではありません。";
     case "cells":
       return cellSizeMeters === null
-        ? "位置情報が集まると、観測範囲を探索セルとして表示します。"
-        : `観測範囲を約${Math.round(cellSizeMeters)}m単位で集約しています。再訪は色の濃さに反映されます。`;
+        ? "位置情報が集まると、採用済み経路の近くを推定通過セルとして表示します。"
+        : `採用済み経路の近くを約${Math.round(cellSizeMeters)}m単位の推定通過セルとして表示します。位置精度が悪くてもセル面積は広げず、確信度だけを下げます。別の探索で再び通ったセルは少し濃くなります。`;
     case "track":
-      return "採用済み位置の中心線です。GPSロガーとの比較用に残しています。";
+      return "採用済み位置の中心推定を線で表示します。正確な道路線ではありません。";
   }
 }
 
 export function TrackCanvas({ height = 360, snapshot }: TrackCanvasProps) {
   const [width, setWidth] = useState(0);
   const [displayMode, setDisplayMode] =
-    useState<MapDisplayMode>("corridor");
+    useState<MapDisplayMode>("uncertainty");
   const sourceSegments = useMemo(() => snapshotSegments(snapshot), [snapshot]);
   const geometry = useMemo(
     () =>
@@ -189,22 +189,22 @@ export function TrackCanvas({ height = 360, snapshot }: TrackCanvasProps) {
             ))
           : null}
 
-        {displayMode === "corridor"
-          ? geometry.corridors.map((corridor) => (
+        {displayMode === "uncertainty"
+          ? geometry.uncertaintyBands.map((band) => (
               <View
-                key={`corridor-${corridor.id}`}
+                key={`uncertainty-${band.id}`}
                 accessibilityElementsHidden
                 importantForAccessibility="no-hide-descendants"
                 style={[
-                  styles.corridor,
+                  styles.uncertaintyBand,
                   {
-                    left: corridor.left,
-                    top: corridor.top,
-                    width: corridor.length,
-                    height: corridor.width,
-                    borderRadius: corridor.width / 2,
-                    opacity: corridor.opacity,
-                    transform: [{ rotateZ: `${corridor.angleRadians}rad` }],
+                    left: band.left,
+                    top: band.top,
+                    width: band.length,
+                    height: band.width,
+                    borderRadius: band.width / 2,
+                    opacity: band.opacity,
+                    transform: [{ rotateZ: `${band.angleRadians}rad` }],
                   },
                 ]}
               />
@@ -311,13 +311,13 @@ export function TrackCanvas({ height = 360, snapshot }: TrackCanvasProps) {
         </View>
       </View>
 
-      <View accessibilityLabel="推定探索範囲の説明" style={styles.legend}>
+      <View accessibilityLabel="地図表示の説明" style={styles.legend}>
         <Text style={styles.legendTitle}>
-          {displayMode === "corridor"
-            ? "推定探索範囲"
+          {displayMode === "uncertainty"
+            ? "位置の不確実性"
             : displayMode === "cells"
-              ? `探索セル ${geometry.cells.length}個`
-              : "採用済み軌跡"}
+              ? `推定通過セル ${geometry.cells.length}個`
+              : "採用済み位置の中心線"}
         </Text>
         <Text style={styles.legendBody}>
           {modeDescription(displayMode, geometry.cellSizeMeters)}
@@ -386,7 +386,7 @@ const styles = StyleSheet.create({
     backgroundColor: palette.border,
     opacity: 0.55,
   },
-  corridor: {
+  uncertaintyBand: {
     position: "absolute",
     backgroundColor: palette.primary,
   },
