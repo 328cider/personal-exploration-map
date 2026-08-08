@@ -159,11 +159,12 @@ test("poor accuracy widens uncertainty but does not increase coverage footprint"
       }),
     ),
   };
+  const mixedAccuracies = [4, 6, 24, 30, 8] as const;
   const mixed: ExploredSpaceSegment = {
     id: "mixed",
     points: coordinates.map(([xMeters, yMeters], index) =>
       point(`mixed-${index}`, xMeters, yMeters, {
-        horizontalAccuracyMeters: [4, 6, 24, 30, 8][index],
+        horizontalAccuracyMeters: mixedAccuracies[index]!,
         confidence: 0.9,
       }),
     ),
