@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the interaction suite with a notification-shade-safe click strategy.
+"""Run the interaction suite with notification-shade-safe assertions.
 
 Android's legacy `uiautomator dump` waits for the current UI to become idle.
 The Android 15 notification shade may keep emitting accessibility/window events,
@@ -30,6 +30,7 @@ if SPEC is None or SPEC.loader is None:
 interaction = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(interaction)
 smoke = interaction.smoke
+ORIGINAL_EXACT_TEXT_EXISTS = interaction.exact_text_exists
 
 
 def raw_screenshot(artifacts: Path, name: str) -> Path:
@@ -110,7 +111,40 @@ def click_tracking_notification(artifacts: Path) -> None:
     )
 
 
+def marker_metric_is_one(root, expected: str) -> bool:
+    """Match the numeric value positioned directly above the `発見` metric label."""
+
+    if expected != "1":
+        return ORIGINAL_EXACT_TEXT_EXISTS(root, expected)
+
+    labels = [
+        node
+        for node in root.iter("node")
+        if node.attrib.get("text", "").strip() == "発見"
+    ]
+    values = [
+        node
+        for node in root.iter("node")
+        if node.attrib.get("text", "").strip() == expected
+    ]
+    for label in labels:
+        label_left, label_top, label_right, _ = smoke.parse_bounds(label)
+        label_center_x = (label_left + label_right) / 2
+        for value in values:
+            value_left, _, value_right, value_bottom = smoke.parse_bounds(value)
+            value_center_x = (value_left + value_right) / 2
+            horizontally_aligned = abs(value_center_x - label_center_x) <= max(
+                24,
+                (label_right - label_left) * 0.35,
+            )
+            vertically_above = 0 <= label_top - value_bottom <= 180
+            if horizontally_aligned and vertically_above:
+                return True
+    return False
+
+
 interaction.open_tracking_notification = click_tracking_notification
+interaction.exact_text_exists = marker_metric_is_one
 
 
 if __name__ == "__main__":
