@@ -13,9 +13,10 @@ on:
 permissions:
   contents: read
   actions: read
+  pull-requests: read
 
 concurrency:
-  group: emulator-harness-only-${{ github.ref }}
+  group: emulator-harness-only-v2-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -30,12 +31,42 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
+
+      - name: Confirm this PR changes only the emulator harness
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          changed_files="$(
+            gh api --paginate \
+              "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" \
+              --jq '.[].filename'
+          )"
+          printf '%s\n' "$changed_files"
+
+          if grep -Eq '^(apps/mobile/|packages/|package\.json$|package-lock\.json$|\.nvmrc$)' <<<"$changed_files"; then
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            echo "App or dependency files changed; the full devex-field-test APK run is authoritative."
+          else
+            echo "eligible=true" >> "$GITHUB_OUTPUT"
+            echo "Only harness-side files changed; a compatible signed APK may be reused."
+          fi
+
+      - name: Report full-APK handoff
+        if: steps.scope.outputs.eligible != 'true'
+        run: >-
+          echo "Harness-only emulator execution skipped because this PR changes the app or dependency graph."
+
       - uses: actions/setup-java@v5
+        if: steps.scope.outputs.eligible == 'true'
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Find the newest compatible Field-test APK from this PR branch
+        if: steps.scope.outputs.eligible == 'true'
         id: source
         env:
           GH_TOKEN: ${{ github.token }}
@@ -68,6 +99,7 @@ jobs:
           echo "Reusing Field-test APK from workflow run $selected"
 
       - name: Download the previously built and signed APK
+        if: steps.scope.outputs.eligible == 'true'
         uses: actions/download-artifact@v4
         with:
           name: personal-exploration-map-field-test
@@ -76,6 +108,7 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Record harness source
+        if: steps.scope.outputs.eligible == 'true'
         run: |
           mkdir -p "$EVIDENCE_DIR"
           cat > "$EVIDENCE_DIR/harness.json" <<JSON
@@ -91,6 +124,7 @@ jobs:
           JSON
 
       - name: Enable KVM group permissions
+        if: steps.scope.outputs.eligible == 'true'
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -98,6 +132,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Run lifecycle, coverage, notification and marker checks on Android 15
+        if: steps.scope.outputs.eligible == 'true'
         uses: ReactiveCircus/android-emulator-runner@v2.37.0
         with:
           api-level: 35
@@ -114,7 +149,7 @@ jobs:
           script: bash scripts/run-android-emulator-e2e.sh "$APK_PATH" "$EVIDENCE_DIR"
 
       - name: Upload emulator screenshots, hierarchy and logs
-        if: always()
+        if: always() && steps.scope.outputs.eligible == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: personal-exploration-map-emulator-harness-only
