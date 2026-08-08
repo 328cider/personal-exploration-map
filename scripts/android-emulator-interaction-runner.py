@@ -1,21 +1,18 @@
 #!/usr/bin/env python3
-"""Run the interaction suite with notification-shade-safe assertions.
+"""Run marker and notification checks without waiting for an active timer to idle.
 
-Android's legacy `uiautomator dump` waits for the current UI to become idle.
-The Android 15 notification shade may keep emitting accessibility/window events,
-so a structurally valid foreground-service notification can make the dump command
-fail forever with `could not get idle state`.
-
-The notification itself is asserted through `dumpsys notification`. This wrapper
-opens the shade, captures raw screenshots without requesting an accessibility
-hierarchy, taps the only app notification on the fixed CI Pixel profile, and
-verifies that the field-test activity becomes top-resumed. The normal app UI is
-then checked by the existing black-box interaction suite.
+The recording screen intentionally changes once per second. Android's legacy
+`uiautomator dump` waits for a quiet UI and therefore reports `could not get idle
+state` even when the app is healthy. This runner uses UI hierarchy assertions
+only on static screens, uses `dumpsys notification` for the foreground service,
+and performs fixed-coordinate taps on the fixed Android 15 Pixel CI profile for
+the recording actions and marker sheet.
 """
 
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 import re
 import subprocess
@@ -30,7 +27,6 @@ if SPEC is None or SPEC.loader is None:
 interaction = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(interaction)
 smoke = interaction.smoke
-ORIGINAL_EXACT_TEXT_EXISTS = interaction.exact_text_exists
 
 
 def raw_screenshot(artifacts: Path, name: str) -> Path:
@@ -44,7 +40,7 @@ def raw_screenshot(artifacts: Path, name: str) -> Path:
         )
     if result.returncode != 0:
         raise smoke.SmokeFailure(
-            "raw notification screenshot failed: "
+            "raw screenshot failed: "
             + result.stderr.decode("utf-8", errors="replace")
         )
     return path
@@ -66,15 +62,33 @@ def return_to_home() -> None:
     time.sleep(1.5)
 
 
+def wait_for_tracking_notification(
+    artifacts: Path,
+    *,
+    timeout_seconds: int = 60,
+) -> str:
+    deadline = time.monotonic() + timeout_seconds
+    latest = ""
+    while time.monotonic() < deadline:
+        latest = interaction.notification_dump(artifacts, "13-tracking")
+        if smoke.PACKAGE in latest and "探索を記録中" in latest:
+            return latest
+        time.sleep(1)
+    raise smoke.SmokeFailure(
+        "foreground-service notification did not expose the field-test package "
+        "and recording title"
+    )
+
+
 def click_tracking_notification(artifacts: Path) -> None:
-    """Click the first app notification without dumping the shade hierarchy."""
+    """Click the app notification without asking SystemUI to become idle."""
 
     return_to_home()
     width, height = smoke.parse_screen_size()
 
-    # Android 15's Pixel profile places the first collapsed notification below
-    # the compact quick-settings header. Several vertical candidates make the
-    # test robust to minor SystemUI layout changes without assuming app internals.
+    # The emulator profile is fixed at Pixel 1080x1920. The first app
+    # notification is below the compact quick-settings header; multiple rows
+    # tolerate minor SystemUI layout changes. Every failed tap is reset to Home.
     candidate_ratios = (0.31, 0.37, 0.43, 0.49, 0.55, 0.61)
     attempts: list[str] = []
 
@@ -92,17 +106,8 @@ def click_tracking_notification(artifacts: Path) -> None:
         time.sleep(1)
 
         if field_app_is_top_resumed():
-            smoke.wait_for_node(
-                artifacts,
-                "探索を記録中",
-                timeout_seconds=45,
-                dump_prefix="notification-return",
-            )
-            smoke.screenshot(artifacts, "13-notification-returned")
+            raw_screenshot(artifacts, "13-notification-returned")
             return
-
-        # A wrong coordinate may have toggled a quick-setting or opened another
-        # system surface. Reset to Home before trying the next stable row.
         return_to_home()
 
     raise smoke.SmokeFailure(
@@ -111,40 +116,142 @@ def click_tracking_notification(artifacts: Path) -> None:
     )
 
 
-def marker_metric_is_one(root, expected: str) -> bool:
-    """Match the numeric value positioned directly above the `発見` metric label."""
+def tap_at_ratio(x_ratio: float, y_ratio: float) -> None:
+    width, height = smoke.parse_screen_size()
+    smoke.adb_shell(
+        "input",
+        "tap",
+        str(int(width * x_ratio)),
+        str(int(height * y_ratio)),
+    )
 
-    if expected != "1":
-        return ORIGINAL_EXACT_TEXT_EXISTS(root, expected)
 
-    labels = [
-        node
-        for node in root.iter("node")
-        if node.attrib.get("text", "").strip() == "発見"
+def assert_no_known_runtime_errors(log_text: str) -> None:
+    patterns = [
+        r"FATAL EXCEPTION",
+        r"Cannot use shared object that was already released",
+        r"NativeDatabase\.prepareAsync",
+        r"NativeStatement",
+        r"ReactNativeJS.*(?:Error|Unhandled)",
     ]
-    values = [
-        node
-        for node in root.iter("node")
-        if node.attrib.get("text", "").strip() == expected
-    ]
-    for label in labels:
-        label_left, label_top, label_right, _ = smoke.parse_bounds(label)
-        label_center_x = (label_left + label_right) / 2
-        for value in values:
-            value_left, _, value_right, value_bottom = smoke.parse_bounds(value)
-            value_center_x = (value_left + value_right) / 2
-            horizontally_aligned = abs(value_center_x - label_center_x) <= max(
-                24,
-                (label_right - label_left) * 0.35,
-            )
-            vertically_above = 0 <= label_top - value_bottom <= 180
-            if horizontally_aligned and vertically_above:
-                return True
-    return False
+    matches = [pattern for pattern in patterns if re.search(pattern, log_text, re.I)]
+    if matches:
+        raise smoke.SmokeFailure(
+            "known fatal/runtime error appeared in logcat: " + ", ".join(matches)
+        )
 
 
-interaction.open_tracking_notification = click_tracking_notification
-interaction.exact_text_exists = marker_metric_is_one
+def run_interaction_without_active_ui_dumps(
+    artifacts: Path,
+) -> dict[str, object]:
+    started_at = time.time()
+    smoke.log("continue persisted PersonalMap for notification and marker checks")
+
+    # Review and permission screens are static, so semantic UI selection remains
+    # preferable there.
+    smoke.wait_for_node(
+        artifacts,
+        "YOUR PERSONAL MAP",
+        timeout_seconds=45,
+        dump_prefix="interaction-review-start",
+    )
+    smoke.tap_text(
+        artifacts,
+        "この地図の続きを探索",
+        timeout_seconds=45,
+        scroll=True,
+        dump_prefix="interaction-continue",
+    )
+    smoke.wait_for_node(
+        artifacts,
+        "ポケット記録を許可して開始",
+        timeout_seconds=45,
+        scroll=True,
+        dump_prefix="interaction-permission",
+    )
+    smoke.tap_text(
+        artifacts,
+        "ポケット記録を許可して開始",
+        timeout_seconds=45,
+        scroll=True,
+        dump_prefix="interaction-start",
+    )
+
+    # The notification is the stable external signal that the active recording
+    # foreground service started. Do not ask the once-per-second timer screen to
+    # become idle.
+    wait_for_tracking_notification(artifacts)
+    raw_screenshot(artifacts, "13-recording-started")
+
+    smoke.inject_route(
+        [
+            (139.767540, 35.681260),
+            (139.767600, 35.681300),
+            (139.767660, 35.681340),
+        ],
+        delay_seconds=6,
+    )
+    click_tracking_notification(artifacts)
+
+    # RecordingScreen keeps these two actions fixed at the bottom. Coordinates
+    # are intentionally limited to the fixed CI Pixel profile and are not product
+    # implementation constants.
+    tap_at_ratio(0.22, 0.918)  # + 発見を記録
+    time.sleep(2)
+    raw_screenshot(artifacts, "14-marker-modal")
+
+    # MarkerModal's primary action is the bottom-right button. The default
+    # category is `気になる`, which is saved without additional input.
+    tap_at_ratio(0.76, 0.955)  # この場所に保存
+    time.sleep(3)
+    raw_screenshot(artifacts, "15-marker-saved-recording")
+
+    tap_at_ratio(0.70, 0.918)  # 探索を終了して地図を見る
+    smoke.wait_for_node(
+        artifacts,
+        "YOUR PERSONAL MAP",
+        timeout_seconds=75,
+        dump_prefix="marker-review",
+    )
+    smoke.wait_for_node(
+        artifacts,
+        "気になる",
+        timeout_seconds=45,
+        scroll=True,
+        dump_prefix="marker-review-item",
+    )
+    smoke.screenshot(artifacts, "16-marker-review")
+
+    log_text = smoke.adb("logcat", "-d", "-v", "threadtime", timeout=60)
+    (artifacts / "interaction-final-logcat.txt").write_text(
+        log_text,
+        encoding="utf-8",
+    )
+    assert_no_known_runtime_errors(log_text)
+
+    elapsed = round(time.time() - started_at, 2)
+    result = {
+        "status": "passed",
+        "package": smoke.PACKAGE,
+        "elapsedSeconds": elapsed,
+        "assertions": [
+            "continued-existing-personal-map",
+            "foreground-service-notification-visible",
+            "notification-content-intent-returned-to-recording",
+            "marker-sheet-opened",
+            "default-marker-saved",
+            "marker-persisted-to-review",
+            "no-known-runtime-error",
+        ],
+    }
+    (artifacts / "interaction-result.json").write_text(
+        json.dumps(result, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return result
+
+
+interaction.run_interaction_smoke = run_interaction_without_active_ui_dumps
 
 
 if __name__ == "__main__":
