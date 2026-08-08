@@ -13,6 +13,8 @@ on:
       - "scripts/check-tracking-stop-policy.mjs"
       - "scripts/android-emulator-smoke.py"
       - "scripts/android-emulator-coverage-modes.py"
+      - "scripts/android-emulator-interaction-smoke.py"
+      - "scripts/run-android-emulator-e2e.sh"
       - "apps/mobile/**"
       - "packages/**"
       - "package.json"
@@ -23,7 +25,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: devex-field-test-v5-${{ github.ref }}
+  group: devex-field-test-v6-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -107,7 +109,7 @@ jobs:
     name: Android emulator user-flow gate
     needs: field-test-apk
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
     env:
       APK_PATH: artifacts/field-test/personal-exploration-map-field-test.apk
       EVIDENCE_DIR: artifacts/emulator-e2e
@@ -140,7 +142,7 @@ jobs:
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Run black-box PersonalMap lifecycle and coverage comparison on Android 15
+      - name: Run black-box lifecycle, coverage, notification and marker checks on Android 15
         uses: ReactiveCircus/android-emulator-runner@v2.37.0
         with:
           api-level: 35
@@ -154,12 +156,7 @@ jobs:
             -no-window -gpu swiftshader_indirect -no-snapshot -noaudio
             -no-boot-anim -camera-back none -camera-front none
           disable-animations: true
-          script: >-
-            python3 scripts/android-emulator-smoke.py
-            --apk "$APK_PATH"
-            --artifacts "$EVIDENCE_DIR"
-            && python3 scripts/android-emulator-coverage-modes.py
-            --artifacts "$EVIDENCE_DIR"
+          script: bash scripts/run-android-emulator-e2e.sh "$APK_PATH" "$EVIDENCE_DIR"
       - name: Upload emulator screenshots, UI hierarchy and logs
         if: always()
         uses: actions/upload-artifact@v4
