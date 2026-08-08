@@ -55,12 +55,7 @@ test("accuracy becomes an honest bounded explored radius", () => {
     30,
   );
   assert.equal(
-    exploredRadiusMeters(
-      point("pdr", 0, 0, {
-        source: "pdr",
-        horizontalAccuracyMeters: undefined,
-      }),
-    ),
+    exploredRadiusMeters(point("pdr", 0, 0, { source: "pdr" })),
     4,
   );
 });
