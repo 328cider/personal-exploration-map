@@ -40,7 +40,7 @@ export interface GeographicExportOptions {
 
 export class PersonalMapExportError extends Error {
   readonly code: PersonalMapExportErrorCode;
-  readonly entityId?: string;
+  readonly entityId: string | undefined;
 
   constructor(
     code: PersonalMapExportErrorCode,
