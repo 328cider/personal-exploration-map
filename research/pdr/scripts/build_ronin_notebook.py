@@ -44,8 +44,9 @@ def build():
 - Estimators received only raw Android IMU-device accelerometer, gyroscope, Game Rotation Vector, and raw IMU timestamps.
 - Tango pose, synchronized time, `start_frame`, and `imu_time_offset` were isolated to evaluation.
 - B0 was unsupported because no product-compatible step-event stream was admitted.
-- All supported B1 ideal runs failed a catastrophic distance, heading, endpoint, or mirror gate at both 50 and 100 Hz. Turn MAE was also high at about 38–44 degrees over 76 events.
-- Decision: stop B0/B1 v1.0.0 as product candidates, do not start a personal pilot, and keep Android lifecycle feasibility as a separate unknown.
+- B1 v1.1.0 uses Android's documented `atan2(R[1], R[4])` azimuth convention rather than generic Z-yaw extraction.
+- All supported B1 ideal runs failed a catastrophic distance, heading, turn, or mirror gate at both 50 and 100 Hz. Turn MAE was about 43–60 degrees over 76 events.
+- Decision: stop B0/B1 through B1 v1.1.0 as product candidates, do not start a personal pilot, and keep Android lifecycle feasibility as a separate unknown.
 """
         ),
         markdown(
@@ -58,9 +59,10 @@ The official custom license is non-commercial scientific-research only and prohi
 
 1. `raw/imu/acce`, `raw/imu/gyro`, and `raw/imu/game_rv` preserve Android API semantics; the HDF quaternion is explicitly reordered from `w,x,y,z` to Android-like `x,y,z,w`.
 2. Source rates above 200 Hz are downsampled causally to 50/100 Hz and are not product requirements.
-3. Callback timestamps and Android sensor capability metadata are absent, so this sequence cannot pass lifecycle or device-support gates.
-4. Tango orientation and the evaluation-only `align_tango_to_body` label define body-heading truth and the evaluation frame. No ICP or later shape alignment is applied.
-5. One public sequence can reject these configurations but cannot prove unseen-device/user generalization.
+3. Rotation-vector azimuth follows Android `SensorManager.getOrientation()` (`atan2(R[1], R[4])`) and is converted to mathematical heading with `pi/2 - azimuth`.
+4. Callback timestamps and Android sensor capability metadata are absent, so this sequence cannot pass lifecycle or device-support gates.
+5. Tango orientation and the evaluation-only `align_tango_to_body` label define body-heading truth and the evaluation frame. No ICP or later shape alignment is applied.
+6. One public sequence can reject these configurations but cannot prove unseen-device/user generalization.
 """
         ),
         code(
@@ -177,7 +179,7 @@ print("All license, leakage, capability, batching, gap, and stop-boundary assert
 
 1. The raw Android-field adapter and label-isolation gates work on a real HDF5 sequence at both target rates.
 2. The current step detector/stride rule estimates roughly 570–613 m for about 381 m of truth, so low endpoint drift in `imu6` does not imply acceptable distance.
-3. Game Rotation Vector produces mirrored, high-drift paths here, reinforcing that device orientation is not body heading.
+3. Correct Android azimuth semantics reduce platform heading MAE, but the paths remain mirrored and have catastrophic turn error. Device orientation is still not body heading.
 4. Callback batching independence and explicit gap uncertainty work, but real callback gaps and screen-off behavior are absent from the artifact.
 5. Confidence is sufficient to stop these exact baseline configurations. It is not sufficient for a product Go, a personal pilot, or an Android feasibility claim.
 """

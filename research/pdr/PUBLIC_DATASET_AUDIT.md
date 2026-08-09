@@ -24,6 +24,11 @@ configurations fail catastrophically on distance and heading quality, while turn
 error is also high. They remain diagnostic baselines. See
 `PUBLIC_SEQUENCE_REPLAY.md`.
 
+The platform-heading replay now uses Android's documented rotation-matrix
+azimuth convention. That semantic correction does not remove mirror, heading,
+or turn failures and therefore does not make device orientation equivalent to
+body heading.
+
 RIDI has Android sensor origins and an MIT code repository, but the published
 pipeline synchronizes to 200 Hz and uses linear acceleration, gravity,
 magnetometer, and a rotation vector. It also contains post-session optimization

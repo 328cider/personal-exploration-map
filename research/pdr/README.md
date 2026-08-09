@@ -11,25 +11,27 @@ Start with:
 - `PUBLIC_DATASET_AUDIT.md` for the revision-pinned Phase 2 findings;
 - `BASELINE_REPLAY.md` for the synthetic-only Phase 3 B0/B1 results;
 - `PUBLIC_SEQUENCE_REPLAY.md` for the first raw-Android public sequence result;
+- `HEADING_STRIDE_DIAGNOSTIC.md` for the Android azimuth correction and
+  predeclared stride-gain sensitivity;
 - `datasets/registry.json` for the initial public-dataset audit;
 - `notebooks/01_synthetic_foundation.ipynb` for the executable Phase 1 example;
 - `notebooks/02_public_dataset_audit.ipynb` for the executed metadata audit;
 - `notebooks/03_common_baselines.ipynb` for the executed common-baseline matrix;
-- `notebooks/04_ronin_public_sequence.ipynb` for the first raw public replay.
+- `notebooks/04_ronin_public_sequence.ipynb` for the first raw public replay;
+- `notebooks/05_heading_stride_diagnostic.ipynb` for the executed heading and
+  stride sensitivity diagnostic.
 
 Run the research checks from the repository root:
 
-```powershell
-python -m unittest discover -s research/pdr/tests -v
-python research/pdr/scripts/audit_datasets.py
-```
-
-Public sequence preflight and any non-standard Python dependency run in Docker,
-not through a Windows npm or Node installation:
+All research checks run in Docker, not through a Windows npm, Node, or Python
+installation:
 
 ```powershell
 docker compose -f research/pdr/compose.yaml build pdr-audit
-docker compose -f research/pdr/compose.yaml run --rm pdr-audit
+docker compose -f research/pdr/compose.yaml run --rm pdr-audit `
+  python -m unittest discover -s research/pdr/tests -v
+docker compose -f research/pdr/compose.yaml run --rm pdr-audit `
+  python research/pdr/scripts/audit_datasets.py --strict-ready
 ```
 
 Mount legally obtained archives under the ignored `research/pdr/data/` path.
@@ -43,6 +45,10 @@ docker compose -f research/pdr/compose.yaml run --rm pdr-fetch `
   python research/pdr/scripts/fetch_ronin_sequence.py --list-sequences
 docker compose -f research/pdr/compose.yaml run --rm pdr-fetch `
   python research/pdr/scripts/fetch_ronin_sequence.py --sequence a054_1
+docker compose -f research/pdr/compose.yaml run --rm pdr-audit `
+  python research/pdr/scripts/analyze_heading_stride.py `
+  --sequence-root /data/ronin/a054_1 `
+  --output /outputs/ronin-a054_1-heading-stride.json
 ```
 
 `pdr-fetch` is the only research service with network access. `pdr-audit` stays

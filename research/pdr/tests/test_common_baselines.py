@@ -15,7 +15,13 @@ from pdr_research.benchmark import (  # noqa: E402
     summarize_records,
 )
 from pdr_research.compatibility import validate_estimator_output  # noqa: E402
-from pdr_research.estimators import run_b0, run_b1, run_common_baselines  # noqa: E402
+from pdr_research.estimators import (  # noqa: E402
+    _math_heading_from_rotation_vector,
+    _wrap_angle,
+    run_b0,
+    run_b1,
+    run_common_baselines,
+)
 from pdr_research.metrics import evaluate_estimator_output  # noqa: E402
 from pdr_research.synthetic import (  # noqa: E402
     drop_sensor,
@@ -39,6 +45,40 @@ def complete_fixture(*, rate: int = 100, magnetic_anomaly=None):
 
 
 class CommonBaselineTests(unittest.TestCase):
+    def test_rotation_vector_uses_android_azimuth_convention(self) -> None:
+        identity = _math_heading_from_rotation_vector((0.0, 0.0, 0.0, 1.0))
+        quarter_turn = _math_heading_from_rotation_vector(
+            (0.0, 0.0, 2.0 ** -0.5, 2.0 ** -0.5)
+        )
+        self.assertAlmostEqual(identity, 0.5 * 3.141592653589793)
+        self.assertAlmostEqual(
+            _wrap_angle(quarter_turn - identity),
+            0.5 * 3.141592653589793,
+        )
+
+    def test_weinberg_gain_is_versioned_and_changes_distance_causally(self) -> None:
+        fixture = complete_fixture(rate=50)
+        low = run_b1(
+            fixture.session,
+            capability_profile="platform-fused",
+            weinberg_gain=0.364,
+        )
+        high = run_b1(
+            fixture.session,
+            capability_profile="platform-fused",
+            weinberg_gain=0.640,
+        )
+        assert low.output is not None and high.output is not None
+        self.assertIn("weinberg-k0.364", low.requirement.version)
+        self.assertIn("weinberg-gain-0.364", low.fallback_flags)
+        self.assertGreater(
+            high.output.points[-1].x_m ** 2 + high.output.points[-1].y_m ** 2,
+            low.output.points[-1].x_m ** 2 + low.output.points[-1].y_m ** 2,
+        )
+        self.assertTrue(
+            all(point.source_end_ns <= point.timestamp_ns for point in low.output.points)
+        )
+
     def test_estimators_cannot_receive_truth(self) -> None:
         source = (ROOT / "pdr_research" / "estimators.py").read_text(encoding="utf-8")
         self.assertNotIn("ground_truth", source)
