@@ -168,12 +168,7 @@ export const MIGRATE_V2_TO_V3_SQL = `
   PRAGMA user_version = 3;
 `;
 
-/**
- * v4 separates exact provider evidence from SQLite's normalized numeric
- * projection. Legacy rows keep their prior projection and deterministic replay
- * order but are explicitly marked as non-lossless rather than reconstructed.
- */
-export const MIGRATE_V3_TO_V4_SQL = `
+const CREATE_POSITION_SAMPLES_V4_SQL = `
   CREATE TABLE position_samples_v4 (
     id TEXT NOT NULL,
     exploration_id TEXT NOT NULL,
@@ -206,53 +201,9 @@ export const MIGRATE_V3_TO_V4_SQL = `
       (raw_payload_format = 'legacy-normalized-v1' AND raw_payload_json IS NULL)
     )
   );
+`;
 
-  INSERT INTO position_samples_v4(
-    id,
-    exploration_id,
-    sample_ordinal,
-    ordinal_provenance,
-    raw_payload_format,
-    raw_payload_json,
-    recorded_at,
-    source,
-    coordinate_kind,
-    latitude,
-    longitude,
-    altitude_meters,
-    x_meters,
-    y_meters,
-    floor_level,
-    horizontal_accuracy_meters,
-    heading_degrees,
-    speed_meters_per_second,
-    confidence
-  )
-  SELECT
-    id,
-    exploration_id,
-    ROW_NUMBER() OVER (
-      PARTITION BY exploration_id
-      ORDER BY recorded_at ASC, id ASC
-    ) - 1,
-    'legacy-recorded-at-id-v1',
-    'legacy-normalized-v1',
-    NULL,
-    recorded_at,
-    source,
-    coordinate_kind,
-    latitude,
-    longitude,
-    altitude_meters,
-    x_meters,
-    y_meters,
-    floor_level,
-    horizontal_accuracy_meters,
-    heading_degrees,
-    speed_meters_per_second,
-    confidence
-  FROM position_samples;
-
+const FINALIZE_POSITION_SAMPLES_V4_SQL = `
   DROP TABLE position_samples;
   ALTER TABLE position_samples_v4 RENAME TO position_samples;
 
@@ -264,6 +215,24 @@ export const MIGRATE_V3_TO_V4_SQL = `
 
   PRAGMA user_version = 4;
 `;
+
+interface LegacyPositionSampleRow {
+  readonly id: string;
+  readonly exploration_id: string;
+  readonly recorded_at: number;
+  readonly source: string;
+  readonly coordinate_kind: "geographic" | "local";
+  readonly latitude: number | null;
+  readonly longitude: number | null;
+  readonly altitude_meters: number | null;
+  readonly x_meters: number | null;
+  readonly y_meters: number | null;
+  readonly floor_level: number | null;
+  readonly horizontal_accuracy_meters: number | null;
+  readonly heading_degrees: number | null;
+  readonly speed_meters_per_second: number | null;
+  readonly confidence: number;
+}
 
 interface UserVersionRow {
   readonly user_version: number;
@@ -303,6 +272,76 @@ async function assertForeignKeyIntegrity(
       `Mapping database migration left ${violations.length} foreign-key violation(s).`,
     );
   }
+}
+
+/**
+ * Rebuilds raw observations without window functions so the migration remains
+ * compatible with older Android SQLite runtimes. Legacy order is deterministic
+ * `(recorded_at, id)` order only; it is explicitly not claimed as provider
+ * receive order.
+ */
+async function migratePositionSamplesV3ToV4(
+  transaction: AsyncSqliteExecutor,
+): Promise<void> {
+  await transaction.execAsync(CREATE_POSITION_SAMPLES_V4_SQL);
+  const rows = await transaction.getAllAsync<LegacyPositionSampleRow>(
+    `SELECT * FROM position_samples
+     ORDER BY exploration_id ASC, recorded_at ASC, id ASC`,
+  );
+
+  let currentExplorationId: string | undefined;
+  let sampleOrdinal = 0;
+  for (const row of rows) {
+    if (row.exploration_id !== currentExplorationId) {
+      currentExplorationId = row.exploration_id;
+      sampleOrdinal = 0;
+    }
+    await transaction.runAsync(
+      `INSERT INTO position_samples_v4(
+        id,
+        exploration_id,
+        sample_ordinal,
+        ordinal_provenance,
+        raw_payload_format,
+        raw_payload_json,
+        recorded_at,
+        source,
+        coordinate_kind,
+        latitude,
+        longitude,
+        altitude_meters,
+        x_meters,
+        y_meters,
+        floor_level,
+        horizontal_accuracy_meters,
+        heading_degrees,
+        speed_meters_per_second,
+        confidence
+      ) VALUES (
+        ?, ?, ?, 'legacy-recorded-at-id-v1', 'legacy-normalized-v1', NULL,
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      )`,
+      row.id,
+      row.exploration_id,
+      sampleOrdinal,
+      row.recorded_at,
+      row.source,
+      row.coordinate_kind,
+      row.latitude,
+      row.longitude,
+      row.altitude_meters,
+      row.x_meters,
+      row.y_meters,
+      row.floor_level,
+      row.horizontal_accuracy_meters,
+      row.heading_degrees,
+      row.speed_meters_per_second,
+      row.confidence,
+    );
+    sampleOrdinal += 1;
+  }
+
+  await transaction.execAsync(FINALIZE_POSITION_SAMPLES_V4_SQL);
 }
 
 /**
@@ -357,9 +396,7 @@ export async function migrateMappingDatabase(
   }
 
   if (version < 4) {
-    await runExclusive(database, async (transaction) => {
-      await transaction.execAsync(MIGRATE_V3_TO_V4_SQL);
-    });
+    await runExclusive(database, migratePositionSamplesV3ToV4);
     await assertForeignKeyIntegrity(database);
     version = 4;
   }
