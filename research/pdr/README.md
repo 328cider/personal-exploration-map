@@ -26,6 +26,8 @@ Start with:
   Stop decision, and the boundary before any learned model or personal pilot;
 - `LEARNED_HEADING_PROTOCOL.md` for the preregistered non-shippable RoNIN ridge
   benchmark that measures learned body-heading headroom after the data gate;
+- `LEARNED_HEADING_RESULT.md` for the 36-candidate residual-ridge development
+  Stop, rate-instability diagnosis, and still-sealed validation groups;
 - `datasets/registry.json` for the initial public-dataset audit;
 - `notebooks/01_synthetic_foundation.ipynb` for the executable Phase 1 example;
 - `notebooks/02_public_dataset_audit.ipynb` for the executed metadata audit;
@@ -39,6 +41,8 @@ Start with:
   metadata-only official-model audit.
 - `notebooks/08_learned_training_data_gate.ipynb` for the executed aggregate-only
   rights, Android-input, target-fitness, and leakage audit.
+- `notebooks/09_learned_heading_headroom.ipynb` for the executed aggregate-only
+  leave-one-group-out residual-ridge Stop.
 
 Run the research checks from the repository root:
 
