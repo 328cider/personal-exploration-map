@@ -72,6 +72,8 @@ IssueまたはPRに次を残す。該当しない場合も理由を書く。
 - OS、sensor、DB、file、network
 - 観測と保存を担うが、map truthや報酬を決めない
 - export file作成、temporary file、share sheet、platform permissionはここまたはapp shellで扱う
+- SQLite numeric columnをoriginal raw truthと扱わない
+- provider observationはnormalization / filtering前のexact payloadとsession-local ordinalをcanonical保存する
 
 ### Renderer
 
@@ -91,11 +93,27 @@ IssueまたはPRに次を残す。該当しない場合も理由を書く。
 - ExplorationSessionごとのsegmentを維持し、未観測区間を人工pointで接続しない。
 - GPX / GeoJSONは相互運用用のderived exportであり、raw evidenceを含むbackupではない。
 - `PersonalMapSnapshot`だけをJSON化してlossless bundleと呼ばない。raw / rejected / provider / frame provenanceを保持するrepository export modelを使う。
+- lossless bundleはnormalized numeric columnsではなく、exact raw payloadとsession-local ordinalを読む。
+- legacy normalized rowから失われた`NaN`、`-0`、provider受領順を推測して復元しない。exact provenanceがなければlossless exportをfail closedする。
+- sample identityはExplorationSession scopeの`(explorationId, sampleId)`として扱い、別sessionの同じsample IDを衝突と誤認しない。
 - diagnostic、uncertainty、confirmed evidence、game overlayを同一profileへ暗黙に混ぜない。
 - raw位置を含むbundleはユーザーの明示操作だけで生成し、自動uploadしない。
 - share sheetを自動で開かず、temporary fileを不要後に削除する。
 - importしたderived snapshotをcanonical mapへ直接昇格させない。schema、hash、frame、provenanceを検証し、transactionとcanonical commandを通す。
 - default filenameへ住所、地図名、正確な場所名を入れない。
+
+## Exact raw storage boundary
+
+ADR 0012を正本とする。
+
+- 新規`RawPositionSample`はSQLite affinityへ渡す前に`raw-position-sample-exact-v1`としてserializeする。
+- 全numberはbundleと同じcanonical tokenを使い、optional absenceと`NaN / ±Infinity / -0`を区別する。
+- numeric columnsはfinite-only projectionであり、payloadと異なる場合はpayloadがauthorityである。
+- `sample_ordinal`はexclusive repository transaction内でsessionごとに割り当てる。
+- identical retryはordinalを消費せず、同一identityのdifferent payloadは失敗させる。
+- v3以前のrowは`legacy-normalized-v1`として保持し、通常replayは可能でもlossless backupへ暗黙に昇格しない。
+- migrationはwindow function等の新しいSQLite機能へ不必要に依存せず、supported Android runtimeで実行できる形にする。
+- bundle readは一つのconsistent read snapshot内でqueryを逐次awaitする。
 
 ## Engineering rules
 
@@ -105,11 +123,13 @@ IssueまたはPRに次を残す。該当しない場合も理由を書く。
 - 複数のcore操作と永続化を伴うユーザー操作は `mapping-engine` のcommand / queryにする。
 - future `apps/game-*` はcore mutationを直接importせず、engineとexperience-sdkを使う。
 - 推定結果をrawテーブルへ上書きしない。
+- raw payloadとnormalized projectionを一つの値へ再統合しない。
 - UI操作を増やす変更には、`docs/UX_PRINCIPLES.md` の中断コスト確認を書く。
 - 実験的精度の機能は既定で有効にせず、計測方法と停止条件を先に文書化する。
 - 大きなフレームワーク、認証、バックエンド、plugin systemを「将来使うかもしれない」だけで追加しない。
 - 標準アルゴリズムや一般部品を自作する場合は、既存OSSを採用しない理由とライセンス判断を記録する。
 - テストは重要な変換・品質判定・application transaction・アーキテクチャ境界を中心に必要十分に保つ。
+- schema migrationはversion、row count、foreign key、rollback、restart、runtime compatibilityを確認する。
 - 実地試験はユーザーコストが高い。Android Emulatorで再現可能な起動・権限済み導線・擬似GNSS・live preview・終了・永続化を先に通す。
 - `Android emulator user-flow gate`が失敗したField-test APKを、ユーザーへ実地試験候補として渡さない。
 - エミュレータ合格を、実GNSS、OEM省電力、電池、ポケットUXの合格と混同しない。
