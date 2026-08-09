@@ -33,6 +33,15 @@ export interface AsyncSqliteExecutor {
 }
 
 export interface AsyncSqliteDatabase extends AsyncSqliteExecutor {
+  /**
+   * Runs a read-only operation inside one consistent database snapshot.
+   * Implementations must keep unrelated top-level operations outside the
+   * callback's transaction and pass the transaction-scoped executor directly.
+   */
+  withReadTransactionAsync(
+    task: (transaction: AsyncSqliteExecutor) => Promise<void>,
+  ): Promise<void>;
+
   withExclusiveTransactionAsync(
     task: (transaction: AsyncSqliteExecutor) => Promise<void>,
   ): Promise<void>;
