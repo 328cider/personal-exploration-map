@@ -40,8 +40,15 @@ jobs:
           [void][ScriptBlock]::Create($source)
       - name: Assert the analyzer has no runtime dependencies
         run: |
+          set -euo pipefail
           node --check scripts/analyze-field-test-summary.mjs
-          if grep -Eq "from ['\"](?!node:)" scripts/analyze-field-test-summary.mjs; then
-            echo "Objective analyzer must use Node standard-library imports only." >&2
+          unexpected="$(
+            grep -E '^import .* from ' scripts/analyze-field-test-summary.mjs \
+              | grep -Ev ' from "node:' \
+              || true
+          )"
+          if [ -n "$unexpected" ]; then
+            echo "Objective analyzer must use Node standard-library imports only:" >&2
+            echo "$unexpected" >&2
             exit 1
           fi
