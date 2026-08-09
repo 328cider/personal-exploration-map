@@ -173,6 +173,31 @@ for (const packagePath of [
   }
 }
 
+// The application facade and its serializers must run in React Native, tests,
+// future game shells, and offline tooling. Keeping package.json small is not
+// enough: Node built-ins or a workspace platform package can leak through a
+// direct source import without appearing as a new external dependency.
+for (const file of collectSourceFiles("packages/mapping-engine/src")) {
+  const content = read(file);
+  const forbiddenImports = [
+    /from\s+["']react["']/u,
+    /from\s+["']react-native["']/u,
+    /from\s+["']expo(?:-[^"']+)?["']/u,
+    /from\s+["']expo\//u,
+    /from\s+["']@exploration-map\/sqlite-adapter["']/u,
+    /from\s+["']@exploration-map\/experience-sdk["']/u,
+    /(?:from\s+|import\s*\()["']node:/u,
+    /require\s*\(\s*["']node:/u,
+  ];
+  for (const pattern of forbiddenImports) {
+    if (pattern.test(content)) {
+      failures.push(
+        `mapping-engine must remain headless and platform-neutral: ${file}: ${pattern}`,
+      );
+    }
+  }
+}
+
 const sqlitePackage = readPackage("packages/sqlite-adapter/package.json");
 if (sqlitePackage !== null) {
   const allowedDependencies = new Set([
