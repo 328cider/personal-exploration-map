@@ -48,12 +48,12 @@ for (const output of ["docker_required", "apk_required", "emulator_required"]) {
   }
 }
 for (const required of [
-  "github.event_name == 'schedule'",
+  "  schedule:\n",
   "-PreactNativeArchitectures=arm64-v8a,x86_64",
   "needs.field-test-apk.result == 'success'",
 ]) {
   if (!devex.includes(required)) {
-    failures.push(`devex-field-test.yml: missing ${required}`);
+    failures.push(`devex-field-test.yml: missing ${required.trim()}`);
   }
 }
 if (devex.includes("arm64-v8a,armeabi-v7a,x86,x86_64")) {
