@@ -3,7 +3,7 @@ import type {
   AsyncSqliteExecutor,
 } from "./database.ts";
 
-export const MAPPING_DATABASE_VERSION = 3;
+export const MAPPING_DATABASE_VERSION = 4;
 
 export const CREATE_LEGACY_V1_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS explorations (
@@ -168,6 +168,102 @@ export const MIGRATE_V2_TO_V3_SQL = `
   PRAGMA user_version = 3;
 `;
 
+/**
+ * v4 separates exact provider evidence from SQLite's normalized numeric
+ * projection. Legacy rows keep their prior projection and deterministic replay
+ * order but are explicitly marked as non-lossless rather than reconstructed.
+ */
+export const MIGRATE_V3_TO_V4_SQL = `
+  CREATE TABLE position_samples_v4 (
+    id TEXT PRIMARY KEY NOT NULL,
+    exploration_id TEXT NOT NULL,
+    sample_ordinal INTEGER NOT NULL CHECK (sample_ordinal >= 0),
+    ordinal_provenance TEXT NOT NULL CHECK (
+      ordinal_provenance IN ('ingest-sequence-v1', 'legacy-recorded-at-id-v1')
+    ),
+    raw_payload_format TEXT NOT NULL CHECK (
+      raw_payload_format IN ('raw-position-sample-exact-v1', 'legacy-normalized-v1')
+    ),
+    raw_payload_json TEXT,
+    recorded_at REAL,
+    source TEXT NOT NULL,
+    coordinate_kind TEXT NOT NULL CHECK (coordinate_kind IN ('geographic', 'local')),
+    latitude REAL,
+    longitude REAL,
+    altitude_meters REAL,
+    x_meters REAL,
+    y_meters REAL,
+    floor_level REAL,
+    horizontal_accuracy_meters REAL,
+    heading_degrees REAL,
+    speed_meters_per_second REAL,
+    confidence REAL,
+    FOREIGN KEY (exploration_id) REFERENCES explorations(id) ON DELETE CASCADE,
+    CHECK (
+      (raw_payload_format = 'raw-position-sample-exact-v1' AND raw_payload_json IS NOT NULL)
+      OR
+      (raw_payload_format = 'legacy-normalized-v1' AND raw_payload_json IS NULL)
+    )
+  );
+
+  INSERT INTO position_samples_v4(
+    id,
+    exploration_id,
+    sample_ordinal,
+    ordinal_provenance,
+    raw_payload_format,
+    raw_payload_json,
+    recorded_at,
+    source,
+    coordinate_kind,
+    latitude,
+    longitude,
+    altitude_meters,
+    x_meters,
+    y_meters,
+    floor_level,
+    horizontal_accuracy_meters,
+    heading_degrees,
+    speed_meters_per_second,
+    confidence
+  )
+  SELECT
+    id,
+    exploration_id,
+    ROW_NUMBER() OVER (
+      PARTITION BY exploration_id
+      ORDER BY recorded_at ASC, id ASC
+    ) - 1,
+    'legacy-recorded-at-id-v1',
+    'legacy-normalized-v1',
+    NULL,
+    recorded_at,
+    source,
+    coordinate_kind,
+    latitude,
+    longitude,
+    altitude_meters,
+    x_meters,
+    y_meters,
+    floor_level,
+    horizontal_accuracy_meters,
+    heading_degrees,
+    speed_meters_per_second,
+    confidence
+  FROM position_samples;
+
+  DROP TABLE position_samples;
+  ALTER TABLE position_samples_v4 RENAME TO position_samples;
+
+  CREATE UNIQUE INDEX position_samples_exploration_ordinal
+    ON position_samples(exploration_id, sample_ordinal);
+
+  CREATE INDEX position_samples_exploration_time
+    ON position_samples(exploration_id, recorded_at);
+
+  PRAGMA user_version = 4;
+`;
+
 interface UserVersionRow {
   readonly user_version: number;
 }
@@ -210,8 +306,8 @@ async function assertForeignKeyIntegrity(
 
 /**
  * Migrates the local-first mapping database without discarding canonical raw
- * evidence. Operational diagnostics are added in v3 as a separate table and
- * never become authoritative map data.
+ * evidence. Operational diagnostics remain separate from map truth. v4 can
+ * preserve exact new observations while keeping legacy normalization explicit.
  */
 export async function migrateMappingDatabase(
   database: AsyncSqliteDatabase,
@@ -257,6 +353,14 @@ export async function migrateMappingDatabase(
     });
     await assertForeignKeyIntegrity(database);
     version = 3;
+  }
+
+  if (version < 4) {
+    await runExclusive(database, async (transaction) => {
+      await transaction.execAsync(MIGRATE_V3_TO_V4_SQL);
+    });
+    await assertForeignKeyIntegrity(database);
+    version = 4;
   }
 
   if (version !== MAPPING_DATABASE_VERSION) {
