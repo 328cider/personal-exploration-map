@@ -26,6 +26,7 @@ PROGRAM_TEMPLATE = ROOT / "capture-schema" / "v1" / "capture-program.template.js
 TRUTH_CONTRACT = ROOT / "capture-schema" / "v1" / "truth-sidecar-contract.json"
 SENSOR_LAYOUTS = ROOT / "capture-schema" / "v1" / "sensor-value-layouts.json"
 ANDROID_CAPTURE = ROOT / "android-capture"
+PDR_WORKFLOW = ROOT.parents[1] / ".github" / "workflows" / "pdr-capture-research.yml"
 
 
 def _json_line(value: object) -> bytes:
@@ -498,6 +499,12 @@ class CaptureQualityTests(unittest.TestCase):
         self.assertNotIn("android.permission.HIGH_SAMPLING_RATE_SENSORS", manifest)
         self.assertIn("android.permission.FOREGROUND_SERVICE", manifest)
         self.assertIn("android.permission.WAKE_LOCK", manifest)
+
+    def test_apk_badging_gate_uses_current_aapt2_min_sdk_label(self) -> None:
+        workflow = PDR_WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("minSdkVersion:'28'", workflow)
+        self.assertIn("targetSdkVersion:'35'", workflow)
+        self.assertNotIn('grep -q "sdkVersion:', workflow)
 
     def test_capture_adapter_does_not_import_product_mapping_layers(self) -> None:
         kotlin_root = ANDROID_CAPTURE / "app" / "src" / "main" / "java"
