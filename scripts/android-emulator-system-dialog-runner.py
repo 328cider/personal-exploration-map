@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Run the current emulator smoke suite while ignoring emulator launcher ANRs.
+"""Run the current emulator smoke suite while ignoring emulator system ANRs.
 
-GitHub-hosted Android emulators occasionally display a transient
-"Pixel Launcher isn't responding" dialog over an otherwise healthy app. That
-system-process failure must not be mistaken for an application failure, but
-Field-test or other app-process crash dialogs must remain visible and fail the
+GitHub-hosted Android emulators occasionally display a transient system-process
+"isn't responding" dialog over an otherwise healthy app. Those known emulator
+process failures must not be mistaken for an application failure, but Field-test
+or any unrecognised app-process crash dialog must remain visible and fail the
 suite.
 """
 
@@ -30,7 +30,15 @@ SPEC.loader.exec_module(runner)
 smoke = runner.smoke
 _base_dump_ui = smoke.dump_ui
 
-_TRANSIENT_SYSTEM_PROCESSES = ("Pixel Launcher", "System UI")
+# Keep this list deliberately narrow. These are emulator/system components seen
+# to fail transiently on GitHub-hosted API 35 images while the Field-test app is
+# already healthy underneath. Never match arbitrary com.google/android package
+# names because doing so could hide a real application failure.
+_TRANSIENT_SYSTEM_PROCESSES = (
+    "Pixel Launcher",
+    "System UI",
+    "com.google.android.googlesdksetup",
+)
 
 
 def _node_value(node: ET.Element, key: str) -> str:
