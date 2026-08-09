@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "experiment": "ronin-learned-heading-v1",
+  "registered_on": "2026-08-09",
+  "parent_split": "ronin-body-heading-v1.json",
+  "parent_split_sha256": "cf3c6d8a4ea1a4e93357f07f69c7cb96958d023ebe30e552fa06444e3bc9dd02",
+  "artifact": "unseen_subjects_test_set.zip",
+  "artifact_sha256": "d518eb150f5d44f74c56ce4b05e671cb73e507fcf6fc1ebcf7f1116bcd93bbb9",
+  "group_key_rule": "sequence prefix before underscore; conservative leakage group, not proven participant identity",
+  "development_assignments": [
+    {"sequence": "a049_1", "subject_key": "a049", "role": "cross-validation-fold", "raw_state_at_registration": "already-opened"},
+    {"sequence": "a051_3", "subject_key": "a051", "role": "cross-validation-fold", "raw_state_at_registration": "already-opened"},
+    {"sequence": "a052_2", "subject_key": "a052", "role": "cross-validation-fold", "raw_state_at_registration": "already-opened"},
+    {"sequence": "a054_1", "subject_key": "a054", "role": "cross-validation-fold", "raw_state_at_registration": "already-opened"}
+  ],
+  "validation_assignments": [
+    {"sequence": "a050_1", "subject_key": "a050", "role": "validation-primary", "data_hdf5_compressed_bytes": 72923076, "raw_state_at_registration": "not-fetched"},
+    {"sequence": "a019_3", "subject_key": "a019", "role": "validation-confirmatory-1", "data_hdf5_compressed_bytes": 77857582, "raw_state_at_registration": "not-fetched"},
+    {"sequence": "a058_1", "subject_key": "a058", "role": "validation-confirmatory-2", "data_hdf5_compressed_bytes": 80193975, "raw_state_at_registration": "not-fetched"}
+  ],
+  "candidate_grid": {
+    "output_rate_hz": 10,
+    "feature_bin_count": 5,
+    "feature_count": 60,
+    "window_seconds": [0.5, 1.0, 2.0],
+    "ridge_alpha": [0.1, 10.0, 1000.0],
+    "turn_weight": [0.0, 8.0],
+    "residual_clip_degrees_per_second": [90.0, 180.0],
+    "candidate_count": 36
+  },
+  "training_rule": "Fit on 50 Hz rows only; evaluate identical weights at 50 and 100 Hz. Split by full sequence/subject prefix before any window extraction.",
+  "lock_rules": [
+    "No validation member may be fetched or opened before implementation, tests, complete development output, selected config, fitted-weight hash, and implementation hashes are committed.",
+    "No window from a held-out cross-validation sequence may enter normalization, fitting, or selection for that fold.",
+    "Validation cannot change implementation, fields, target, grid, weights, normalization, metrics, thresholds, or alignment.",
+    "Weights remain ignored and non-shippable under the RoNIN non-commercial research license.",
+    "No result from this split is a product or Android lifecycle Go."
+  ]
+}

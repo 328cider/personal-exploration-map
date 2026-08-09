@@ -24,6 +24,8 @@ Start with:
   semantics, target-fitness, and clean-split gate before any learned model;
 - `LEARNED_TRAINING_DATA_RESULT.md` for the eight-source audit, zero-compatible
   Stop decision, and the boundary before any learned model or personal pilot;
+- `LEARNED_HEADING_PROTOCOL.md` for the preregistered non-shippable RoNIN ridge
+  benchmark that measures learned body-heading headroom after the data gate;
 - `datasets/registry.json` for the initial public-dataset audit;
 - `notebooks/01_synthetic_foundation.ipynb` for the executable Phase 1 example;
 - `notebooks/02_public_dataset_audit.ipynb` for the executed metadata audit;
