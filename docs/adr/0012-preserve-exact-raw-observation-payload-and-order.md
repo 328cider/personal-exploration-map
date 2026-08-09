@@ -51,9 +51,9 @@ replayとlossless bundle exportは新規rowではこのexact payloadをauthority
 
 ### Order and identity
 
-- ordinalはexclusive canonical transaction内でsessionごとの`MAX + 1`を割り当てる
+- ordinalはexclusive canonical transaction内でsessionの既存row数と最大exact ordinalの次値から割り当てる
 - byte-identical retryはidempotentでordinalを消費しない
--同じsessionで同じIDに別payloadを渡した場合はtransactionを失敗させる
+- 同じsessionで同じIDに別payloadを渡した場合はtransactionを失敗させる
 - sample IDはbundle / restore preflightと同じくExplorationSession scopeとする
 
 ### Legacy data
@@ -62,10 +62,13 @@ v3以前のrowは値や元順序を推測しない。
 
 - `raw_payload_format = legacy-normalized-v1`
 - `raw_payload_json = NULL`
+- `sample_ordinal = NULL`
 - `ordinal_provenance = legacy-recorded-at-id-v1`
-- ordinalは従来のdeterministic replay順`recorded_at, id`から移行時に付与
+- 通常replayだけは従来のdeterministic fallback順`recorded_at, id`を維持する
 
-通常replayは従来どおり可能だが、lossless bundle exportはlegacy rowが一件でもあればfail closedする。
+legacy rowにはprovider受領順を表すordinalが存在しない。この欠落を明示したまま一括SQLで移行し、window functionやrowごとのJavaScript/native bridge callへ依存しない。
+
+通常replayは従来どおり可能だが、lossless bundle exportはlegacy rowが一件でもあればfail closedする。新規exact rowが同じsessionへ後から追加された場合、legacy fallback rowsの後へappendする。
 
 ## Consistent read
 
@@ -88,13 +91,17 @@ bundle用SQLite readerは一つのread transaction / snapshot内でmap、frame�
 
 却下。schema/runtime実装を公開contractにし、migration、privacy、cross-platform restoreを困難にする。
 
-### D. timestampを順序として使い続ける
+### D. timestampを新規sampleの順序として使い続ける
 
 却下。timestampは観測値であり、receive order、同時刻、out-of-order deliveryを表さない。
 
-### E. legacy値を推測してexact payloadを生成する
+### E. legacy値またはordinalを推測してexact payloadを生成する
 
 却下。回復不能な情報を捏造してlosslessと表示することになる。
+
+### F. legacy rowへ`recorded_at, id`から連番ordinalを付ける
+
+却下。連番が存在するとprovider受領順と誤認されやすい。fallback sort provenanceと`NULL ordinal`を保持する方が制約を正確に表す。
 
 ## Consequences
 
@@ -105,12 +112,14 @@ bundle用SQLite readerは一つのread transaction / snapshot内でmap、frame�
 - duplicate callbackのidempotencyとordinalが整合する
 - bundle builderがnormalized DB columnsを再解釈しない
 - legacy limitationが明示され、silent degradationを防げる
+- migrationはrow数に比例するnative bridge往復を追加しない
 
 ### Costs
 
 - raw payloadとprojectionの二重保存でDB sizeが増える
 - v4 migrationとExpo / Android validationが必要
 - legacy mapは完全なlossless backup対象にできない
+- mixed legacy / exact sessionには二種類のorder provenanceが残る
 - future raw schema変更はpayload format version追加が必要
 
 ## Privacy and logging
@@ -126,7 +135,8 @@ exact payloadはraw locationを含むapp-private canonical evidenceである。
 
 - exact codecでfinite、`NaN`、`±Infinity`、`-0`、optional absence
 - v1→v4 migration、rollback、foreign-key integrity
-- equal / out-of-order timestampでもordinal順
+- legacy ordinalが`NULL`でありfallback orderだけが維持されること
+- equal / out-of-order timestampでもnew exact rowはordinal順
 - duplicate retryでordinal非消費
 - same sample IDを別sessionで保持
 - normalized projectionとexact payloadのauthority分離
