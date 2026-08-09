@@ -1,0 +1,11 @@
+services:
+  pdr-audit:
+    build:
+      context: ../..
+      dockerfile: research/pdr/docker/Dockerfile
+    working_dir: /workspace
+    volumes:
+      - ../..:/workspace
+      - ./data:/data:ro
+      - ./outputs:/outputs
+    network_mode: none
