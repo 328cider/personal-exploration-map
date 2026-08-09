@@ -14,9 +14,13 @@ on:
       - "scripts/pull-field-test-bundle.ps1"
       - "scripts/check-tracking-stop-policy.mjs"
       - "scripts/android-emulator-smoke.py"
+      - "scripts/android-emulator-smoke-runner.py"
+      - "scripts/android-emulator-system-dialog-runner.py"
+      - "scripts/android-emulator-background-growth-runner.py"
       - "scripts/android-emulator-coverage-modes.py"
       - "scripts/android-emulator-interaction-smoke.py"
       - "scripts/android-emulator-interaction-runner.py"
+      - "scripts/android-emulator-interaction-compat-runner.py"
       - "scripts/run-android-emulator-e2e.sh"
       - "apps/mobile/**"
       - "packages/**"
@@ -28,7 +32,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: devex-field-test-v11-${{ github.ref }}
+  group: devex-field-test-v12-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -175,9 +179,7 @@ jobs:
             set -eu
             bash scripts/run-android-emulator-e2e.sh "$APK_PATH" "$EVIDENCE_DIR"
 
-            pwsh -NoProfile -File scripts/pull-field-test-bundle.ps1 \
-              -OutputRoot "$EVIDENCE_DIR/device-bundles" \
-              -PackageName "$FIELD_TEST_PACKAGE"
+            pwsh -NoProfile -File scripts/pull-field-test-bundle.ps1 -OutputRoot "$EVIDENCE_DIR/device-bundles" -PackageName "$FIELD_TEST_PACKAGE"
 
             bundle_dir="$(find "$EVIDENCE_DIR/device-bundles" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
             test -n "$bundle_dir"
