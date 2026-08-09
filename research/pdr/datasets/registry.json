@@ -1,0 +1,201 @@
+{
+  "schema_version": 1,
+  "policy": "Initial metadata audit only. Downloaded versions require sequence-level manifests and content hashes before use.",
+  "datasets": [
+    {
+      "dataset": "RoNIN",
+      "source_url": "https://ronin.cs.sfu.ca/",
+      "platform": "Android phone plus Tango ground-truth system",
+      "split_keys": ["dataset", "user", "device", "placement", "sequence"],
+      "license": {
+        "research": "official repository and artifacts state research use; verify exact downloaded artifact terms",
+        "redistribution": "unknown",
+        "product": "research-only"
+      },
+      "decision": "benchmark-only",
+      "decision_reasons": [
+        "Android raw IMU is a candidate input subset, but every downloaded column and preprocessing step still needs a sequence manifest.",
+        "Tango pose, ground-truth trajectory, and true body heading are evaluation-only.",
+        "Official code is GPL-3.0 and must remain isolated from product packages; artifact product rights are not established."
+      ],
+      "fields": [
+        {
+          "name": "raw_accelerometer",
+          "availability": "candidate; verify downloaded sequence manifest",
+          "role": "live-input",
+          "android_api": "android.hardware.SensorEvent.values",
+          "sensor_type": "TYPE_ACCELEROMETER",
+          "unit": "m/s^2",
+          "axes_or_frame": "Android device axes; verify dataset export transform",
+          "timestamp_basis": "monotonic sensor time; verify export",
+          "required_rate_hz": 100,
+          "reproducible_from_android_raw": true,
+          "transformation": "explicit axis/unit conversion after manifest audit"
+        },
+        {
+          "name": "raw_gyroscope",
+          "availability": "candidate; verify downloaded sequence manifest",
+          "role": "live-input",
+          "android_api": "android.hardware.SensorEvent.values",
+          "sensor_type": "TYPE_GYROSCOPE",
+          "unit": "rad/s",
+          "axes_or_frame": "Android device axes; verify dataset export transform",
+          "timestamp_basis": "monotonic sensor time; verify export",
+          "required_rate_hz": 100,
+          "reproducible_from_android_raw": true,
+          "transformation": "explicit axis/unit conversion after manifest audit"
+        },
+        {
+          "name": "tango_pose",
+          "availability": "dataset ground truth",
+          "role": "evaluation-only",
+          "android_api": null,
+          "sensor_type": null,
+          "unit": "m and quaternion",
+          "axes_or_frame": "Tango world frame",
+          "timestamp_basis": "dataset synchronized",
+          "required_rate_hz": null,
+          "reproducible_from_android_raw": false
+        },
+        {
+          "name": "true_body_heading",
+          "availability": "derived ground truth",
+          "role": "training-label",
+          "android_api": null,
+          "sensor_type": null,
+          "unit": "rad",
+          "axes_or_frame": "ground-truth body frame",
+          "timestamp_basis": "dataset synchronized",
+          "required_rate_hz": null,
+          "reproducible_from_android_raw": false
+        }
+      ]
+    },
+    {
+      "dataset": "OxIOD",
+      "source_url": "https://deepio.cs.ox.ac.uk/",
+      "platform": "iPhone/Core Motion with external reference",
+      "split_keys": ["dataset", "user", "device", "placement", "sequence"],
+      "license": {
+        "research": "verify dataset terms before download",
+        "redistribution": "unknown",
+        "product": "unknown"
+      },
+      "decision": "benchmark-only",
+      "decision_reasons": [
+        "Raw inertial channels may support algorithm comparison, but iPhone axes, timestamps, calibration, and Core Motion fields are not assumed Android-equivalent.",
+        "External position/orientation remains evaluation-only.",
+        "Product and redistribution rights require an artifact-specific review."
+      ],
+      "fields": [
+        {
+          "name": "raw_accelerometer",
+          "availability": "candidate raw channel; exact semantics pending manifest",
+          "role": "live-input",
+          "android_api": "android.hardware.SensorEvent.values",
+          "sensor_type": "TYPE_ACCELEROMETER",
+          "unit": "m/s^2; verify source export",
+          "axes_or_frame": "iPhone device axes; requires explicit Android-frame audit",
+          "timestamp_basis": "dataset timestamp; monotonic semantics pending",
+          "required_rate_hz": 100,
+          "reproducible_from_android_raw": true,
+          "transformation": "unit and handedness conversion only after field audit"
+        },
+        {
+          "name": "core_motion_attitude",
+          "availability": "platform-fused field",
+          "role": "forbidden",
+          "android_api": null,
+          "sensor_type": null,
+          "unit": "quaternion",
+          "axes_or_frame": "Apple Core Motion reference frame",
+          "timestamp_basis": "dataset timestamp",
+          "required_rate_hz": null,
+          "reproducible_from_android_raw": false,
+          "transformation": "no proven Android-semantic equivalent"
+        },
+        {
+          "name": "ground_truth_position",
+          "availability": "external ground truth",
+          "role": "evaluation-only",
+          "android_api": null,
+          "sensor_type": null,
+          "unit": "m",
+          "axes_or_frame": "dataset world frame",
+          "timestamp_basis": "dataset synchronized",
+          "required_rate_hz": null,
+          "reproducible_from_android_raw": false
+        }
+      ]
+    },
+    {
+      "dataset": "RIDI",
+      "source_url": "https://yanhangpublic.github.io/ridi/index.html",
+      "platform": "smartphone inertial dataset with external trajectory reference",
+      "split_keys": ["dataset", "user", "device", "placement", "sequence"],
+      "license": {
+        "research": "official code is MIT; verify dataset and each downloaded artifact separately",
+        "redistribution": "unknown for dataset artifacts",
+        "product": "unknown for dataset artifacts and derived weights"
+      },
+      "decision": "benchmark-only",
+      "decision_reasons": [
+        "Raw inertial fields require a column-level unit, axis, timestamp, and device audit.",
+        "A 200 Hz source can be downsampled for robustness testing but cannot make 200 Hz a product requirement.",
+        "Corrected orientation and trajectory are not product inference inputs."
+      ],
+      "fields": [
+        {
+          "name": "raw_accelerometer",
+          "availability": "candidate; exact device/export semantics pending manifest",
+          "role": "live-input",
+          "android_api": "android.hardware.SensorEvent.values",
+          "sensor_type": "TYPE_ACCELEROMETER",
+          "unit": "m/s^2; verify source export",
+          "axes_or_frame": "phone axes; verify handedness and preprocessing",
+          "timestamp_basis": "dataset timestamp; monotonic semantics pending",
+          "required_rate_hz": 100,
+          "reproducible_from_android_raw": true,
+          "transformation": "downsample source to 50/100 Hz after anti-alias audit"
+        },
+        {
+          "name": "raw_gyroscope",
+          "availability": "candidate; exact device/export semantics pending manifest",
+          "role": "live-input",
+          "android_api": "android.hardware.SensorEvent.values",
+          "sensor_type": "TYPE_GYROSCOPE",
+          "unit": "rad/s; verify source export",
+          "axes_or_frame": "phone axes; verify handedness and preprocessing",
+          "timestamp_basis": "dataset timestamp; monotonic semantics pending",
+          "required_rate_hz": 100,
+          "reproducible_from_android_raw": true,
+          "transformation": "downsample source to 50/100 Hz after anti-alias audit"
+        },
+        {
+          "name": "corrected_orientation",
+          "availability": "dataset/platform-derived",
+          "role": "forbidden",
+          "android_api": null,
+          "sensor_type": null,
+          "unit": "quaternion",
+          "axes_or_frame": "dataset-defined frame",
+          "timestamp_basis": "dataset synchronized",
+          "required_rate_hz": null,
+          "reproducible_from_android_raw": false
+        },
+        {
+          "name": "ground_truth_trajectory",
+          "availability": "external/derived ground truth",
+          "role": "evaluation-only",
+          "android_api": null,
+          "sensor_type": null,
+          "unit": "m",
+          "axes_or_frame": "dataset world frame",
+          "timestamp_basis": "dataset synchronized",
+          "required_rate_hz": null,
+          "reproducible_from_android_raw": false
+        }
+      ]
+    }
+  ]
+}
