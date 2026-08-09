@@ -1,0 +1,47 @@
+name: field-test-analysis
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/field-test-analysis.yml"
+      - "scripts/analyze-field-test-summary.mjs"
+      - "scripts/analyze-field-test-summary.test.mjs"
+      - "scripts/analyze-field-test-summary-safety.test.mjs"
+      - "scripts/analyze-latest-field-test.ps1"
+      - "docs/FIELD_TEST_OBJECTIVE_ANALYSIS.md"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: field-test-analysis-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  objective-analyzer:
+    name: Coordinate-free objective S0 analyzer
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Run analyzer unit and privacy tests
+        run: >-
+          node --test
+          scripts/analyze-field-test-summary.test.mjs
+          scripts/analyze-field-test-summary-safety.test.mjs
+      - name: Parse Windows Docker wrapper with PowerShell
+        shell: pwsh
+        run: |
+          $source = [System.IO.File]::ReadAllText("scripts/analyze-latest-field-test.ps1")
+          [void][ScriptBlock]::Create($source)
+      - name: Assert the analyzer has no runtime dependencies
+        run: |
+          node --check scripts/analyze-field-test-summary.mjs
+          if grep -Eq "from ['\"](?!node:)" scripts/analyze-field-test-summary.mjs; then
+            echo "Objective analyzer must use Node standard-library imports only." >&2
+            exit 1
+          fi
