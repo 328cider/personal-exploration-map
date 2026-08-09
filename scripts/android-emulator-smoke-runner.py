@@ -13,11 +13,13 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 import re
+import struct
 import subprocess
 import sys
 import time
 from typing import Any
 import xml.etree.ElementTree as ET
+import zlib
 
 SCRIPT_PATH = Path(__file__).with_name("android-emulator-smoke.py")
 SPEC = importlib.util.spec_from_file_location("pem_android_emulator_smoke", SCRIPT_PATH)
@@ -29,7 +31,6 @@ SPEC.loader.exec_module(smoke)
 _base_wait_for_node = smoke.wait_for_node
 _base_tap_text = smoke.tap_text
 _base_screenshot = smoke.screenshot
-_base_changed_pixel_ratio = smoke.changed_pixel_ratio
 
 STATIC_LABEL_ALIASES = {
     "POCKET-FIRST RECORDING": "探索を邪魔しないために",
@@ -43,6 +44,7 @@ RAW_RECORDING_SCREENSHOTS = {
     "05-live-after-route",
     "06-recording-recovered",
 }
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
 def field_app_is_top_resumed() -> bool:
@@ -146,45 +148,139 @@ def screenshot(artifacts: Path, name: str) -> Path:
     return _base_screenshot(artifacts, name)
 
 
-def changed_pixel_ratio(first: Path, second: Path) -> float:
-    """Parse ImageMagick AE output as an absolute changed-pixel count.
+def paeth_predictor(left: int, up: int, upper_left: int) -> int:
+    prediction = left + up - upper_left
+    left_distance = abs(prediction - left)
+    up_distance = abs(prediction - up)
+    upper_left_distance = abs(prediction - upper_left)
+    if left_distance <= up_distance and left_distance <= upper_left_distance:
+        return left
+    if up_distance <= upper_left_distance:
+        return up
+    return upper_left
 
-    ImageMagick 7 commonly prints both the absolute count and a normalized
-    value, for example ``73788 (0.0355845)``. The legacy harness selected the
-    final parenthesized token, failed to convert it, and silently fell back to
-    average screen colour. That understated a visibly grown map by almost an
-    order of magnitude.
-    """
 
-    available = smoke.run(
-        ["bash", "-lc", "command -v compare >/dev/null"],
-        check=False,
-    ).returncode == 0
-    if available:
-        metric = smoke.run(
-            [
-                "compare",
-                "-metric",
-                "AE",
-                str(first),
-                str(second),
-                "null:",
-            ],
-            check=False,
+def decode_png_rgb(path: Path) -> tuple[int, int, bytes]:
+    """Decode the non-interlaced 8-bit RGB/RGBA PNG emitted by screencap."""
+
+    png = path.read_bytes()
+    if not png.startswith(PNG_SIGNATURE):
+        raise smoke.SmokeFailure(f"screencap is not a PNG: {path}")
+
+    offset = len(PNG_SIGNATURE)
+    width = height = bit_depth = color_type = interlace = None
+    compressed = bytearray()
+    while offset + 12 <= len(png):
+        length = struct.unpack(">I", png[offset : offset + 4])[0]
+        chunk_type = png[offset + 4 : offset + 8]
+        chunk_data = png[offset + 8 : offset + 8 + length]
+        offset += 12 + length
+        if chunk_type == b"IHDR":
+            (
+                width,
+                height,
+                bit_depth,
+                color_type,
+                _compression,
+                _filter_method,
+                interlace,
+            ) = struct.unpack(">IIBBBBB", chunk_data)
+        elif chunk_type == b"IDAT":
+            compressed.extend(chunk_data)
+        elif chunk_type == b"IEND":
+            break
+
+    if width is None or height is None:
+        raise smoke.SmokeFailure(f"PNG is missing IHDR: {path}")
+    if bit_depth != 8 or color_type not in (2, 6) or interlace != 0:
+        raise smoke.SmokeFailure(
+            "unsupported screencap PNG format: "
+            f"bitDepth={bit_depth} colorType={color_type} interlace={interlace}"
         )
-        output = f"{metric.stdout}\n{metric.stderr}".strip()
-        count_match = re.match(r"\s*([0-9]+(?:\.[0-9]+)?)", output)
-        if count_match is not None:
-            changed = float(count_match.group(1))
-            total_text = smoke.run(
-                ["identify", "-format", "%[fx:w*h]", str(first)],
-                check=True,
-            ).stdout.strip()
-            total = float(total_text)
-            if total > 0:
-                return changed / total
 
-    return _base_changed_pixel_ratio(first, second)
+    bytes_per_pixel = 3 if color_type == 2 else 4
+    stride = width * bytes_per_pixel
+    raw = zlib.decompress(bytes(compressed))
+    expected = height * (stride + 1)
+    if len(raw) != expected:
+        raise smoke.SmokeFailure(
+            f"unexpected PNG payload length: expected {expected}, got {len(raw)}"
+        )
+
+    cursor = 0
+    previous = bytearray(stride)
+    rgb = bytearray(width * height * 3)
+    output = 0
+    for _ in range(height):
+        filter_type = raw[cursor]
+        cursor += 1
+        encoded = raw[cursor : cursor + stride]
+        cursor += stride
+        decoded = bytearray(stride)
+        for index, value in enumerate(encoded):
+            left = decoded[index - bytes_per_pixel] if index >= bytes_per_pixel else 0
+            up = previous[index]
+            upper_left = (
+                previous[index - bytes_per_pixel]
+                if index >= bytes_per_pixel
+                else 0
+            )
+            if filter_type == 0:
+                reconstructed = value
+            elif filter_type == 1:
+                reconstructed = value + left
+            elif filter_type == 2:
+                reconstructed = value + up
+            elif filter_type == 3:
+                reconstructed = value + ((left + up) // 2)
+            elif filter_type == 4:
+                reconstructed = value + paeth_predictor(left, up, upper_left)
+            else:
+                raise smoke.SmokeFailure(f"unsupported PNG filter {filter_type}")
+            decoded[index] = reconstructed & 0xFF
+
+        for index in range(0, stride, bytes_per_pixel):
+            rgb[output : output + 3] = decoded[index : index + 3]
+            output += 3
+        previous = decoded
+
+    return width, height, bytes(rgb)
+
+
+def changed_pixel_ratio(first: Path, second: Path) -> float:
+    first_width, first_height, before = decode_png_rgb(first)
+    second_width, second_height, after = decode_png_rgb(second)
+    if (first_width, first_height) != (second_width, second_height):
+        raise smoke.SmokeFailure(
+            f"screen size changed from {first_width}x{first_height} to "
+            f"{second_width}x{second_height}"
+        )
+
+    changed = sum(
+        1
+        for index in range(0, len(before), 3)
+        if before[index : index + 3] != after[index : index + 3]
+    )
+    return changed / max(1, first_width * first_height)
+
+
+def assert_screen_changed(
+    before: Path,
+    after: Path,
+    *,
+    minimum_ratio: float,
+    label: str,
+) -> float:
+    ratio = changed_pixel_ratio(before, after)
+    smoke.log(
+        f"{label} changed-pixel ratio={ratio:.6f} source=stdlib-png-ae"
+    )
+    if ratio < minimum_ratio:
+        raise smoke.SmokeFailure(
+            f"{label} did not change enough: ratio={ratio:.6f}, "
+            f"expected >= {minimum_ratio}"
+        )
+    return ratio
 
 
 def tap_at_ratio(x_ratio: float, y_ratio: float) -> None:
@@ -214,6 +310,7 @@ def tap_text(
 smoke.wait_for_node = wait_for_node
 smoke.screenshot = screenshot
 smoke.changed_pixel_ratio = changed_pixel_ratio
+smoke.assert_screen_changed = assert_screen_changed
 smoke.tap_text = tap_text
 
 if __name__ == "__main__":
