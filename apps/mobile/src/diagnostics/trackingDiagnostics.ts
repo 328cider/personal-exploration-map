@@ -1,5 +1,6 @@
 import {
   createExplorationTrackingDiagnostics,
+  formatTrackingDiagnosticsSummary,
   type ExplorationTrackingDiagnostics,
   type TrackingDiagnosticEvent,
   type TrackingDiagnosticEventKind,
@@ -7,6 +8,10 @@ import {
 } from "@exploration-map/mapping-engine";
 import { createSqliteTrackingDiagnosticsStore } from "@exploration-map/sqlite-adapter";
 
+import {
+  captureFieldTestEnvironmentSnapshot,
+  writeFieldTestTextFile,
+} from "../../modules/field-test-diagnostics";
 import {
   getActiveTrackingContext,
   type ActiveTrackingContext,
@@ -18,6 +23,8 @@ import { createId } from "../utils/id";
 const diagnosticsStore = createSqliteTrackingDiagnosticsStore(
   getMappingDatabase,
 );
+const environmentCaptureEnabled =
+  __DEV__ || process.env.EXPO_PUBLIC_FIELD_TEST === "1";
 
 let diagnosticWriteQueue: Promise<void> = Promise.resolve();
 
@@ -54,6 +61,88 @@ function createDiagnosticEvent(input: DiagnosticInput): TrackingDiagnosticEvent 
   };
 }
 
+function environmentPhaseFor(
+  kind: TrackingDiagnosticEventKind,
+): "started" | "ended" | null {
+  if (kind === "provider.started") {
+    return "started";
+  }
+  if (kind === "provider.stop.requested") {
+    return "ended";
+  }
+  return null;
+}
+
+async function appendEnvironmentSnapshot(
+  context: ActiveTrackingContext,
+  phase: "started" | "ended",
+): Promise<void> {
+  if (!environmentCaptureEnabled) {
+    return;
+  }
+
+  try {
+    const snapshot = await captureFieldTestEnvironmentSnapshot();
+    if (snapshot === null) {
+      return;
+    }
+    await diagnosticsStore.append(
+      createDiagnosticEvent({
+        context,
+        kind:
+          phase === "started"
+            ? "environment.session.started"
+            : "environment.session.ended",
+        occurredAtMs: snapshot.capturedAtMs,
+        payload: { ...snapshot },
+      }),
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await diagnosticsStore
+      .append(
+        createDiagnosticEvent({
+          context,
+          kind: "environment.snapshot.failed",
+          payload: { phase, message },
+        }),
+      )
+      .catch(() => undefined);
+  }
+}
+
+function coordinateFreeSummary(
+  reports: readonly ExplorationTrackingReportItem[],
+): string {
+  return [
+    "Personal Exploration Map / USB field-test diagnostics",
+    "privacy=no_coordinates_no_map_names_no_ids_no_marker_text_no_map_images",
+    "contains=device_time_battery_permissions_and_aggregate_tracking_metrics",
+    `exploration_count=${reports.length}`,
+    ...reports.map(
+      ({ report }, index) =>
+        `[exploration_${index + 1}]\n${formatTrackingDiagnosticsSummary(report)}`,
+    ),
+  ].join("\n\n");
+}
+
+async function persistCoordinateFreeSummary(
+  reports: readonly ExplorationTrackingReportItem[],
+): Promise<void> {
+  if (!environmentCaptureEnabled || reports.length === 0) {
+    return;
+  }
+  const content = coordinateFreeSummary(reports);
+  const latestStartedAtMs = reports.at(-1)?.report.startedAtMs ?? Date.now();
+  await Promise.all([
+    writeFieldTestTextFile("latest-coordinate-free-diagnostics.txt", content),
+    writeFieldTestTextFile(
+      `diagnostics-${Math.round(latestStartedAtMs)}.txt`,
+      content,
+    ),
+  ]).catch(() => undefined);
+}
+
 export async function recordTrackingDiagnosticEvent(
   input: DiagnosticInput,
 ): Promise<boolean> {
@@ -71,9 +160,13 @@ export function recordTrackingDiagnosticBestEffort(
   input: DiagnosticInput,
 ): Promise<void> {
   const event = createDiagnosticEvent(input);
+  const environmentPhase = environmentPhaseFor(input.kind);
   diagnosticWriteQueue = diagnosticWriteQueue.then(async () => {
     try {
       await diagnosticsStore.append(event);
+      if (environmentPhase !== null) {
+        await appendEnvironmentSnapshot(input.context, environmentPhase);
+      }
     } catch {
       // Operational evidence is useful but non-canonical. Never trade away a
       // raw location sample or recoverable tracking session for diagnostics.
@@ -131,5 +224,6 @@ export async function loadPersonalMapTrackingDiagnostics(
       }),
     });
   }
+  await persistCoordinateFreeSummary(reports);
   return reports;
 }

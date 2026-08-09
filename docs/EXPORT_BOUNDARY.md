@@ -1,7 +1,8 @@
 # Export / Import Boundary
 
-- Status: Design boundary
+- Status: Active boundary — geographic serializers partially implemented
 - Established: 2026-08-07
+- Last reviewed: 2026-08-09
 - Scope: GPX, GeoJSON, and lossless PersonalMap backup
 
 ## Purpose
@@ -13,6 +14,29 @@ exportは1種類にまとめない。目的が異なるため、次の3境界へ
 3. **PersonalMap bundle** — raw evidenceを含む無損失backup / restore
 
 標準形式へ収まらない情報を捨てて「export済み」と扱わない。一方、独自bundleだけに閉じ込めて標準相互運用を失わない。
+
+## Current implementation status
+
+PR #81 / main `53ab66a37ba11472f2c935b4415c1f7787dab4e6`で、mapping-engineへdependency-freeのread-only serializerを追加した。
+
+Implemented:
+
+- `serializePersonalMapGpx`
+- `buildPersonalMapGeoJson`
+- `serializePersonalMapGeoJson`
+- typed error / warning contract
+- session separation、local-frame rejection、geographic marker handling
+- mapping package test / typecheck、mobile static、APK build
+
+Not implemented:
+
+- mobile file creation、保存、share sheet
+- GPX / GeoJSON import
+- lossless PersonalMap bundle
+- raw/rejected evidence backup / restore
+- temporary file cleanup / encryption
+
+現在のField-test S0候補へexport UIを追加していない。pure serializerをmainへ置いたことと、ユーザー向けexport機能が完成したことを混同しない。
 
 ## Canonical rule
 
@@ -55,15 +79,27 @@ PersonalMap
 - rejected raw sampleは通常GPXには含めない
 - markerはgeographic source positionがある場合に`<wpt>`候補
 
+### Implemented behavior
+
+- each ExplorationSessionを独立`trkseg`へ出力
+- accepted geographic positionのみ`trkpt`へ出力
+- time、optional altitude、source、confidence、horizontal accuracyを保持
+- geographic markerを`wpt`へ出力
+- local-only markerはwarning付きで省略
+- local / unresolved PersonalMapをtyped errorで拒否
+- XML special charactersをescape
+
 ### Metadata
 
 可能な範囲でextensionsへ次を記録できる。
 
 - PersonalMap id
 - ExplorationSession id
-- source provider
+- source provider / position source
 - confidence / horizontal accuracy
 - accepted / rejected filter version
+
+現在のserializerはPersonalMap id、ExplorationSession id、point source、confidence、horizontal accuracyをextensionsへ入れる。filter versionはsnapshot contractに存在しないため未実装であり、lossless bundle側のprovenance設計で扱う。
 
 extensionsが失われても基本GPX trackとして読めるようにする。
 
@@ -90,9 +126,9 @@ GPXだけでは次を無損失に表せない。
 
 ### Feature mapping
 
-- each geographic ExplorationSession: one `LineString`
+- each eligible geographic ExplorationSession: one `LineString`
 - confirmed geographic marker: one `Point`
-- optional uncertainty / explored corridor: separate derived `Polygon` or `MultiPolygon`
+- optional uncertainty: separate diagnostic feature / file only when semantics are defined
 - segment / marker ids: `properties`
 
 ```json
@@ -122,13 +158,28 @@ GeoJSON geometryはlongitude / latitudeのgeographic coordinatesとしてのみ�
 
 local mapをGISへ渡す必要が生じた場合は、明示CRSを持つ別format、anchor transform、またはlossless bundleを使う。GeoJSONの標準的なgeographic意味を曲げない。
 
+### Implemented behavior
+
+- 2点以上の各ExplorationSessionを独立LineString featureへ出力
+- coordinate orderをlongitude / latitudeへ固定
+- optional altitudeをthird position elementへ出力
+- geographic markerをPoint featureへ出力
+- trackを`derived-map` / `derived-from-accepted-observations`と明示
+- markerを`confirmed-evidence`と明示
+- 2点未満のsessionをinvalid LineStringにせずwarning付きで省略
+- local / unresolved PersonalMapをtyped errorで拒否
+
+Antimeridianを跨ぐLineStringのcut / splitは未検証であり、Issue #22の残項目として扱う。
+
 ### Derived vs evidence
 
 GeoJSONは用途別profileを明示する。
 
-- `derived-map`: accepted sampleから再構成した線・点
+- `derived-map`: accepted sampleから再構成した線
 - `diagnostic`: rejected / gap / uncertaintyの可視化
 - `confirmed-evidence`: confirmed marker / correction
+
+現在のserializerは`derived-map` trackと`confirmed-evidence` markerのみを出力する。diagnostic / uncertainty geometryはcanonical geographic exportへ混ぜない。
 
 game overlayはcanonical GeoJSON exportへ混ぜない。必要なら別file / layerとする。
 
@@ -140,6 +191,12 @@ game overlayはcanonical GeoJSON exportへ混ぜない。必要なら別file / l
 - device migration
 - reproducible replay
 - filter / renderer / engine update後の再生成
+
+### Current status
+
+未実装。
+
+`PersonalMapSnapshot`はderived viewであり、raw observation、rejected evidence、tracking provider provenanceをすべて保持しない。したがって、snapshotだけをJSON化してlossless backupと呼ばない。repositoryのread-only export modelを別途設計する。
 
 ### Container
 
@@ -204,7 +261,7 @@ raw location historyは高感度データである。
 - diagnostic exportとuser backupを分ける
 - default filenameへ住所や正確な場所名を含めない
 
-GPX / GeoJSONも位置履歴であるため同じ注意を適用する。
+GPX / GeoJSONも位置履歴であるため同じ注意を適用する。pure serializerはfile作成やshareを自動実行しない。
 
 ## Import rules
 
@@ -217,22 +274,39 @@ GPX / GeoJSONも位置履歴であるため同じ注意を適用する。
 7. derived snapshotをimportして正本にしない
 8. partial failureはtransactionでrollbackする
 
+Import / restoreは未実装であり、serializer追加をround-trip完成とは扱わない。
+
 ## Implementation order
 
-1. Issue #7のOSS監査とformat profileを確定
-2. read-only export query / serializer boundaryをmapping-engineに追加
-3. GPX geographic track exporter
-4. GeoJSON derived map exporter
-5. versioned lossless bundle exporter
-6. restoreはexport formatがdogfoodで安定した後
+1. [x] Issue #7のOSS監査とformat profileを確定
+2. [x] read-only serializer boundaryをmapping-engineに追加
+3. [x] GPX geographic track serializer
+4. [x] GeoJSON derived map serializer
+5. [ ] mobile file / explicit share adapter
+6. [ ] versioned lossless bundle exporter
+7. [ ] export dogfood
+8. [ ] import / restore transaction
 
 ## Validation
 
-- two sessions export as two GPX `trkseg`
-- no false connection after re-import / display
-- local map is rejected by GPX / geographic GeoJSON exporter without anchor
-- geographic marker round-trip
-- bundle preserves rejected raw observations
-- bundle replay reproduces PersonalMap stats / segments
-- malformed / unsupported version is rejected without partial writes
-- game state absence does not block map import
+Completed:
+
+- [x] two sessions export as two GPX `trkseg`
+- [x] no artificial connection point
+- [x] local map is rejected by GPX / geographic GeoJSON serializer without anchor
+- [x] geographic marker becomes GPX waypoint / GeoJSON Point
+- [x] longitude / latitude order
+- [x] invalid or inconsistent geographic source position is rejected
+- [x] mapping package test / TypeScript
+- [x] mobile architecture / canonical-write / Expo / TypeScript
+- [x] Metro-independent Field-test APK build after export surface addition
+
+Remaining:
+
+- [ ] official GPX XSD validation strategy
+- [ ] antimeridian GeoJSON fixture / split strategy
+- [ ] explicit mobile file / share UX
+- [ ] bundle preserves rejected raw observations
+- [ ] bundle replay reproduces PersonalMap stats / segments
+- [ ] malformed / unsupported version is rejected without partial writes
+- [ ] game state absence does not block map import

@@ -12,6 +12,7 @@
 4. `docs/PRODUCT.md`、`docs/UX_PRINCIPLES.md`、`docs/ARCHITECTURE.md`
 5. `docs/FEATURE_PLACEMENT.md` — core / engine / adapter / renderer / gameの配置規則
 6. 対象Issue、関連PR、実験文書
+7. export / import / share / backupを扱う場合は`docs/EXPORT_BOUNDARY.md`
 
 `CURRENT_DIRECTION.md`、Issue、PR、実装が憲章と矛盾する場合は、下位文書を優先してはならない。実装都合で憲章を暗黙に変更せず、専用IssueとADRで明示する。
 
@@ -62,6 +63,7 @@ IssueまたはPRに次を残す。該当しない場合も理由を書く。
 - map / exploration lifecycle、transaction、repository / tracking port、event publication
 - 現在採用している地図への唯一の書き込み窓口
 - mutable sessionやcore mutationをapp / gameへ公開しない
+- read-only serializerは置けるが、file system、share sheet、React Native、Expo、SQLite、Node runtimeへ依存しない
 
 `mapping-engine`という名称やAPIはADRで変更できるが、canonical writeを制御されたapplication boundaryへ集約する憲章原則は維持する。
 
@@ -69,6 +71,7 @@ IssueまたはPRに次を残す。該当しない場合も理由を書く。
 
 - OS、sensor、DB、file、network
 - 観測と保存を担うが、map truthや報酬を決めない
+- export file作成、temporary file、share sheet、platform permissionはここまたはapp shellで扱う
 
 ### Renderer
 
@@ -80,6 +83,19 @@ IssueまたはPRに次を残す。該当しない場合も理由を書く。
 - read-only snapshotとeventから別管理のstate、overlay、cueを生成
 - raw、accepted / rejected、基本track、marker evidenceを直接変更しない
 - 地図修正はユーザー確認後にappがengine commandへ変換する
+
+## Export / import boundary
+
+- GPXとgeographic GeoJSONはWGS84のgeographic PersonalMapだけを対象にする。
+- local / unresolved frameを緯度経度0,0や任意のWGS84座標へ偽装しない。
+- ExplorationSessionごとのsegmentを維持し、未観測区間を人工pointで接続しない。
+- GPX / GeoJSONは相互運用用のderived exportであり、raw evidenceを含むbackupではない。
+- `PersonalMapSnapshot`だけをJSON化してlossless bundleと呼ばない。raw / rejected / provider / frame provenanceを保持するrepository export modelを使う。
+- diagnostic、uncertainty、confirmed evidence、game overlayを同一profileへ暗黙に混ぜない。
+- raw位置を含むbundleはユーザーの明示操作だけで生成し、自動uploadしない。
+- share sheetを自動で開かず、temporary fileを不要後に削除する。
+- importしたderived snapshotをcanonical mapへ直接昇格させない。schema、hash、frame、provenanceを検証し、transactionとcanonical commandを通す。
+- default filenameへ住所、地図名、正確な場所名を入れない。
 
 ## Engineering rules
 
