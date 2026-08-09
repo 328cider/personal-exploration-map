@@ -10,6 +10,7 @@ import {
   cutLineStringAtAntimeridian,
   type AntimeridianSafeLineGeometry,
 } from "./geojsonAntimeridian.ts";
+import { normalizeGpxLongitude } from "./gpxCoordinates.ts";
 
 export type PersonalMapExportFormat = "gpx-1.1" | "geojson";
 
@@ -252,7 +253,7 @@ function serializeGpxPoint(
 ): readonly string[] {
   const position = geographicPositionForTrackPoint(point, explorationId);
   const lines = [
-    `      <trkpt lat="${formatNumber(position.latitude, 8)}" lon="${formatNumber(position.longitude, 8)}">`,
+    `      <trkpt lat="${formatNumber(position.latitude, 8)}" lon="${formatNumber(normalizeGpxLongitude(position.longitude), 8)}">`,
   ];
   if (position.altitudeMeters !== undefined) {
     lines.push(`        <ele>${formatNumber(position.altitudeMeters, 3)}</ele>`);
@@ -312,7 +313,7 @@ function serializeGpxWaypoint(marker: MapMarker): readonly string[] | null {
     return null;
   }
   const lines = [
-    `  <wpt lat="${formatNumber(position.latitude, 8)}" lon="${formatNumber(position.longitude, 8)}">`,
+    `  <wpt lat="${formatNumber(position.latitude, 8)}" lon="${formatNumber(normalizeGpxLongitude(position.longitude), 8)}">`,
   ];
   if (position.altitudeMeters !== undefined) {
     lines.push(`    <ele>${formatNumber(position.altitudeMeters, 3)}</ele>`);
