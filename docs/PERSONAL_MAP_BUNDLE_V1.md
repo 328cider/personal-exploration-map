@@ -1,9 +1,9 @@
 # PersonalMap Bundle v1 — Logical Format
 
-- Status: implementation candidate / export-only logical contract
+- Status: implemented logical contract / platform backup incomplete
 - Schema version: `1`
 - Number encoding: `ecmascript-number-string-v1`
-- Updated: 2026-08-09
+- Updated: 2026-08-10
 
 ## Purpose
 
@@ -134,6 +134,26 @@ Decoderは`01`、`1.0`、`+1`、`0e0`、前後空白、lowercase infinity等の�
 
 structural metadata（PersonalMap / session start/end等）はfiniteかつ整合していなければbundle buildを拒否する。一方、raw evidence内のinvalid numberは失敗の証拠なのでtoken化して保持する。
 
+### Canonical SQLite fidelity gate
+
+logical formatが特殊値を表現できることと、現行SQLiteがproviderの元値を保持していることは別である。
+
+PR #108 / Issue #99のGitHub Node `v22.23.1` / SQLite `3.51.3` probeは次を確認した。
+
+- nullable `REAL`の`NaN`は`NULL`へ変わる
+- `REAL NOT NULL` / `INTEGER NOT NULL`の`NaN`はinsert failureになる
+- `-0`は正の`0`へ変わる
+- `±Infinity`はREALとして往復する
+
+したがって、現在のnumeric columnsを後からtoken化するだけでは、すでに失われた`NaN`や`-0`を復元できない。Issue #109がoriginal raw payload、normalized projection、明示的sample ordinal、legacy migration、Expo / Android verificationを扱う。
+
+このgateが完了するまで、次を区別する。
+
+1. logical bundleは受け取ったJavaScript numberをexact encodeできる
+2. current canonical SQLite sourceは全original raw number / orderをexact保存しているとは限らない
+
+legacy dataの失われた値や順序を推測して「無損失」と呼ばない。
+
 ## `markers/<ordinal>.json`
 
 user-confirmed markerをpersisted orderで保持する。
@@ -203,24 +223,46 @@ validatorが成功する前にcanonical transactionを開始しない。
 
 ## Current implementation state
 
-Implemented in mapping-engine:
+Implemented in `mapping-engine`:
 
 - logical content builder
-- deterministic inventory
+- deterministic inventory and ordinal private paths
 - exact number encoder / decoder
 - injected SHA-256 port
 - build-time validation
-- unit tests
+- fail-closed logical bundle validator
+- validated staged import decoder without repository writes
+- read-only repository export orchestration with one consistent, sequential snapshot contract
+- read-only `restore-new` collision preflight
+- unit and architecture-boundary tests
+
+Implemented evidence / policy:
+
+- privacy-safe default filenames
+- plaintext external raw backup rejection for normal v1 UX
+- app-private dogfood threat model
+- Node 22 SQLite special-number probe and seven-day JSON artifact
+- explicit storage follow-up #109 for exact raw payload and sample ordinal
 
 Not yet implemented:
 
-- repository read-only export model
-- actual SHA-256 adapter
-- directory / ZIP writer
+- SQLite implementation of the repository snapshot contract
+- canonical exact raw payload / ordinal schema and migration (#109)
+- actual UTF-8 SHA-256 runtime adapter
+- app-private directory writer and atomic finalization
+- orphan temporary cleanup / cancellation
+- directory / ZIP container parser and size/decompression limits
 - encryption
 - mobile explicit backup/share UI
-- container parser
-- fail-closed validator
 - transactional import / restore
+- replay verification and restore provenance
+
+Current sequencing:
+
+1. do not close the SQLite-backed lossless gate until #109 is complete
+2. platform writer work may proceed independently with synthetic/exact logical inputs
+3. start with app-private dogfood only; no share sheet or automatic upload
+4. transactional restore remains gated by successful backup dogfood
+5. current real-device S0 candidate receives no backup UI or runtime change
 
 後続実装で本書と実体がずれた場合、同じPRで更新する。
