@@ -19,35 +19,75 @@
 
 - Docker Desktopが起動している
 - リポジトリの最新`main`を取得している
-- `scripts/pull-field-test-bundle.ps1`で少なくとも1件のbundleを回収済み
+- USBデバッグを有効にしたField-test端末がPCから承認済み
 
-WindowsへNode.js、npm、JDK、Android SDK、Android Studioを導入しない。解析用Node.jsは既存Docker image内で実行する。
+WindowsへNode.js、npm、JDK、Android SDK、Android Studioを導入しない。ADBが無い場合はUSB collectorがGoogle公式Platform Toolsをリポジトリ内`.local`へ取得し、解析用Node.jsは既存Docker image内で実行する。
 
-## 最短手順
+## 回収から解析まで1コマンド — 推奨
 
 リポジトリ直下のWindows PowerShellで実行する。
 
 ```powershell
 git switch main
 git pull --ff-only
-.\scripts\analyze-latest-field-test.ps1
+.\scripts\collect-and-analyze-field-test.ps1
 ```
 
-既定では、次の配下にある最新の`pem-field-test-*`ディレクトリを選ぶ。
+このコマンドは順番に次を行う。
+
+1. Field-testアプリを停止する
+2. `run-as`でapp-private dataをbinary-safe tarとして回収する
+3. system / battery / permission情報を回収する
+4. checksumsとローカルZIPを生成する
+5. Field-testアプリを再起動する
+6. Docker内で最新bundleを解析する
+7. Markdown / JSONの客観S0レポートを生成する
+
+複数のAndroid端末が接続されている場合:
+
+```powershell
+.\scripts\collect-and-analyze-field-test.ps1 -Serial <adb-device-serial>
+```
+
+解析結果がFAILでもPowerShell例外にせず、レポートだけ確認する場合:
+
+```powershell
+.\scripts\collect-and-analyze-field-test.ps1 -NoFailExit
+```
+
+回収後にアプリを再起動しない場合:
+
+```powershell
+.\scripts\collect-and-analyze-field-test.ps1 -DoNotRestartApp
+```
+
+既定の生成物:
 
 ```text
 artifacts\device-bundles\
+├─ pem-field-test-<UTC日時>\
+│  ├─ coordinate-free-diagnostics.txt
+│  ├─ manifest.json
+│  ├─ SHA256SUMS.txt
+│  ├─ app\app-private-data.tar
+│  ├─ system\...
+│  └─ analysis\
+│     ├─ objective-s0-report.md
+│     └─ objective-s0-report.json
+└─ pem-field-test-<UTC日時>.zip
 ```
 
-生成物:
+## 既に回収済みのbundleだけを解析する
 
-```text
-artifacts\device-bundles\pem-field-test-<UTC日時>\analysis\
-├─ objective-s0-report.md
-└─ objective-s0-report.json
+Field-test bundleが既にある場合は、USB回収を繰り返さず解析だけを実行する。
+
+```powershell
+.\scripts\analyze-latest-field-test.ps1
 ```
 
-## 明示的なbundleを解析する
+既定では`artifacts\device-bundles`配下にある最新の`pem-field-test-*`ディレクトリを選ぶ。
+
+明示的なbundleを指定する場合:
 
 ```powershell
 .\scripts\analyze-latest-field-test.ps1 `
@@ -117,12 +157,6 @@ PASSでも次は未判定である。
 - Field-test package / manifest / privacy境界の不整合
 
 FAIL時もMarkdown / JSONは生成される。**同じ条件を再度歩かず、bundleを保持したままコード・エミュレータへ戻す。**
-
-PowerShellでFAILを例外にせず結果だけ確認したい場合:
-
-```powershell
-.\scripts\analyze-latest-field-test.ps1 -NoFailExit
-```
 
 ## 解析する情報
 
