@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "experiment": "ipin-2022-classical-replay-v1",
+  "status": "preregistered-before-raw-member-access",
+  "preregistered_on": "2026-08-09",
+  "protocol": "IPIN_CLASSICAL_PROTOCOL.md",
+  "protocol_sha256": "8e3a9432b60b10e72635e4ba6cead9bab13ca130756c49215c8967507fbba45b",
+  "artifact": {
+    "record": "Zenodo 7612915",
+    "archive": "2022_IPIN_Competition_Track03.zip",
+    "archive_size_bytes": 444265064,
+    "archive_md5": "5b2876681bb7855e0f562ec2ab4510c1",
+    "license": "CC-BY-4.0",
+    "parser_sha256": "e0b41d486f8721d0e624d0f6fbe65d8dedc0ce58433b70df6b0b005ef626855e",
+    "training_inventory_count": 89,
+    "training_user_count": 9,
+    "full_archive_download_allowed": false
+  },
+  "sequences": [
+    {
+      "id": "trial12-user03",
+      "role": "development",
+      "user": "03",
+      "trial": "12",
+      "member": "2022_IPIN_Competition_Track03/01 Logfiles/01 IPIN2022_T3_TrainingData (training)/IPIN2022_T3_TrainingTrial12_User03.txt",
+      "uncompressed_bytes": 5446160,
+      "compressed_bytes": 1588575,
+      "crc32": "29e5bdd2"
+    },
+    {
+      "id": "trial13-user03",
+      "role": "development",
+      "user": "03",
+      "trial": "13",
+      "member": "2022_IPIN_Competition_Track03/01 Logfiles/01 IPIN2022_T3_TrainingData (training)/IPIN2022_T3_TrainingTrial13_User03.txt",
+      "uncompressed_bytes": 5443237,
+      "compressed_bytes": 1641006,
+      "crc32": "a898667e"
+    },
+    {
+      "id": "trial12-user05",
+      "role": "untouched-validation",
+      "user": "05",
+      "trial": "12",
+      "member": "2022_IPIN_Competition_Track03/01 Logfiles/01 IPIN2022_T3_TrainingData (training)/IPIN2022_T3_TrainingTrial12_User05.txt",
+      "uncompressed_bytes": 2630710,
+      "compressed_bytes": 623160,
+      "crc32": "172a4638"
+    },
+    {
+      "id": "trial13-user05",
+      "role": "untouched-validation",
+      "user": "05",
+      "trial": "13",
+      "member": "2022_IPIN_Competition_Track03/01 Logfiles/01 IPIN2022_T3_TrainingData (training)/IPIN2022_T3_TrainingTrial13_User05.txt",
+      "uncompressed_bytes": 2407239,
+      "compressed_bytes": 611307,
+      "crc32": "28e93e74"
+    }
+  ],
+  "frozen_inputs": [
+    "ACCE SensorTimestamp, xyz, accuracy",
+    "GYRO SensorTimestamp, xyz, accuracy",
+    "MAGN SensorTimestamp, xyz, accuracy for quality diagnostics only",
+    "AppTimestamp as callback/lifecycle proxy only"
+  ],
+  "forbidden_inputs": [
+    "AHRS",
+    "POSI",
+    "GNSS bearing or route",
+    "IMUL",
+    "IMUX",
+    "Wi-Fi/BLE/RFID",
+    "maps",
+    "future samples",
+    "completed path shape"
+  ],
+  "estimator": {
+    "family": "B1 imu6",
+    "step_detector_config": "rs25-a010-p025-r025",
+    "weinberg_gain": 0.64,
+    "fallback_stride_m": 0.66,
+    "rates_hz": [50, 100],
+    "parameter_search_allowed": false
+  },
+  "validation_opened": false,
+  "accuracy_claim_allowed": false,
+  "product_adoption_allowed": false,
+  "personal_pilot_allowed": false
+}
