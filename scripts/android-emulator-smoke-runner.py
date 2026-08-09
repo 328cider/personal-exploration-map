@@ -28,7 +28,6 @@ if SPEC is None or SPEC.loader is None:
 smoke = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(smoke)
 
-_base_wait_for_node = smoke.wait_for_node
 _base_tap_text = smoke.tap_text
 _base_screenshot = smoke.screenshot
 
@@ -44,6 +43,11 @@ RAW_RECORDING_SCREENSHOTS = {
     "05-live-after-route",
     "06-recording-recovered",
 }
+SYSTEM_ANR_LABELS = (
+    "Pixel Launcher isn't responding",
+    "System UI isn't responding",
+    "Process system isn't responding",
+)
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
@@ -95,13 +99,55 @@ def wait_for_tracking_notification(
     )
 
 
+def dismiss_blocking_system_anr(root: ET.Element) -> bool:
+    label = next(
+        (candidate for candidate in SYSTEM_ANR_LABELS if smoke.find_node(root, candidate)),
+        None,
+    )
+    if label is None:
+        return False
+
+    smoke.log(f"dismiss emulator system ANR dialog: {label}")
+    action = (
+        smoke.find_node(root, "Close app")
+        or smoke.find_node(root, "アプリを閉じる")
+        or smoke.find_node(root, "Wait")
+        or smoke.find_node(root, "待機")
+    )
+    if action is not None:
+        smoke.tap_node(action)
+    else:
+        smoke.adb_shell(
+            "am",
+            "force-stop",
+            "com.google.android.apps.nexuslauncher",
+            check=False,
+            timeout=30,
+        )
+
+    # The launch intent may have been hidden behind the system dialog. Start
+    # the known Field-test activity directly instead of depending on Launcher.
+    smoke.adb_shell(
+        "am",
+        "start",
+        "-W",
+        "-n",
+        f"{smoke.PACKAGE}/.MainActivity",
+        check=False,
+        timeout=30,
+    )
+    time.sleep(2)
+    return True
+
+
 def wait_for_node(
     artifacts: Path,
     needle: str,
-    **kwargs: Any,
+    *,
+    timeout_seconds: int = 45,
+    scroll: bool = False,
+    dump_prefix: str = "wait",
 ):
-    dump_prefix = str(kwargs.get("dump_prefix", "wait"))
-
     if needle == "YOUR PERSONAL MAP" and dump_prefix == "home-ready":
         needle = "PERSONAL EXPLORATION MAP"
     else:
@@ -111,7 +157,7 @@ def wait_for_node(
         wait_for_tracking_notification(
             artifacts,
             dump_prefix,
-            timeout_seconds=int(kwargs.get("timeout_seconds", 60)),
+            timeout_seconds=timeout_seconds,
         )
         return ET.Element(
             "node",
@@ -121,7 +167,25 @@ def wait_for_node(
             },
         )
 
-    return _base_wait_for_node(artifacts, needle, **kwargs)
+    width, height = smoke.parse_screen_size()
+    deadline = time.monotonic() + timeout_seconds
+    attempt = 0
+    while time.monotonic() < deadline:
+        root, _ = smoke.dump_ui(artifacts, f"{dump_prefix}-{attempt:02d}")
+        node = smoke.find_node(root, needle)
+        if node is not None:
+            return node
+        if dismiss_blocking_system_anr(root):
+            attempt += 1
+            continue
+        if scroll:
+            smoke.swipe_up(width, height)
+        else:
+            time.sleep(1)
+        attempt += 1
+    raise smoke.SmokeFailure(
+        f"UI element did not appear within {timeout_seconds}s: {needle}"
+    )
 
 
 def raw_screenshot(artifacts: Path, name: str) -> Path:
@@ -272,9 +336,7 @@ def assert_screen_changed(
     label: str,
 ) -> float:
     ratio = changed_pixel_ratio(before, after)
-    smoke.log(
-        f"{label} changed-pixel ratio={ratio:.6f} source=stdlib-png-ae"
-    )
+    smoke.log(f"{label} changed-pixel ratio={ratio:.6f} source=stdlib-png-ae")
     if ratio < minimum_ratio:
         raise smoke.SmokeFailure(
             f"{label} did not change enough: ratio={ratio:.6f}, "
