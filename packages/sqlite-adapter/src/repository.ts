@@ -1,7 +1,5 @@
 import type {
   MapMarker,
-  MarkerCategory,
-  PositionSource,
   RawPositionSample,
   ReplayExplorationInput,
 } from "@exploration-map/mapping-core";
@@ -10,8 +8,6 @@ import type {
   MappingRepositoryPort,
   MappingRepositoryWriter,
   PersonalMapListItem,
-  StoredExploration,
-  StoredPersonalMap,
 } from "@exploration-map/mapping-engine";
 
 import type {
@@ -19,59 +15,20 @@ import type {
   AsyncSqliteExecutor,
   SqliteBindValue,
 } from "./database.ts";
-
-interface PersonalMapRow {
-  readonly id: string;
-  readonly name: string;
-  readonly created_at: number;
-  readonly updated_at: number;
-}
-
-interface ExplorationRow {
-  readonly id: string;
-  readonly personal_map_id: string;
-  readonly name: string;
-  readonly status: "recording" | "completed";
-  readonly tracking_provider_id: string;
-  readonly tracking_mode: "background" | "foreground" | "demo" | null;
-  readonly frame_hint: string | null;
-  readonly started_at: number;
-  readonly ended_at: number | null;
-  readonly created_at: number;
-  readonly updated_at: number;
-}
-
-interface PositionRow {
-  readonly id: string;
-  readonly recorded_at: number;
-  readonly source: PositionSource;
-  readonly coordinate_kind: "geographic" | "local";
-  readonly latitude: number | null;
-  readonly longitude: number | null;
-  readonly altitude_meters: number | null;
-  readonly x_meters: number | null;
-  readonly y_meters: number | null;
-  readonly floor_level: number | null;
-  readonly horizontal_accuracy_meters: number | null;
-  readonly heading_degrees: number | null;
-  readonly speed_meters_per_second: number | null;
-  readonly confidence: number;
-}
-
-interface MarkerRow {
-  readonly id: string;
-  readonly recorded_at: number;
-  readonly category: MarkerCategory;
-  readonly label: string;
-  readonly note: string | null;
-  readonly coordinate_kind: "geographic" | "local" | null;
-  readonly latitude: number | null;
-  readonly longitude: number | null;
-  readonly altitude_meters: number | null;
-  readonly x_meters: number | null;
-  readonly y_meters: number | null;
-  readonly floor_level: number | null;
-}
+import {
+  rowToMarker,
+  rowToReplaySample,
+  rowToStoredExploration,
+  SqliteRawEvidenceError,
+  type ExplorationRow,
+  type MarkerRow,
+  type PersonalMapRow,
+  type PositionRow,
+} from "./records.ts";
+import {
+  encodeSqliteRawSamplePayload,
+  SQLITE_RAW_SAMPLE_PAYLOAD_FORMAT,
+} from "./rawSamplePayload.ts";
 
 interface ExplorationMapRow {
   readonly personal_map_id: string;
@@ -82,6 +39,16 @@ interface PersonalMapListRow {
   readonly name: string;
   readonly updated_at: number;
   readonly exploration_count: number;
+}
+
+interface NextSampleOrdinalRow {
+  readonly next_ordinal: number;
+}
+
+interface ExistingSampleRow {
+  readonly exploration_id: string;
+  readonly raw_payload_format: string;
+  readonly raw_payload_json: string | null;
 }
 
 function legacyTrackingMode(
@@ -99,108 +66,6 @@ function legacyTrackingMode(
   }
 }
 
-function rowToSample(row: PositionRow): RawPositionSample | null {
-  const shared = {
-    id: row.id,
-    recordedAtMs: row.recorded_at,
-    source: row.source,
-    confidence: row.confidence,
-    ...(row.horizontal_accuracy_meters === null
-      ? {}
-      : { horizontalAccuracyMeters: row.horizontal_accuracy_meters }),
-    ...(row.heading_degrees === null
-      ? {}
-      : { headingDegrees: row.heading_degrees }),
-    ...(row.speed_meters_per_second === null
-      ? {}
-      : { speedMetersPerSecond: row.speed_meters_per_second }),
-  };
-
-  if (
-    row.coordinate_kind === "geographic" &&
-    row.latitude !== null &&
-    row.longitude !== null
-  ) {
-    return {
-      ...shared,
-      position: {
-        kind: "geographic",
-        latitude: row.latitude,
-        longitude: row.longitude,
-        ...(row.altitude_meters === null
-          ? {}
-          : { altitudeMeters: row.altitude_meters }),
-      },
-    };
-  }
-
-  if (
-    row.coordinate_kind === "local" &&
-    row.x_meters !== null &&
-    row.y_meters !== null
-  ) {
-    return {
-      ...shared,
-      position: {
-        kind: "local",
-        xMeters: row.x_meters,
-        yMeters: row.y_meters,
-        ...(row.floor_level === null ? {} : { floor: row.floor_level }),
-      },
-    };
-  }
-
-  return null;
-}
-
-function rowToMarker(row: MarkerRow): MapMarker {
-  const sourcePosition =
-    row.coordinate_kind === "geographic" &&
-    row.latitude !== null &&
-    row.longitude !== null
-      ? {
-          kind: "geographic" as const,
-          latitude: row.latitude,
-          longitude: row.longitude,
-          ...(row.altitude_meters === null
-            ? {}
-            : { altitudeMeters: row.altitude_meters }),
-        }
-      : row.coordinate_kind === "local" &&
-          row.x_meters !== null &&
-          row.y_meters !== null
-        ? {
-            kind: "local" as const,
-            xMeters: row.x_meters,
-            yMeters: row.y_meters,
-            ...(row.floor_level === null ? {} : { floor: row.floor_level }),
-          }
-        : undefined;
-
-  return {
-    id: row.id,
-    recordedAtMs: row.recorded_at,
-    category: row.category,
-    label: row.label,
-    ...(row.note === null ? {} : { note: row.note }),
-    ...(sourcePosition === undefined ? {} : { sourcePosition }),
-    ...(row.x_meters === null ? {} : { xMeters: row.x_meters }),
-    ...(row.y_meters === null ? {} : { yMeters: row.y_meters }),
-  };
-}
-
-function rowToStoredExploration(row: ExplorationRow): StoredExploration {
-  return {
-    id: row.id,
-    personalMapId: row.personal_map_id,
-    name: row.name,
-    startedAtMs: row.started_at,
-    trackingProviderId: row.tracking_provider_id,
-    ...(row.ended_at === null ? {} : { endedAtMs: row.ended_at }),
-    ...(row.frame_hint === null ? {} : { localFrameLabel: row.frame_hint }),
-  };
-}
-
 async function requirePersonalMapId(
   database: AsyncSqliteExecutor,
   explorationId: string,
@@ -210,7 +75,7 @@ async function requirePersonalMapId(
     explorationId,
   );
   if (row === null) {
-    throw new Error(`Exploration not found: ${explorationId}`);
+    throw new Error("Exploration does not exist.");
   }
   return row.personal_map_id;
 }
@@ -245,23 +110,34 @@ async function touchExplorationAndMap(
   await touchPersonalMap(database, personalMapId, updatedAtMs);
 }
 
-function sampleValues(sample: RawPositionSample): readonly SqliteBindValue[] {
+function finiteProjection(value: number | undefined): number | null {
+  return value !== undefined && Number.isFinite(value) ? value : null;
+}
+
+function sampleProjectionValues(
+  sample: RawPositionSample,
+): readonly SqliteBindValue[] {
   const position = sample.position;
   return [
-    sample.id,
-    sample.recordedAtMs,
+    finiteProjection(sample.recordedAtMs),
     sample.source,
     position.kind,
-    position.kind === "geographic" ? position.latitude : null,
-    position.kind === "geographic" ? position.longitude : null,
-    position.kind === "geographic" ? position.altitudeMeters ?? null : null,
-    position.kind === "local" ? position.xMeters : null,
-    position.kind === "local" ? position.yMeters : null,
-    position.kind === "local" ? position.floor ?? null : null,
-    sample.horizontalAccuracyMeters ?? null,
-    sample.headingDegrees ?? null,
-    sample.speedMetersPerSecond ?? null,
-    sample.confidence,
+    position.kind === "geographic"
+      ? finiteProjection(position.latitude)
+      : null,
+    position.kind === "geographic"
+      ? finiteProjection(position.longitude)
+      : null,
+    position.kind === "geographic"
+      ? finiteProjection(position.altitudeMeters)
+      : null,
+    position.kind === "local" ? finiteProjection(position.xMeters) : null,
+    position.kind === "local" ? finiteProjection(position.yMeters) : null,
+    position.kind === "local" ? finiteProjection(position.floor) : null,
+    finiteProjection(sample.horizontalAccuracyMeters),
+    finiteProjection(sample.headingDegrees),
+    finiteProjection(sample.speedMetersPerSecond),
+    finiteProjection(sample.confidence),
   ];
 }
 
@@ -281,6 +157,49 @@ function markerValues(marker: MapMarker): readonly SqliteBindValue[] {
     marker.yMeters ?? (source?.kind === "local" ? source.yMeters : null),
     source?.kind === "local" ? source.floor ?? null : null,
   ];
+}
+
+async function nextSampleOrdinal(
+  database: AsyncSqliteExecutor,
+  explorationId: string,
+): Promise<number> {
+  const row = await database.getFirstAsync<NextSampleOrdinalRow>(
+    `SELECT COALESCE(MAX(sample_ordinal), -1) + 1 AS next_ordinal
+     FROM position_samples
+     WHERE exploration_id = ?`,
+    explorationId,
+  );
+  return Number(row?.next_ordinal ?? 0);
+}
+
+async function assertIdempotentExistingSample(
+  database: AsyncSqliteExecutor,
+  explorationId: string,
+  sampleId: string,
+  exactPayload: string,
+): Promise<void> {
+  const existing = await database.getFirstAsync<ExistingSampleRow>(
+    `SELECT exploration_id, raw_payload_format, raw_payload_json
+     FROM position_samples
+     WHERE id = ?`,
+    sampleId,
+  );
+  if (existing === null) {
+    throw new SqliteRawEvidenceError(
+      "exact-payload-identity-mismatch",
+      "Raw observation insertion was ignored by an unexpected constraint.",
+    );
+  }
+  if (
+    existing.exploration_id !== explorationId ||
+    existing.raw_payload_format !== SQLITE_RAW_SAMPLE_PAYLOAD_FORMAT ||
+    existing.raw_payload_json !== exactPayload
+  ) {
+    throw new SqliteRawEvidenceError(
+      "exact-payload-identity-mismatch",
+      "A raw observation identity was reused with different evidence.",
+    );
+  }
 }
 
 function createWriter(database: AsyncSqliteExecutor): MappingRepositoryWriter {
@@ -397,11 +316,18 @@ function createWriter(database: AsyncSqliteExecutor): MappingRepositoryWriter {
     async appendPositionSamples(explorationId, samples) {
       await requirePersonalMapId(database, explorationId);
       const inserted: RawPositionSample[] = [];
+      let ordinal = await nextSampleOrdinal(database, explorationId);
+
       for (const sample of samples) {
+        const exactPayload = encodeSqliteRawSamplePayload(sample);
         const result = await database.runAsync(
           `INSERT OR IGNORE INTO position_samples(
             id,
             exploration_id,
+            sample_ordinal,
+            ordinal_provenance,
+            raw_payload_format,
+            raw_payload_json,
             recorded_at,
             source,
             coordinate_kind,
@@ -415,25 +341,35 @@ function createWriter(database: AsyncSqliteExecutor): MappingRepositoryWriter {
             heading_degrees,
             speed_meters_per_second,
             confidence
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ) VALUES (?, ?, ?, 'ingest-sequence-v1', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           sample.id,
           explorationId,
-          ...sampleValues(sample).slice(1),
+          ordinal,
+          SQLITE_RAW_SAMPLE_PAYLOAD_FORMAT,
+          exactPayload,
+          ...sampleProjectionValues(sample),
         );
         if (result.changes > 0) {
           inserted.push(sample);
+          ordinal += 1;
+        } else {
+          await assertIdempotentExistingSample(
+            database,
+            explorationId,
+            sample.id,
+            exactPayload,
+          );
         }
       }
 
-      if (inserted.length > 0) {
-        const latestTimestamp = inserted.reduce(
-          (maximum, sample) => Math.max(maximum, sample.recordedAtMs),
-          0,
-        );
+      const finiteTimestamps = inserted
+        .map((sample) => sample.recordedAtMs)
+        .filter(Number.isFinite);
+      if (finiteTimestamps.length > 0) {
         await touchExplorationAndMap(
           database,
           explorationId,
-          latestTimestamp,
+          Math.max(...finiteTimestamps),
         );
       }
       return inserted;
@@ -487,9 +423,9 @@ function createWriter(database: AsyncSqliteExecutor): MappingRepositoryWriter {
           explorationId,
         );
         if (existing === null) {
-          throw new Error(`Exploration not found: ${explorationId}`);
+          throw new Error("Exploration does not exist.");
         }
-        throw new Error(`Exploration already completed: ${explorationId}`);
+        throw new Error("Exploration is already completed.");
       }
       const personalMapId = await requirePersonalMapId(database, explorationId);
       await touchPersonalMap(database, personalMapId, endedAtMs);
@@ -504,7 +440,7 @@ async function loadReplay(
   const positionRows = await database.getAllAsync<PositionRow>(
     `SELECT * FROM position_samples
      WHERE exploration_id = ?
-     ORDER BY recorded_at ASC, id ASC`,
+     ORDER BY sample_ordinal ASC`,
     exploration.id,
   );
   const markerRows = await database.getAllAsync<MarkerRow>(
@@ -515,7 +451,7 @@ async function loadReplay(
   );
 
   const samples = positionRows
-    .map(rowToSample)
+    .map(rowToReplaySample)
     .filter((sample): sample is RawPositionSample => sample !== null);
 
   return {
@@ -536,9 +472,10 @@ async function loadReplay(
 /**
  * Creates the local-first SQLite implementation of MappingRepositoryPort.
  *
- * The adapter persists only canonical records. Every query reconstructs replay
- * input from raw observations and confirmed markers; no derived snapshot table
- * can silently become the source of truth.
+ * The adapter persists exact raw payloads before SQLite numeric normalization.
+ * New rows replay in provider-received ordinal order; migrated rows keep their
+ * previous deterministic order with explicit legacy provenance. Derived map
+ * snapshots never become authoritative.
  */
 export function createSqliteMappingRepository(
   getDatabase: AsyncSqliteDatabaseProvider,
