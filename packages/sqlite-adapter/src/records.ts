@@ -49,7 +49,8 @@ export interface ExplorationRow {
 export interface PositionRow {
   readonly id: string;
   readonly exploration_id: string;
-  readonly sample_ordinal: number;
+  /** Exact new rows have an ordinal; legacy rows truthfully retain NULL. */
+  readonly sample_ordinal: number | null;
   readonly ordinal_provenance: SampleOrdinalProvenance;
   readonly raw_payload_format: StoredRawPayloadFormat;
   readonly raw_payload_json: string | null;
