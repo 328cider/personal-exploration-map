@@ -18,6 +18,12 @@ class FailingNodeSqliteDatabase implements AsyncSqliteDatabase {
   failV4Copy = false;
 
   async execAsync(source: string): Promise<void> {
+    if (
+      this.failV4Copy &&
+      source.includes("INSERT INTO position_samples_v4")
+    ) {
+      throw new Error("planned v4 copy failure");
+    }
     this.database.exec(source);
   }
 
@@ -25,9 +31,6 @@ class FailingNodeSqliteDatabase implements AsyncSqliteDatabase {
     source: string,
     ...params: readonly SqliteBindValue[]
   ): Promise<SqliteRunResult> {
-    if (this.failV4Copy && source.includes("INSERT INTO position_samples_v4")) {
-      throw new Error("planned v4 copy failure");
-    }
     const result = this.database.prepare(source).run(...params);
     return {
       lastInsertRowId: Number(result.lastInsertRowid),
