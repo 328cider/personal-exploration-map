@@ -106,9 +106,9 @@ feature list. All eligible live fields name an ordinary Android sensor or
 
 `scripts/audit_training_data_sources.py` fetched eight bounded official metadata
 sources totaling about 0.22 MB. It fetched no archives, sensor rows, or weights.
-Raw byte hashes are retained. Dynamic FDA/Google Sites scaffolding is separated
-from a canonical hash of the extracted claims, so a nonce does not masquerade as
-a scientific change.
+Raw byte hashes are retained for diagnosis. Acceptance uses a canonical hash of
+the extracted claims because official JSON/HTML can change transport metadata or
+dynamic scaffolding without changing the audited scientific evidence.
 
 The machine-readable decision is
 `datasets/manifests/learned-training-data-v1.json`. The independent validator:
@@ -120,7 +120,7 @@ The machine-readable decision is
 - verifies current official metadata against locked evidence hashes; and
 - asserts the zero-compatible Stop decision.
 
-The executed result contains 391 independent assertions. The aggregate notebook
+The current independent validator contains 395 assertions. The aggregate notebook
 loads no sensor row and renders the same 0/3/1/4 product/benchmark/auxiliary/
 reject classification.
 

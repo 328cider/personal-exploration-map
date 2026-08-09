@@ -1,0 +1,362 @@
+{
+  "schema_version": 1,
+  "audit": "pdr-evidence-unblocker-v2",
+  "protocol": "EVIDENCE_UNBLOCKER_V2_PROTOCOL.md",
+  "protocol_sha256": "b085394fae0bda0b7661217d53a6c612473a76f8a93bac5eac15b144ef6f6a38",
+  "executed_on": "2026-08-09",
+  "target": "continuous body-heading or 2D motion, plus a separately bounded stride-length component, from future Android-capturable inputs",
+  "artifact_download_policy": "official metadata, immutable repository trees, ZIP indexes, README/parser/aggregate files only; no raw sensor rows, full archives, or model weights",
+  "raw_sensor_rows_downloaded": 0,
+  "full_dataset_archives_downloaded": 0,
+  "model_weights_downloaded": 0,
+  "metadata_bytes_transferred": 1964895,
+  "source_snapshots": [
+    {
+      "id": "ipin-2022-t3",
+      "record": "Zenodo 7612915",
+      "metadata_bytes_transferred": 166526,
+      "evidence_sha256": "f510702532aaa353486f3d5e0dbd2052bcd1d49dd4f3d6b0571ca74d6ee476c9",
+      "locked_claims": {
+        "license": "cc-by-4.0",
+        "archive_size": 444265064,
+        "training_logs": 89,
+        "training_users_from_paths": 9,
+        "parser_sha256": "e0b41d486f8721d0e624d0f6fbe65d8dedc0ce58433b70df6b0b005ef626855e",
+        "ground_truth_files": 3
+      }
+    },
+    {
+      "id": "ipin-2023-t3",
+      "record": "Zenodo 8362205",
+      "metadata_bytes_transferred": 152520,
+      "evidence_sha256": "6cbaf4c52c45400decb0a8665f44300211b66308aa3d33501e68ab73dd772b34",
+      "locked_claims": {
+        "license": "cc-by-4.0",
+        "archive_size": 99458898,
+        "training_logs": 54,
+        "training_users_from_paths": 0,
+        "parser_sha256": "e0b41d486f8721d0e624d0f6fbe65d8dedc0ce58433b70df6b0b005ef626855e",
+        "training_index_sha256": "78931cc91e002cdbbf17f8306441ad4dcf85bc15252cdb1bc46b6aceb458a766"
+      }
+    },
+    {
+      "id": "ipin-2024-t3",
+      "record": "Zenodo 13931119",
+      "metadata_bytes_transferred": 154670,
+      "evidence_sha256": "7968bc99120e38631967bac284e53400020ae1ff4e9603884c95e0462724ee0c",
+      "locked_claims": {
+        "license": "cc-by-4.0",
+        "archive_size": 95126038,
+        "training_logs": 54,
+        "training_users_from_paths": 0,
+        "parser_sha256": "e0b41d486f8721d0e624d0f6fbe65d8dedc0ce58433b70df6b0b005ef626855e",
+        "training_index_sha256": "78931cc91e002cdbbf17f8306441ad4dcf85bc15252cdb1bc46b6aceb458a766"
+      }
+    },
+    {
+      "id": "xdr-2023",
+      "record": "AIST xDR Challenge 2023 public page",
+      "metadata_bytes_transferred": 30165,
+      "evidence_sha256": "b5b8da12a2aff46eea175550a24885cf788a74125e076a8c1cec56f0083bfd93",
+      "locked_claims": {
+        "android_phone": "AQUOS sense6",
+        "phone_imu_rate": "approximately 100 Hz",
+        "ground_truth": "ZEB-HORIZON position and quaternion at approximately 100 Hz",
+        "access": "ID/password after preregistration",
+        "dataset_license_present": false
+      }
+    },
+    {
+      "id": "wang-sle",
+      "record": "Archeries/StrideLengthEstimation@c96f67c79a81a8f2098eee051dd41c0c1ba1d102",
+      "metadata_bytes_transferred": 1215949,
+      "evidence_sha256": "772e622915fafb62ec90255c3bc6855089b5d59d874453aa7fc7bcee26eeb2d9",
+      "locked_claims": {
+        "phone": "Huawei Mate 9 / Android API 26",
+        "rate_hz": 100,
+        "phone_inputs": ["accelerometer", "gyroscope", "magnetometer"],
+        "truth": "right-foot X-IMU per-stride length",
+        "license_files_found": 0,
+        "subject_ids_explicit": false
+      }
+    },
+    {
+      "id": "wang-wde",
+      "record": "wq1989/WalkingDistanceEstimation@634ac708a71aeae30d41814546f85ebfc71e1411",
+      "metadata_bytes_transferred": 7915,
+      "evidence_sha256": "24d91e4a258d0e2b99f2af430f81e0d0f951f5e967365cefef8443e66f6efe58",
+      "locked_claims": {
+        "phone": "Huawei Mate 9",
+        "rate_hz": 100,
+        "phone_inputs": ["accelerometer", "gyroscope"],
+        "truth": "right-foot NGIMU per-stride length",
+        "phone_modes": 5,
+        "license_files_found": 0,
+        "subject_ids_explicit": false
+      }
+    },
+    {
+      "id": "forestback",
+      "record": "Aueaphum2541/ForestBack-Dataset@02924917f21ea218d464649494197058d6d51cbe",
+      "metadata_bytes_transferred": 4218,
+      "evidence_sha256": "ff7a50d7c6f6908aca0b8ec17398346bcbbc4185111148eb94663e7f6fcce786",
+      "locked_claims": {
+        "repository_files": ["Dataset.zip"],
+        "archive_members": ["forestback_indoor_pdr_dataset.csv", "forestback_indoor_pdr_summary.csv"],
+        "readme_present": false,
+        "license_present": false,
+        "notebook_present": false
+      }
+    },
+    {
+      "id": "el-sle",
+      "record": "Europe PMC PMC9501393",
+      "metadata_bytes_transferred": 232932,
+      "evidence_sha256": "8c8397258454d186ed866ddd1874ef0f1d0c3ed66e0bd212163a7b7f042debf3",
+      "locked_claims": {
+        "paper_android_devices": 5,
+        "paper_distance_km": 31.5,
+        "paper_duration_h": 8.1,
+        "paper_vio_labels": true,
+        "data_availability_section_present": false,
+        "public_dataset_link_present": false
+      }
+    }
+  ],
+  "cross_source_checks": {
+    "ipin_2023_2024_training_members_byte_identical": true,
+    "ipin_2023_training_count": 54,
+    "ipin_2024_training_count": 54,
+    "duplicate_lineage_counted_as_one_candidate": true
+  },
+  "candidates": [
+    {
+      "id": "ipin-2022-t3",
+      "name": "IPIN 2022 Competition Track 3",
+      "target_scope": "full-pdr",
+      "inference_features": ["raw_accelerometer", "raw_gyroscope", "raw_magnetic_field"],
+      "fields": [
+        {"name": "raw_accelerometer", "role": "live-input", "android_api": "Sensor.TYPE_ACCELEROMETER / SensorEvent.values and timestamp"},
+        {"name": "raw_gyroscope", "role": "live-input", "android_api": "Sensor.TYPE_GYROSCOPE / SensorEvent.values and timestamp"},
+        {"name": "raw_magnetic_field", "role": "live-input", "android_api": "Sensor.TYPE_MAGNETIC_FIELD / SensorEvent.values and timestamp"},
+        {"name": "sparse_gnss", "role": "post-session-input", "android_api": "Location latitude/longitude/accuracy and elapsedRealtimeNanos"},
+        {"name": "platform_ahrs", "role": "forbidden", "android_api": null},
+        {"name": "position_reference", "role": "evaluation-only", "android_api": null},
+        {"name": "competition_ground_truth_checkpoints", "role": "evaluation-only", "android_api": null}
+      ],
+      "group_split_keys": ["user_from_training_filename", "trial"],
+      "primary_evidence": [
+        "https://zenodo.org/records/7612915",
+        "ReadLogFile2022.m sha256 e0b41d486f8721d0e624d0f6fbe65d8dedc0ce58433b70df6b0b005ef626855e"
+      ],
+      "gate": {
+        "android_inputs": {"state": "pass", "evidence": "The official parser identifies Android App ACCE/GYRO/MAGN records; AHRS and POSI are explicitly excluded from inference."},
+        "raw_semantics": {"state": "pass", "evidence": "The parser fixes SI units, device-axis triplets, AppTimestamp, SensorTimestamp, and recommends SensorTimestamp for inertial integration."},
+        "target_supervision": {"state": "fail", "evidence": "Only three tiny competition ground-truth CSVs were indexed; they are sparse checkpoints, not continuous body-heading or velocity labels."},
+        "rate_50_100_hz": {"state": "unknown", "evidence": "The metadata/parser audit does not establish per-sequence raw sampling distributions; a row-level preflight is required before replay."},
+        "group_split": {"state": "pass", "evidence": "Nine user IDs and trial identifiers are present in training member paths, allowing pre-window grouped benchmark splits."},
+        "provenance": {"state": "pass", "evidence": "Zenodo record, archive checksum/size, member CRCs, README hash, and parser hash are immutable and recorded."},
+        "rights": {"state": "pass", "evidence": "Zenodo records the archive as open under CC BY 4.0."},
+        "deployment": {"state": "pass", "evidence": "The eligible replay contract uses only raw Android sensor records and causal timestamps; AHRS, POSI, and competition truth remain non-input fields."}
+      },
+      "classification": "product-input-benchmark-only",
+      "allowed_next_use": ["separately preregistered classical replay after raw-row preflight", "capture/evaluation adapter QA"],
+      "blocked_actions": ["learned body-heading or velocity training", "treating sparse checkpoints as continuous truth", "product adoption or personal pilot"]
+    },
+    {
+      "id": "ipin-2023-2024-t3",
+      "name": "IPIN 2023/2024 Competition Track 3 training lineage",
+      "target_scope": "full-pdr",
+      "inference_features": ["raw_accelerometer", "raw_gyroscope", "raw_magnetic_field"],
+      "fields": [
+        {"name": "raw_accelerometer", "role": "live-input", "android_api": "Sensor.TYPE_ACCELEROMETER / SensorEvent.values and timestamp"},
+        {"name": "raw_gyroscope", "role": "live-input", "android_api": "Sensor.TYPE_GYROSCOPE / SensorEvent.values and timestamp"},
+        {"name": "raw_magnetic_field", "role": "live-input", "android_api": "Sensor.TYPE_MAGNETIC_FIELD / SensorEvent.values and timestamp"},
+        {"name": "sparse_gnss", "role": "post-session-input", "android_api": "Location latitude/longitude/accuracy and elapsedRealtimeNanos"},
+        {"name": "platform_ahrs", "role": "forbidden", "android_api": null},
+        {"name": "position_reference", "role": "evaluation-only", "android_api": null},
+        {"name": "competition_ground_truth_checkpoints", "role": "evaluation-only", "android_api": null}
+      ],
+      "group_split_keys": ["trial", "repetition"],
+      "primary_evidence": [
+        "https://zenodo.org/records/8362205",
+        "https://zenodo.org/records/13931119",
+        "normalized training index sha256 78931cc91e002cdbbf17f8306441ad4dcf85bc15252cdb1bc46b6aceb458a766"
+      ],
+      "gate": {
+        "android_inputs": {"state": "pass", "evidence": "The shared official parser identifies Android App ACCE/GYRO/MAGN records; platform AHRS and POSI are excluded."},
+        "raw_semantics": {"state": "pass", "evidence": "Both releases ship the same parser hash with SI units, device-axis values, AppTimestamp, and SensorTimestamp semantics."},
+        "target_supervision": {"state": "fail", "evidence": "Indexed ground truth consists of sparse scoring/testing checkpoints, not continuous body-heading or horizontal velocity."},
+        "rate_50_100_hz": {"state": "unknown", "evidence": "Metadata does not establish sequence-level rate, gaps, or batching; these require bounded row preflight."},
+        "group_split": {"state": "fail", "evidence": "Training member paths expose trial/repetition but no user or device identity, so a claimed user/device-generalization split cannot be constructed."},
+        "provenance": {"state": "pass", "evidence": "Both Zenodo records, archive checksums/sizes, member CRCs, and parser hashes are fixed; all 54 normalized training members are byte-identical across 2023 and 2024."},
+        "rights": {"state": "pass", "evidence": "Both Zenodo records are open under CC BY 4.0."},
+        "deployment": {"state": "pass", "evidence": "Only raw Android IMU and causal timestamps are eligible; AHRS, POSI, and future/sparse truth are isolated."}
+      },
+      "classification": "product-input-benchmark-only",
+      "allowed_next_use": ["one-corpus classical replay after raw-row preflight", "format and robustness adapter QA"],
+      "blocked_actions": ["counting 2023 and 2024 as independent evidence", "learned product training", "user/device-generalization claims", "product adoption or personal pilot"]
+    },
+    {
+      "id": "xdr-2023",
+      "name": "xDR Challenge 2023",
+      "target_scope": "full-pdr",
+      "inference_features": ["raw_accelerometer", "raw_gyroscope", "raw_magnetic_field"],
+      "fields": [
+        {"name": "raw_accelerometer", "role": "live-input", "android_api": "Sensor.TYPE_ACCELEROMETER / SensorEvent.values and timestamp"},
+        {"name": "raw_gyroscope", "role": "live-input", "android_api": "Sensor.TYPE_GYROSCOPE / SensorEvent.values and timestamp"},
+        {"name": "raw_magnetic_field", "role": "live-input", "android_api": "Sensor.TYPE_MAGNETIC_FIELD / SensorEvent.values and timestamp"},
+        {"name": "lidar_position", "role": "training-label", "android_api": null},
+        {"name": "lidar_orientation_quaternion", "role": "training-label", "android_api": null}
+      ],
+      "group_split_keys": ["unavailable_before_registration"],
+      "primary_evidence": ["https://unit.aist.go.jp/rihsa/xDR-Challenge-2023/"],
+      "gate": {
+        "android_inputs": {"state": "pass", "evidence": "The official page identifies AQUOS sense6 acceleration, angular velocity, and magnetism at approximately 100 Hz."},
+        "raw_semantics": {"state": "unknown", "evidence": "The public page does not expose the archive columns, axis/frame convention, timestamp basis, or raw-versus-fused provenance."},
+        "target_supervision": {"state": "pass", "evidence": "The training task lists approximately 100 Hz ZEB-HORIZON position and quaternion ground truth, kept label-only."},
+        "rate_50_100_hz": {"state": "pass", "evidence": "Phone IMU and LiDAR truth are described at approximately 100 Hz; no rate above the product contract is mandatory."},
+        "group_split": {"state": "unknown", "evidence": "User, device, placement, and sequence identity needed for pre-window splits are not established on the public page."},
+        "provenance": {"state": "unknown", "evidence": "The official page is traceable, but access is registration-gated and no public immutable dataset version/checksum was found."},
+        "rights": {"state": "unknown", "evidence": "The public page states registration access but no artifact license, commercial-ML grant, redistribution term, or derived-weight right."},
+        "deployment": {"state": "pass", "evidence": "The technical candidate can restrict inference to ordinary Android IMU while keeping LiDAR truth label-only."}
+      },
+      "classification": "reject-unresolved",
+      "allowed_next_use": ["obtain written artifact-specific rights and an immutable schema/manifest before requesting rows"],
+      "blocked_actions": ["dataset registration/download", "model training", "benchmark execution", "product adoption or personal pilot"]
+    },
+    {
+      "id": "wang-sle",
+      "name": "Benchmark Dataset for Adaptive Stride Length Estimation",
+      "target_scope": "distance-component",
+      "inference_features": ["raw_accelerometer", "raw_gyroscope", "raw_magnetic_field"],
+      "fields": [
+        {"name": "raw_accelerometer", "role": "live-input", "android_api": "Sensor.TYPE_ACCELEROMETER / SensorEvent.values and timestamp"},
+        {"name": "raw_gyroscope", "role": "live-input", "android_api": "Sensor.TYPE_GYROSCOPE / SensorEvent.values and timestamp"},
+        {"name": "raw_magnetic_field", "role": "live-input", "android_api": "Sensor.TYPE_MAGNETIC_FIELD / SensorEvent.values and timestamp"},
+        {"name": "stride_length", "role": "training-label", "android_api": null},
+        {"name": "right_foot_ximu", "role": "evaluation-only", "android_api": null}
+      ],
+      "group_split_keys": ["sequence_only_subject_identity_absent"],
+      "primary_evidence": [
+        "https://github.com/Archeries/StrideLengthEstimation/tree/c96f67c79a81a8f2098eee051dd41c0c1ba1d102",
+        "https://doi.org/10.3390/s19040840"
+      ],
+      "gate": {
+        "android_inputs": {"state": "pass", "evidence": "The artifact documents Android Huawei Mate 9 raw accelerometer, gyroscope, and magnetometer streams."},
+        "raw_semantics": {"state": "pass", "evidence": "README schema records timestamps and SI units for phone acceleration, angular velocity, and magnetic field."},
+        "target_supervision": {"state": "pass", "evidence": "Per-stride length/count/cumulative distance are labelled from a right-foot X-IMU and remain non-input fields."},
+        "rate_50_100_hz": {"state": "pass", "evidence": "The phone signals are sampled at 100 Hz and fit the frozen capture-rate contract."},
+        "group_split": {"state": "fail", "evidence": "The artifact does not expose stable subject IDs sufficient for a held-out-user split; the fixed hand-in-front-of-chest placement is also narrow."},
+        "provenance": {"state": "pass", "evidence": "A pinned Git commit, complete tree, documented device, fields, rate, placement, and label source are available."},
+        "rights": {"state": "unknown", "evidence": "No LICENSE/COPYING file or artifact-specific commercial-training and derived-weight grant exists at the pinned commit."},
+        "deployment": {"state": "pass", "evidence": "Inference needs only normal Android phone IMU; foot X-IMU and stride truth are label-only."}
+      },
+      "classification": "reject-unresolved",
+      "allowed_next_use": ["owner/license clarification and subject-key clarification only"],
+      "blocked_actions": ["data use or model training", "held-out-user or natural-placement claims", "product adoption or personal pilot"]
+    },
+    {
+      "id": "wang-wde",
+      "name": "Walking Distance Estimation dataset",
+      "target_scope": "distance-component",
+      "inference_features": ["raw_accelerometer", "raw_gyroscope"],
+      "fields": [
+        {"name": "raw_accelerometer", "role": "live-input", "android_api": "Sensor.TYPE_ACCELEROMETER / SensorEvent.values and timestamp"},
+        {"name": "raw_gyroscope", "role": "live-input", "android_api": "Sensor.TYPE_GYROSCOPE / SensorEvent.values and timestamp"},
+        {"name": "phone_mode", "role": "evaluation-only", "android_api": null},
+        {"name": "stride_length", "role": "training-label", "android_api": null},
+        {"name": "right_foot_ngimu", "role": "evaluation-only", "android_api": null}
+      ],
+      "group_split_keys": ["sequence_only_subject_identity_absent"],
+      "primary_evidence": [
+        "https://github.com/wq1989/WalkingDistanceEstimation/tree/634ac708a71aeae30d41814546f85ebfc71e1411",
+        "https://doi.org/10.3390/rs11091140"
+      ],
+      "gate": {
+        "android_inputs": {"state": "pass", "evidence": "The artifact documents Huawei Mate 9 accelerometer and gyroscope phone signals plus five carrying modes."},
+        "raw_semantics": {"state": "pass", "evidence": "Tri-axial linear acceleration, angular velocity, 100 Hz rate, JSON stride records, and phone-mode labels are documented."},
+        "target_supervision": {"state": "pass", "evidence": "Each stride has NGIMU-derived stride length and total walking distance, isolated from inference."},
+        "rate_50_100_hz": {"state": "pass", "evidence": "The phone stream is sampled at 100 Hz and can be downsampled to 50 Hz."},
+        "group_split": {"state": "fail", "evidence": "A group of adults is described, but stable subject IDs are not explicit in the artifact README, preventing a verified held-out-user split."},
+        "provenance": {"state": "pass", "evidence": "Pinned repository tree, Huawei device, sensor/rate description, five modes, and right-foot NGIMU label source are traceable."},
+        "rights": {"state": "unknown", "evidence": "No LICENSE/COPYING file or artifact-specific commercial-training and derived-weight grant exists at the pinned commit."},
+        "deployment": {"state": "pass", "evidence": "Inference uses ordinary Android accelerometer/gyroscope data; foot NGIMU truth remains label-only."}
+      },
+      "classification": "reject-unresolved",
+      "allowed_next_use": ["owner/license clarification and subject-key clarification only"],
+      "blocked_actions": ["data use or model training", "held-out-user generalization claims", "product adoption or personal pilot"]
+    },
+    {
+      "id": "forestback",
+      "name": "ForestBack dataset",
+      "target_scope": "full-pdr",
+      "inference_features": [],
+      "fields": [
+        {"name": "paper_claimed_imu_channels", "role": "forbidden", "android_api": null},
+        {"name": "paper_claimed_heading", "role": "training-label", "android_api": null},
+        {"name": "paper_claimed_trajectory", "role": "training-label", "android_api": null},
+        {"name": "paper_claimed_turn_labels", "role": "evaluation-only", "android_api": null}
+      ],
+      "group_split_keys": ["unavailable_without_raw_member"],
+      "primary_evidence": [
+        "https://arxiv.org/abs/2606.14421",
+        "https://github.com/Aueaphum2541/ForestBack-Dataset/tree/02924917f21ea218d464649494197058d6d51cbe"
+      ],
+      "gate": {
+        "android_inputs": {"state": "unknown", "evidence": "The paper claims IMU channels, but the repository exposes no README/schema and the raw CSV was intentionally not opened before rights clearance."},
+        "raw_semantics": {"state": "unknown", "evidence": "Units, axes, timestamp basis, device/OS, raw-versus-derived provenance, and missingness semantics are not auditable from repository metadata."},
+        "target_supervision": {"state": "unknown", "evidence": "The paper claims heading/trajectory/turn fields, but their generation and per-row isolation cannot be verified without an artifact schema."},
+        "rate_50_100_hz": {"state": "unknown", "evidence": "The paper claims 100 Hz; the repository metadata cannot verify actual sequence rates or timestamp gaps."},
+        "group_split": {"state": "unknown", "evidence": "The paper claims 36 trials, but user/device/placement split keys are not visible in the unopened artifact."},
+        "provenance": {"state": "fail", "evidence": "The paper claims a dataset and analysis notebook, while the pinned repository contains only Dataset.zip and its central directory contains two CSVs with no notebook, README, or schema."},
+        "rights": {"state": "unknown", "evidence": "No repository or archive license and no product-training/derived-weight grant were found."},
+        "deployment": {"state": "unknown", "evidence": "No field can be admitted to the Android inference contract until raw semantics and preprocessing are documented."}
+      },
+      "classification": "reject-unresolved",
+      "allowed_next_use": ["request a versioned schema, notebook, device provenance, and artifact-specific license"],
+      "blocked_actions": ["opening raw sensor CSV", "model training", "benchmark claims", "product adoption or personal pilot"]
+    },
+    {
+      "id": "el-sle",
+      "name": "EL-SLE",
+      "target_scope": "distance-component",
+      "inference_features": [],
+      "fields": [
+        {"name": "paper_claimed_phone_imu", "role": "forbidden", "android_api": null},
+        {"name": "vio_stride_length", "role": "training-label", "android_api": null},
+        {"name": "camera_vio", "role": "forbidden", "android_api": null}
+      ],
+      "group_split_keys": ["unavailable_without_public_artifact"],
+      "primary_evidence": [
+        "https://doi.org/10.3390/s22186864",
+        "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC9501393/fullTextXML"
+      ],
+      "gate": {
+        "android_inputs": {"state": "unknown", "evidence": "The paper reports five Android phones, but no public artifact exposes eligible columns or Android raw-sensor semantics."},
+        "raw_semantics": {"state": "unknown", "evidence": "No public sequence schema, units, axes, timestamp basis, or raw-versus-preprocessed provenance was found."},
+        "target_supervision": {"state": "unknown", "evidence": "The paper describes VIO-labelled stride collection over 31.5 km, but no auditable labelled artifact is linked."},
+        "rate_50_100_hz": {"state": "unknown", "evidence": "A reproducible per-device capture rate cannot be checked without the artifact."},
+        "group_split": {"state": "unknown", "evidence": "The paper's device/user experiments do not provide artifact-level stable IDs for an executable grouped split."},
+        "provenance": {"state": "fail", "evidence": "Europe PMC XML contains no Data Availability section, supplementary material, or public dataset repository link."},
+        "rights": {"state": "unknown", "evidence": "The article's publication license does not grant rights to an absent dataset or derived model weights."},
+        "deployment": {"state": "unknown", "evidence": "Camera VIO is label collection only and forbidden at inference; no public artifact proves a phone-IMU-only deployable feature path."}
+      },
+      "classification": "reject-unresolved",
+      "allowed_next_use": ["request the versioned dataset schema, stable split keys, and artifact-specific license"],
+      "blocked_actions": ["treating the paper as a dataset", "model training", "camera VIO as product input", "product adoption or personal pilot"]
+    }
+  ],
+  "classification_counts": {
+    "component-training-compatible": 0,
+    "product-input-benchmark-only": 2,
+    "product-training-compatible": 0,
+    "reject-incompatible": 0,
+    "reject-unresolved": 5
+  },
+  "training_compatible_candidates": [],
+  "benchmark_only_candidates": ["ipin-2022-t3", "ipin-2023-2024-t3"],
+  "training_decision": "stop-product-oriented-training",
+  "next_action": "preregister-classical-benchmark-only",
+  "notebook_sha256": "c63e15d82ecc9ff8cb64880125c54217ecd75086826c68b12cc456b3c3c3d526"
+}

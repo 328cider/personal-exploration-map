@@ -14,13 +14,23 @@ public evidence, licenses, and tested estimator families do not support a
 product candidate. More tuning on the reused RoNIN development groups would add
 selection bias rather than answer the product question.
 
+The 2026-08-09 evidence-unblocker v2 search added seven candidate lineages and
+eight fresh official records. It found **zero** product- or component-training
+sources, so the learned-model and personal-pilot Stop is unchanged. It did find
+one narrower, non-accuracy path: CC BY 4.0 IPIN Track 3 raw Android records may
+support a separately preregistered classical capture/replay benchmark after
+row-level preflight. Sparse competition checkpoints cannot establish continuous
+heading or distance accuracy, and IPIN 2023/2024 are one byte-identical training
+lineage rather than independent replications.
+
 ## Evidence ledger
 
 | Gate | Evidence | Decision |
 |---|---|---|
 | Synthetic capture/evaluation plumbing | Golden rotation, mirror, false-loop, scale, batching, jitter, and gap cases are detected with truth isolated from inference | **Pass for pipeline QA only** |
 | Public input compatibility | RoNIN exposes useful Android-shaped raw streams; dataset truth and corrected poses stay label/evaluation-only | **Benchmark-compatible, not Android lifecycle evidence** |
-| Product-oriented training source | 8 locked sources audited; 0 combine Android semantics, suitable continuous truth, leakage-safe grouping, reproducibility, and product/derived-weight rights | **Stop** |
+| Product-oriented training source | Initial 8-source gate plus 7 new lineages; 0 combine Android semantics, suitable target truth, leakage-safe grouping, reproducibility, and product/derived-weight rights | **Stop** |
+| IPIN classical capture/replay evidence | Android raw parser semantics and CC BY 4.0 pass; continuous heading/velocity truth and, for 2023/24, user/device grouping fail | **Benchmark-only after preflight; no accuracy/product claim** |
 | Step detector rate stability | Frozen detector passes untouched 50/100 Hz agreement, but differs from Android Step Counter by 0–57.6% depending on sequence | **Pass for rate invariance; Stop for count accuracy** |
 | Stride/distance | Validation distance-scale error remains about 14.3–15.0%, with unresolved step semantics and placement calibration | **Stop** |
 | Classical body heading | 90 causal PCA candidates; 0 survive; axis ambiguity produces near-180° rate tails | **Stop** |
@@ -44,6 +54,9 @@ Exhausted within this research version:
 - the declared synthetic robustness matrix;
 - OxIOD/RoNIN/RIDI compatibility auditing plus the broader eight-source learned
   training-data gate;
+- the second public-evidence gate covering IPIN 2022-2024, xDR 2023, Wang
+  SLE/WDE, ForestBack, and EL-SLE, including duplicate-lineage and artifact
+  completeness checks;
 - common B0/B1 replay under identical 50/100 Hz inputs;
 - fixed-time step-rate normalization;
 - causal classical horizontal-motion PCA;
@@ -59,6 +72,8 @@ Not exhausted in the abstract:
 - real Android lifecycle behavior after an estimator and capture profile exist.
 
 Those are external-evidence changes, not another free hyperparameter sweep.
+An IPIN classical replay is an allowed capture/evaluation-pipeline check, not an
+exception to this accuracy conclusion.
 
 ## Required unblocker
 
@@ -75,6 +90,12 @@ protocol and Issue/ADR handoff:
 3. a materially distinct algorithm with a clean, rights-compatible training
    and untouched validation plan, not selected from the existing four reused
    development groups.
+
+The highest-priority new clarification is xDR Challenge 2023 because its public
+description pairs Android IMU with dense external position/quaternion truth at
+about 100 Hz. Registration, row acquisition, or training still waits for an
+artifact license, immutable schema/version, grouped identifiers, and explicit
+derived-weight terms. `DATA_RIGHTS_CLARIFICATION_PACK.md` records the questions.
 
 A no-walking Android capability probe may later confirm sensor availability,
 FIFO, rate, wake-up mode, and permission behavior. It cannot substitute for an

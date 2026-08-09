@@ -145,25 +145,16 @@ def main() -> None:
     recorded_sources = {item["id"]: item for item in manifest["source_snapshots"]}
     current_sources = {item["id"]: item for item in snapshot["sources"]}
     check(set(recorded_sources) == set(current_sources), "source snapshot IDs changed")
-    byte_stable_sources = {
-        "idol-zenodo-api",
-        "advio-zenodo-api",
-        "dryad-walking-api",
-        "fda-synapse-access-wiki",
-        "ridi-official-page",
-        "oxiod-official-page",
-    }
     for source_id, recorded_source in recorded_sources.items():
         current_source = current_sources[source_id]
         check(len(recorded_source["sha256"]) == 64, f"missing raw source hash: {source_id}")
         check(recorded_source["download_bytes"] > 0, f"empty source snapshot: {source_id}")
+        check(len(current_source["sha256"]) == 64, f"missing current source hash: {source_id}")
+        check(current_source["download_bytes"] > 0, f"empty current source: {source_id}")
         check(
             current_source["evidence_sha256"] == recorded_source["evidence_sha256"],
             f"extracted evidence changed: {source_id}",
         )
-        if source_id in byte_stable_sources:
-            check(current_source["sha256"] == recorded_source["sha256"], f"source hash changed: {source_id}")
-            check(current_source["download_bytes"] == recorded_source["download_bytes"], f"source length changed: {source_id}")
 
     idol_checks = current_sources["idol-zenodo-api"]["analysis"]["claim_checks"]
     check(all(idol_checks.values()), "IDOL official metadata claims failed")

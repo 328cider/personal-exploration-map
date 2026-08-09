@@ -32,6 +32,12 @@ Start with:
   headroom test that leaves those validation groups sealed;
 - `DIRECT_HEADING_RESULT.md` for its rate-stable but inaccurate 24-candidate
   development Stop and the resulting public-evidence research boundary;
+- `EVIDENCE_UNBLOCKER_V2_PROTOCOL.md` for the frozen second search across IPIN,
+  xDR, public stride artifacts, and recent paper claims;
+- `EVIDENCE_UNBLOCKER_V2_RESULT.md` for the zero-training-source result, IPIN
+  duplicate-lineage proof, and bounded classical-benchmark authorization;
+- `DATA_RIGHTS_CLARIFICATION_PACK.md` for artifact-specific questions that must
+  be answered before protected rows or learned weights are touched;
 - `RESEARCH_DECISION.md` for the consolidated answer on what is exhausted,
   what remains externally blocked, and why no pilot or product adoption follows;
 - `datasets/registry.json` for the initial public-dataset audit;
@@ -51,6 +57,8 @@ Start with:
   leave-one-group-out residual-ridge Stop.
 - `notebooks/10_direct_heading_headroom.ipynb` for the executed aggregate-only
   direct circular recurrent Stop and rate-stability comparison.
+- `notebooks/11_evidence_unblocker_v2.ipynb` for the executed aggregate-only
+  second-source audit and Android-input/label-isolation checks.
 
 Run the research checks from the repository root:
 
