@@ -18,6 +18,7 @@ from pdr_research.capture_quality import (  # noqa: E402
     validate_capture_attempts,
     validate_capture_bundle,
 )
+from pdr_research.emulator_gate import evaluate_emulator_plumbing  # noqa: E402
 
 
 CONTRACT = ROOT / "capture-schema" / "v1" / "field-contract.json"
@@ -510,6 +511,92 @@ class CaptureQualityTests(unittest.TestCase):
         self.assertIn('manifest["files"]', script)
         self.assertIn("unsafe or duplicate manifest evidence path", script)
         self.assertNotIn("ls files/pdr-captures", script)
+        self.assertIn("validate_emulator_capture.py", script)
+
+    def test_emulator_plumbing_gate_does_not_promote_virtual_timing_to_usable(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            quality = validate_capture_bundle(
+                _make_bundle(Path(temporary)), contract_path=CONTRACT
+            ).to_dict()
+        quality.update(
+            {
+                "session_id": "emulator-e2e",
+                "protocol_cell_id": "e0-api35-batch100-250",
+                "outcome": "invalid",
+                "usable": False,
+                "findings": [
+                    {
+                        "severity": "high",
+                        "code": "continuity-gap",
+                        "message": "virtual sensor scheduling",
+                        "stream": "sensor_events",
+                        "line": None,
+                    },
+                    {
+                        "severity": "critical",
+                        "code": "insufficient-imu-coverage",
+                        "message": "virtual sensor scheduling",
+                        "stream": None,
+                        "line": None,
+                    },
+                ],
+            }
+        )
+        quality["protocol"].update(
+            {
+                "participant_code": "P-EMULATOR",
+                "device_pseudonym": "device-emulator",
+                "placement": "hand",
+                "route_id": "no-walking-emulator",
+                "capture_mode": "batch-100-250",
+                "request_location": False,
+                "request_step_sensors": False,
+            }
+        )
+
+        gate = evaluate_emulator_plumbing(quality)
+        self.assertTrue(gate["accepted"])
+        self.assertFalse(gate["product_usable"])
+        self.assertFalse(gate["counts_toward_capture_kpis"])
+        self.assertFalse(gate["physical_sensor_evidence"])
+
+    def test_emulator_plumbing_gate_rejects_non_timing_failure_and_long_gap(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            quality = validate_capture_bundle(
+                _make_bundle(Path(temporary)), contract_path=CONTRACT
+            ).to_dict()
+        quality.update(
+            {
+                "session_id": "emulator-e2e",
+                "protocol_cell_id": "e0-api35-batch100-250",
+                "findings": [
+                    {
+                        "severity": "critical",
+                        "code": "truth-leakage",
+                        "message": "must never be tolerated",
+                        "stream": "sensor_events",
+                        "line": 1,
+                    }
+                ],
+            }
+        )
+        quality["protocol"].update(
+            {
+                "participant_code": "P-EMULATOR",
+                "device_pseudonym": "device-emulator",
+                "placement": "hand",
+                "route_id": "no-walking-emulator",
+                "capture_mode": "batch-100-250",
+                "request_location": False,
+                "request_step_sensors": False,
+            }
+        )
+        quality["sensors"]["TYPE_GYROSCOPE"]["gaps_ge_1000ms"] = 1
+
+        gate = evaluate_emulator_plumbing(quality)
+        self.assertFalse(gate["accepted"])
+        self.assertTrue(any("truth-leakage" in failure for failure in gate["failures"]))
+        self.assertTrue(any("one second" in failure for failure in gate["failures"]))
 
 
 if __name__ == "__main__":

@@ -53,5 +53,6 @@ for entry in manifest["files"]:
 PY
 )
 
-python research/pdr/scripts/validate_capture_bundle.py "$evidence_dir/bundle" \
-  --output "$evidence_dir/capture-quality.json"
+python research/pdr/scripts/validate_emulator_capture.py "$evidence_dir/bundle" \
+  --quality-output "$evidence_dir/capture-quality.json" \
+  --gate-output "$evidence_dir/emulator-plumbing-gate.json"

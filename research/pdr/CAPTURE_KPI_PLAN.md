@@ -90,6 +90,7 @@ The capture logger cannot produce these metrics. Truth must be an external evalu
 - The Android app emits raw records and session completion metadata continuously; it does not calculate product claims.
 - The Docker validator runs after every export and on every research PR fixture.
 - Program KPIs are recalculated after each preregistered batch, include E0/C0/C1/C2 stage readiness, and report the exact plan-file SHA-256. Sealed validation is evaluated once.
+- GitHub's Android emulator is a plumbing test, not a physical capture cell. Its bundle keeps the ordinary validator outcome; a limited E0 pass never enters K1, K2, K3, a device-support claim, or an accuracy claim.
 - PDR research owns the KPI definitions. Main development sees only the summary and may not treat a capture-ready result as product adoption.
 
 ## Go / Narrow / Stop for the capture mechanism

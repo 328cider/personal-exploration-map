@@ -10,8 +10,10 @@ on:
       - "research/pdr/android-capture/**"
       - "research/pdr/capture-schema/**"
       - "research/pdr/pdr_research/capture_quality.py"
+      - "research/pdr/pdr_research/emulator_gate.py"
       - "research/pdr/scripts/summarize_capture_program.py"
       - "research/pdr/scripts/validate_capture_bundle.py"
+      - "research/pdr/scripts/validate_emulator_capture.py"
       - "research/pdr/tests/test_capture_quality.py"
       - "research/pdr/CAPTURE_KPI_PLAN.md"
       - "research/pdr/ANDROID_CAPTURE_PROTOCOL.md"
@@ -84,7 +86,7 @@ jobs:
           retention-days: 14
 
   emulator-e2e:
-    name: Android 15 no-walking batch/flush gate
+    name: Android 15 no-walking batch/flush plumbing gate
     needs: android-apk
     runs-on: ubuntu-latest
     timeout-minutes: 35

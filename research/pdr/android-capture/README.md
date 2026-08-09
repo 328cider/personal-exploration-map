@@ -59,4 +59,4 @@ docker compose -f research/pdr/compose.yaml run --rm pdr-audit \
 
 ## Explicit limitations
 
-An emulator build/pass does not verify physical sensor fidelity, actual screen-off delivery, OEM power management, pocket handling, battery consumption, or estimator accuracy. Future walking cells in the plan are not executable by this APK revision; real-device walking remains gated by [`../ANDROID_CAPTURE_PROTOCOL.md`](../ANDROID_CAPTURE_PROTOCOL.md).
+An emulator build/pass does not verify physical sensor fidelity, actual screen-off delivery, OEM power management, pocket handling, battery consumption, or estimator accuracy. The emulator artifact retains the ordinary physical-quality verdict; the separate E0 evaluator can accept only integrity-safe virtual-sensor timing deficiencies and explicitly marks the result as not product-usable, not physical evidence, and excluded from capture KPIs. Future walking cells in the plan are not executable by this APK revision; real-device walking remains gated by [`../ANDROID_CAPTURE_PROTOCOL.md`](../ANDROID_CAPTURE_PROTOCOL.md).

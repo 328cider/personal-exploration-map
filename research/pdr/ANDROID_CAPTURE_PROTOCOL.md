@@ -132,9 +132,11 @@ Known-path-only truth can evaluate endpoint, distance, discrete turns, topology,
 
 - Clean install, capability view, required-sensor-missing outcome, start/stop/finalize/export.
 - 50/100 Hz modes, optional-permission denied paths, screen-off/home/return, notification stop, process interruption, and low-storage/writer-failure fixtures.
-- Validate the exact exported ZIP with the Docker validator.
+- Validate the exact exported bundle with the same capture-quality validator used for physical runs.
 - Exercise a batched mode in Android 15 CI so the asynchronous FIFO-flush path is not covered only by mocks.
-- Passing E0 is not real sensor, screen-off, battery, OEM, or pocket evidence.
+- The normal physical verdict is never overridden. A separate E0 plumbing gate may tolerate only the virtual sensor's `continuity-gap` and `insufficient-imu-coverage` findings when integrity is 100%, writer drops are zero, both mandatory streams sustain at least 45 Hz for 10 seconds, median intervals are at most 25 ms, and no mandatory gap reaches one second.
+- An E0 plumbing pass records `product_usable: false`, `counts_toward_capture_kpis: false`, and `physical_sensor_evidence: false` whenever the ordinary validator rejects virtual-sensor timing.
+- Passing E0 is not real sensor, screen-off, battery, OEM, pocket, K1/K2, or estimator evidence.
 
 ### C0 — real-device capability probe, no walking
 
@@ -176,7 +178,7 @@ Requires a new preregistration, participant consent, retention policy, external 
 
 ## Acceptance and stop conditions
 
-The implementation is desk-ready when the standalone APK builds in Docker, unit tests pass, a no-walking emulator flow produces an exported bundle accepted by the same Python validator, malformed/incomplete/leaking fixtures are rejected, and the app never imports product/core packages.
+The implementation is desk-ready when the standalone APK builds in Docker, unit tests pass, a no-walking emulator flow completes capture/FIFO flush/finalization/extraction, the ordinary Python validator emits its unmodified physical-quality verdict, the separate E0 plumbing gate accepts no finding beyond its narrow virtual-timing allowance, malformed/incomplete/leaking fixtures are rejected, and the app never imports product/core packages.
 
 Stop or redesign before personal walking if the emulator/capability probe cannot distinguish unsupported devices, any raw record can be silently dropped, incomplete sessions disappear, local export cannot be verified, or the service cannot maintain the declared foreground lifecycle. Stop the estimator program if a suitable independent truth/rights design is unavailable; more tuning on label-poor public data is not a substitute.
 
