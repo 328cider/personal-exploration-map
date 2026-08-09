@@ -6,6 +6,12 @@ import type {
   TrackPoint,
 } from "@exploration-map/mapping-core";
 
+import {
+  cutLineStringAtAntimeridian,
+  type AntimeridianSafeLineGeometry,
+} from "./geojsonAntimeridian.ts";
+import { normalizeGpxLongitude } from "./gpxCoordinates.ts";
+
 export type PersonalMapExportFormat = "gpx-1.1" | "geojson";
 
 export type PersonalMapExportErrorCode =
@@ -58,13 +64,10 @@ export type GeoJsonPosition =
   | readonly [longitude: number, latitude: number]
   | readonly [longitude: number, latitude: number, altitudeMeters: number];
 
-export interface GeoJsonLineStringFeature {
+export interface GeoJsonTrackFeature {
   readonly type: "Feature";
   readonly id: string;
-  readonly geometry: {
-    readonly type: "LineString";
-    readonly coordinates: readonly GeoJsonPosition[];
-  };
+  readonly geometry: AntimeridianSafeLineGeometry;
   readonly properties: {
     readonly kind: "exploration-track";
     readonly profile: "derived-map";
@@ -73,9 +76,15 @@ export interface GeoJsonLineStringFeature {
     readonly explorationId: string;
     readonly startedAt: string;
     readonly endedAt?: string;
+    /** Number of accepted source observations before boundary cutting. */
     readonly pointCount: number;
+    /** One normally, greater than one when RFC 7946 antimeridian cutting applies. */
+    readonly partCount: number;
   };
 }
+
+/** @deprecated Use GeoJsonTrackFeature; tracks may be MultiLineString at the antimeridian. */
+export type GeoJsonLineStringFeature = GeoJsonTrackFeature;
 
 export interface GeoJsonPointFeature {
   readonly type: "Feature";
@@ -103,10 +112,7 @@ export interface PersonalMapGeoJsonFeatureCollection {
   readonly profile: "derived-map";
   readonly revision: number;
   readonly generatedAt?: string;
-  readonly features: readonly (
-    | GeoJsonLineStringFeature
-    | GeoJsonPointFeature
-  )[];
+  readonly features: readonly (GeoJsonTrackFeature | GeoJsonPointFeature)[];
 }
 
 export interface PersonalMapGeoJsonResult {
@@ -247,23 +253,17 @@ function serializeGpxPoint(
 ): readonly string[] {
   const position = geographicPositionForTrackPoint(point, explorationId);
   const lines = [
-    `      <trkpt lat="${formatNumber(position.latitude, 8)}" lon="${formatNumber(position.longitude, 8)}">`,
+    `      <trkpt lat="${formatNumber(position.latitude, 8)}" lon="${formatNumber(normalizeGpxLongitude(position.longitude), 8)}">`,
   ];
   if (position.altitudeMeters !== undefined) {
-    lines.push(
-      `        <ele>${formatNumber(position.altitudeMeters, 3)}</ele>`,
-    );
+    lines.push(`        <ele>${formatNumber(position.altitudeMeters, 3)}</ele>`);
   }
   lines.push(`        <time>${isoTimestamp(point.recordedAtMs, point.sampleId)}</time>`);
   lines.push("        <extensions>");
   lines.push(gpxExtension("sampleId", point.sampleId, "          "));
   lines.push(gpxExtension("source", point.source, "          "));
   lines.push(
-    gpxExtension(
-      "confidence",
-      formatNumber(point.confidence, 6),
-      "          ",
-    ),
+    gpxExtension("confidence", formatNumber(point.confidence, 6), "          "),
   );
   if (point.horizontalAccuracyMeters !== undefined) {
     lines.push(
@@ -286,9 +286,7 @@ function serializeGpxSegment(
     lines.push(...serializeGpxPoint(point, segment.explorationId));
   }
   lines.push("      <extensions>");
-  lines.push(
-    gpxExtension("explorationId", segment.explorationId, "        "),
-  );
+  lines.push(gpxExtension("explorationId", segment.explorationId, "        "));
   lines.push(
     gpxExtension(
       "startedAt",
@@ -315,12 +313,10 @@ function serializeGpxWaypoint(marker: MapMarker): readonly string[] | null {
     return null;
   }
   const lines = [
-    `  <wpt lat="${formatNumber(position.latitude, 8)}" lon="${formatNumber(position.longitude, 8)}">`,
+    `  <wpt lat="${formatNumber(position.latitude, 8)}" lon="${formatNumber(normalizeGpxLongitude(position.longitude), 8)}">`,
   ];
   if (position.altitudeMeters !== undefined) {
-    lines.push(
-      `    <ele>${formatNumber(position.altitudeMeters, 3)}</ele>`,
-    );
+    lines.push(`    <ele>${formatNumber(position.altitudeMeters, 3)}</ele>`);
   }
   lines.push(`    <time>${isoTimestamp(marker.recordedAtMs, marker.id)}</time>`);
   lines.push(`    <name>${xmlEscape(marker.label)}</name>`);
@@ -363,9 +359,7 @@ export function serializePersonalMapGpx(
 
   lines.push("  <trk>", `    <name>${xmlEscape(snapshot.name)}</name>`);
   lines.push("    <extensions>");
-  lines.push(
-    gpxExtension("personalMapId", snapshot.personalMapId, "      "),
-  );
+  lines.push(gpxExtension("personalMapId", snapshot.personalMapId, "      "));
   lines.push(gpxExtension("revision", snapshot.revision, "      "));
   lines.push("    </extensions>");
   for (const segment of snapshot.segments) {
@@ -385,19 +379,17 @@ export function serializePersonalMapGpx(
 function lineFeature(
   snapshot: PersonalMapSnapshot,
   segment: PersonalMapTrackSegment,
-): GeoJsonLineStringFeature {
+): GeoJsonTrackFeature {
   const coordinates = segment.track.map((point) =>
     geoJsonPosition(
       geographicPositionForTrackPoint(point, segment.explorationId),
     ),
   );
+  const geometry = cutLineStringAtAntimeridian(coordinates);
   return {
     type: "Feature",
     id: `exploration:${segment.explorationId}`,
-    geometry: {
-      type: "LineString",
-      coordinates,
-    },
+    geometry,
     properties: {
       kind: "exploration-track",
       profile: "derived-map",
@@ -409,6 +401,8 @@ function lineFeature(
         ? {}
         : { endedAt: isoTimestamp(segment.endedAtMs, segment.explorationId) }),
       pointCount: coordinates.length,
+      partCount:
+        geometry.type === "LineString" ? 1 : geometry.coordinates.length,
     },
   };
 }
@@ -447,10 +441,7 @@ export function buildPersonalMapGeoJson(
 ): PersonalMapGeoJsonResult {
   assertGeographicFrame(snapshot);
   const warnings = markerWarnings(snapshot.markers);
-  const features: (
-    | GeoJsonLineStringFeature
-    | GeoJsonPointFeature
-  )[] = [];
+  const features: (GeoJsonTrackFeature | GeoJsonPointFeature)[] = [];
 
   for (const segment of snapshot.segments) {
     if (segment.track.length < 2) {
