@@ -1,6 +1,6 @@
 # Current Direction
 
-更新日: 2026-08-09
+更新日: 2026-08-10
 
 > この文書は短期的な開発方針である。恒久的な製品目的、非交渉原則、変更手続きは [`PRODUCT_CONSTITUTION.md`](PRODUCT_CONSTITUTION.md) を正本とする。矛盾時は憲章を優先し、この文書を修正する。
 
@@ -50,6 +50,8 @@ Passive-firstはmap-invisibleを意味しない。探索中の主役は現実空
 
 既存Field-test版をアンインストールせず、同じ署名のAPKを上書きする。通常packageはdebuggableにせず、Field-test packageだけをUSB抽出可能にする。
 
+DB schema v4を含むPR #111は**新しい候補runtimeの開発列**であり、上記S0候補を暗黙に差し替えない。package、mobile static、署名APK、Android 15 lifecycle、永続化、USB抽出、DB v4 exact payload / ordinal gateが同一headでgreenになった後だけ、新しいartifactを別候補として明示する。
+
 ### 試験支援
 
 - subjective review template merge: `3eb5fa4181c564f9ceafacdb0016e86a610c5d48`（PR #75）
@@ -96,6 +98,29 @@ read-only PersonalMap
 - geographic / local、異なるlocal frameを根拠なく混ぜない
 - game / experienceはread-only
 - 地図変更が必要な場合はユーザー確認後の明示commandを通す
+
+### Exact raw storage / lossless backup foundation
+
+PR #108のNode 22 / SQLite実測で、numeric columnだけでは`NaN`と`-0`が保存前に失われることを確認した。Issue #109 / PR #111は、logical bundleだけでなくcanonical sourceからlosslessを成立させるためのstorage gateである。
+
+- DB v4でprovider observationをSQLite affinity前のexact JSON payloadとして保存
+- 全numberはbundleと同じ`ecmascript-number-string-v1`を使用
+- finite numeric columnsはquery/filter projectionでありraw truthではない
+- session-local `sample_ordinal`でprovider受領順を保存
+- sample identityは`(explorationId, sampleId)`
+- identical retryはidempotent、different payloadのidentity再利用はtransaction failure
+- v3以前のrowは`legacy-normalized-v1`として保持し、失われた値や元順序を推測しない
+- legacy rowの通常replayは維持するが、lossless bundle exportはfail closed
+- bundle readは一つのserialized SQLite read snapshot内で逐次実行
+- current S0 UI、share sheet、cloud、automatic uploadは追加しない
+
+正本:
+
+- [ADR 0012](docs/adr/0012-preserve-exact-raw-observation-payload-and-order.md)
+- [`docs/PERSONAL_MAP_BUNDLE_V1.md`](docs/PERSONAL_MAP_BUNDLE_V1.md)
+- [`docs/PERSONAL_MAP_BACKUP_THREAT_MODEL.md`](docs/PERSONAL_MAP_BACKUP_THREAT_MODEL.md)
+
+DB v4 qualification後の次候補はapp-private writerである。通常ユーザー向けplaintext external backupやtransactional restoreを先行しない。
 
 ### PersonalMap-first UX
 
@@ -163,6 +188,16 @@ fixture matrixでは、poor accuracyの5点が旧279 cellを生成していた�
 - device、battery、permission、elapsed-time、debuggable fieldsを確認
 - coordinate-free outputに座標、map名・ID、marker本文、地図画像がないことを確認
 - manifestで`containsRawLocation=true`、`autoUpload=false`を確認
+
+DB v4を含む新候補では、同じUSB gateでさらに次を必須とする。
+
+- `PRAGMA user_version = 4`
+- clean-install sampleがすべて`raw-position-sample-exact-v1`
+- `raw_payload_json`のschema / ID / source / coordinate kindがrowと一致
+- ordinal provenanceが`ingest-sequence-v1`
+- sessionごとのordinalが`0..N-1`で連続
+- force-stop / relaunch後もexact rowとordinalが保持される
+- clean-install artifactに`legacy-normalized-v1`が混入しない
 
 このgateは基本UI、lifecycle、保存、擬似位置、USB回収を検証する。実GNSS、OEM省電力、電池、発熱、身体的UXを代替しない。
 
@@ -269,6 +304,8 @@ raw bundleは自動uploadしない。公開Issueや通常のチャットへ添�
 12. export、renderer性能などM0後続を必要性順に実装
 13. Issue #3と#4の後だけIssue #5 PDR gateへ進む
 
+並行開発では、DB v4を最終headのpackage / APK / emulator / USB gateまで完了し、S0候補とは別にqualified artifactを作る。その後app-private backup writerへ進む。この並行列は実機S0の価値判定順序を変更しない。
+
 ## PDR / GPS-denied
 
 ユーザー提供調査を`docs/PDR_TECHNOLOGY_GATE.md`とIssue #5へ反映済み。
@@ -294,6 +331,8 @@ PDRはGNSS M0の不具合や差別化不足を隠すために先行導入しな�
 - emulatorで再現できるbugを実地試験へ回す
 - PDRやMLを価値検証前に既定有効化する
 - objective analyzerだけで製品価値を自動判定する
+- legacy normalized raw dataを推測でlosslessへ変換する
+- DB v4 qualification前にcurrent S0 artifactを差し替える
 
 ## 変更してはいけない原則
 
