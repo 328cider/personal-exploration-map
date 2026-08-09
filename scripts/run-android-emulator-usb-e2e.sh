@@ -8,4 +8,5 @@ FIELD_TEST_PACKAGE="${3:?Field-test package is required}"
 bash scripts/run-android-emulator-e2e.sh "$APK_PATH" "$EVIDENCE_DIR"
 bash scripts/verify-field-test-usb-export.sh \
   "$EVIDENCE_DIR" \
-  "$FIELD_TEST_PACKAGE"
+  "$FIELD_TEST_PACKAGE" \
+  "4"
