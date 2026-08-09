@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "experiment": "ronin-rate-stable-step-detector-v1",
+  "frozen_on": "2026-08-09",
+  "protocol_commit": "f7601f2",
+  "config_id": "rs25-a010-p025-r025",
+  "config": {
+    "config_id": "rs25-a010-p025-r025",
+    "internal_rate_hz": 25,
+    "baseline_tau_s": 0.75,
+    "smoothing_tau_s": 0.08,
+    "activation_threshold_mps2": 0.1,
+    "minimum_prominence_mps2": 0.25,
+    "release_threshold_mps2": 0.0,
+    "minimum_interval_s": 0.25,
+    "reset_gap_s": 0.2,
+    "warmup_s": 0.6
+  },
+  "implementation_sha256": {
+    "pdr_research/step_detection.py": "d2da4e42977c468a714b83efe16c7c84ab15c0067741a75296089e52a7fe67bb",
+    "pdr_research/rate_stability.py": "03322e6382be7a2fc06a157e5ab15ceb2bb8db79b9e265b5a9011590051855d4",
+    "scripts/analyze_step_rate_stability.py": "5ea34b86248254375e70293910bc504353f0ac1472256d12f43d4a78b7f7eef5"
+  },
+  "split_sha256": "57896835552f20d4a24b0ced0d1f6d5759123b1123f227642b149d2508fc7bfa",
+  "development": {
+    "sequence": "a051_3",
+    "subject_key": "a051",
+    "device": "asus4",
+    "artifact_member_sha256": "33d7831b1123257a85f62d6d3213a0ad24579e8cddaf038ef69c0e3a50080504",
+    "output_sha256": "182ccc4042f0c10ec65904a2fe06773d43bbe45a241e2e8b63c1314e03f5ef84",
+    "rank_order": [
+      "rs25-a010-p025-r025",
+      "rs25-a015-p030-r028",
+      "rs25-a025-p045-r032",
+      "rs25-a020-p035-r030"
+    ],
+    "selection_uses_trajectory_truth": false,
+    "selected_metrics": {
+      "event_count_50_hz": 427,
+      "event_count_100_hz": 426,
+      "relative_count_disagreement": 0.00234192037470726,
+      "relative_amplitude_score_disagreement": 0.0010689928789544803,
+      "median_interval_50_hz_s": 0.6,
+      "median_interval_100_hz_s": 0.6,
+      "batch_invariant": true,
+      "future_sample_violations": 0
+    },
+    "secondary_truth_diagnostics_not_used_for_selection": {
+      "truth_distance_m": 172.04232971241058,
+      "fixed_unclamped_distance_50_hz_m": 200.90235418779218,
+      "fixed_unclamped_distance_100_hz_m": 200.68759100180023,
+      "distance_scale_error_50_hz": 0.1677495563075937,
+      "distance_scale_error_100_hz": 0.16650124034749858
+    }
+  },
+  "validation_state_at_freeze": {
+    "a052_2": "not-fetched",
+    "a049_1": "not-fetched"
+  },
+  "fixed_weinberg_gain": 0.364,
+  "interpretation": "Frozen for untouched validation. Passing rate stability does not establish correct step count, stride calibration, body heading, Android lifecycle feasibility, or product Go."
+}
