@@ -3,6 +3,7 @@ set -euo pipefail
 
 EVIDENCE_DIR="${1:?evidence directory is required}"
 FIELD_TEST_PACKAGE="${2:?field-test package is required}"
+EXPECTED_DATABASE_VERSION="${3:-}"
 BUNDLE_ROOT="$EVIDENCE_DIR/device-bundles"
 
 pwsh -NoProfile -File scripts/pull-field-test-bundle.ps1 \
@@ -35,7 +36,10 @@ rm -rf "$extracted"
 mkdir -p "$extracted"
 tar -xf "$bundle_dir/app/app-private-data.tar" -C "$extracted"
 
-python3 - "$EVIDENCE_DIR" "$bundle_dir" <<'PY'
+python3 - \
+  "$EVIDENCE_DIR" \
+  "$bundle_dir" \
+  "$EXPECTED_DATABASE_VERSION" <<'PY'
 import json
 import pathlib
 import sqlite3
@@ -44,6 +48,7 @@ import sys
 
 evidence = pathlib.Path(sys.argv[1])
 bundle = pathlib.Path(sys.argv[2])
+expected_database_version = int(sys.argv[3]) if sys.argv[3] else None
 root = evidence / "extracted-app-data"
 databases = list(root.rglob("personal-exploration-map.db"))
 assert len(databases) == 1, [str(path) for path in databases]
@@ -57,16 +62,25 @@ try:
         "WHERE kind IN ('environment.session.started','environment.session.ended') "
         "ORDER BY occurred_at"
     ).fetchall()
-    raw_rows = connection.execute(
-        "SELECT exploration_id, id, sample_ordinal, ordinal_provenance, "
-        "raw_payload_format, raw_payload_json, source, coordinate_kind "
-        "FROM position_samples "
-        "ORDER BY exploration_id, sample_ordinal"
-    ).fetchall()
+    if user_version >= 4:
+        raw_rows = connection.execute(
+            "SELECT exploration_id, id, sample_ordinal, ordinal_provenance, "
+            "raw_payload_format, raw_payload_json, source, coordinate_kind "
+            "FROM position_samples "
+            "ORDER BY exploration_id, sample_ordinal"
+        ).fetchall()
+    else:
+        raw_rows = []
 finally:
     connection.close()
 
-assert user_version == 4, user_version
+if expected_database_version is not None:
+    assert user_version == expected_database_version, (
+        user_version,
+        expected_database_version,
+    )
+else:
+    assert user_version in {3, 4}, user_version
 
 kinds = [row[0] for row in diagnostic_rows]
 assert "environment.session.started" in kinds, kinds
@@ -86,40 +100,47 @@ assert payloads, "environment payloads are missing"
 assert required.issubset(payloads[0]), sorted(payloads[0])
 assert payloads[0]["isDebuggable"] is True, payloads[0]
 
-assert raw_rows, "field-test database contains no canonical raw observations"
 ordinals_by_exploration = {}
-for (
-    exploration_id,
-    sample_id,
-    sample_ordinal,
-    ordinal_provenance,
-    raw_payload_format,
-    raw_payload_json,
-    source,
-    coordinate_kind,
-) in raw_rows:
-    assert raw_payload_format == "raw-position-sample-exact-v1", (
+if user_version >= 4:
+    assert raw_rows, "field-test database contains no canonical raw observations"
+    for (
         exploration_id,
         sample_id,
-        raw_payload_format,
-    )
-    assert ordinal_provenance == "ingest-sequence-v1", (
-        exploration_id,
-        sample_id,
+        sample_ordinal,
         ordinal_provenance,
-    )
-    assert raw_payload_json is not None
-    raw_payload = json.loads(raw_payload_json)
-    assert raw_payload["schema"] == "raw-position-sample-exact-v1"
-    assert raw_payload["id"] == sample_id
-    assert raw_payload["source"] == source
-    assert raw_payload["position"]["kind"] == coordinate_kind
-    assert isinstance(raw_payload["recordedAtMs"], str)
-    assert isinstance(raw_payload["confidence"], str)
-    ordinals_by_exploration.setdefault(exploration_id, []).append(sample_ordinal)
+        raw_payload_format,
+        raw_payload_json,
+        source,
+        coordinate_kind,
+    ) in raw_rows:
+        assert raw_payload_format == "raw-position-sample-exact-v1", (
+            exploration_id,
+            sample_id,
+            raw_payload_format,
+        )
+        assert ordinal_provenance == "ingest-sequence-v1", (
+            exploration_id,
+            sample_id,
+            ordinal_provenance,
+        )
+        assert sample_ordinal is not None
+        assert raw_payload_json is not None
+        raw_payload = json.loads(raw_payload_json)
+        assert raw_payload["schema"] == "raw-position-sample-exact-v1"
+        assert raw_payload["id"] == sample_id
+        assert raw_payload["source"] == source
+        assert raw_payload["position"]["kind"] == coordinate_kind
+        assert isinstance(raw_payload["recordedAtMs"], str)
+        assert isinstance(raw_payload["confidence"], str)
+        ordinals_by_exploration.setdefault(exploration_id, []).append(
+            sample_ordinal
+        )
 
-for exploration_id, ordinals in ordinals_by_exploration.items():
-    assert ordinals == list(range(len(ordinals))), (exploration_id, ordinals)
+    for exploration_id, ordinals in ordinals_by_exploration.items():
+        assert ordinals == list(range(len(ordinals))), (
+            exploration_id,
+            ordinals,
+        )
 
 manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
 assert manifest["packageName"] == "com.cider328.personalexplorationmap.fieldtest"
@@ -137,6 +158,10 @@ assert manifest["autoUpload"] is False
             "bundleDirectory": str(bundle),
             "database": str(database),
             "databaseUserVersion": user_version,
+            "expectedDatabaseVersion": expected_database_version,
+            "exactRawEvidenceStatus": (
+                "verified" if user_version >= 4 else "not-available-schema-v3"
+            ),
             "exactRawSampleCount": len(raw_rows),
             "exactRawExplorationCount": len(ordinals_by_exploration),
             "eventKinds": kinds,
