@@ -28,7 +28,7 @@
       }
     },
     {
-      "id": "ronin-raw-hdf5-v1",
+      "id": "ronin-raw-hdf5-v2",
       "dataset": "RoNIN",
       "format": "hdf5-inventory",
       "source_rate_hz": 400,
@@ -46,7 +46,7 @@
       "fields": {
         "raw/imu/acce": {"role": "live-input", "android_api": "Sensor.TYPE_ACCELEROMETER / SensorEvent", "unit": "m/s^2", "axes_or_frame": "Android device axes; first column is raw IMU system timestamp ns"},
         "raw/imu/gyro": {"role": "live-input", "android_api": "Sensor.TYPE_GYROSCOPE / SensorEvent", "unit": "rad/s", "axes_or_frame": "Android device axes; first column is raw IMU system timestamp ns"},
-        "raw/imu/game_rv": {"role": "live-input", "android_api": "Sensor.TYPE_GAME_ROTATION_VECTOR / SensorEvent", "unit": "unit quaternion", "axes_or_frame": "Android device orientation; artifact stores w,x,y,z and adapter reorders to Android x,y,z,w"},
+        "raw/imu/game_rv": {"role": "live-input", "android_api": "Sensor.TYPE_GAME_ROTATION_VECTOR / SensorEvent", "unit": "unit quaternion", "axes_or_frame": "Android device orientation; raw artifact preserves Android x,y,z,w order (the official compiler reorders raw x,y,z,w to synced w,x,y,z)"},
         "raw/imu/step": {"role": "forbidden", "android_api": "Sensor.TYPE_STEP_COUNTER", "unit": "count", "axes_or_frame": "raw IMU time, but cross-stream use in the published synchronized benchmark requires dataset time-alignment metadata"},
         "synced/time": {"role": "evaluation-only", "android_api": null, "unit": "s", "axes_or_frame": "cross-device synchronized dataset timeline"},
         "pose/tango_pos": {"role": "evaluation-only", "android_api": null, "unit": "m", "axes_or_frame": "corrected Tango world frame"},

@@ -184,11 +184,6 @@ def load_ronin_raw_fixture(
             target_rate_hz=rate,
             take_last_values=sensor_type == "TYPE_GAME_ROTATION_VECTOR",
         )
-        if sensor_type == "TYPE_GAME_ROTATION_VECTOR":
-            stream = tuple(
-                (timestamp_ns, (values[1], values[2], values[3], values[0]))
-                for timestamp_ns, values in stream
-            )
         streams[sensor_type] = stream
 
     samples_without_ids = sorted(
@@ -233,8 +228,13 @@ def load_ronin_raw_fixture(
             "dataset": "RoNIN",
             "sequence": sequence,
             "artifact_member_sha256": member_sha256,
-            "adapter": "ronin-raw-hdf5-v1",
+            "adapter": "ronin-raw-hdf5-v2",
             "inference_hdf_paths": "raw/imu/acce,raw/imu/gyro,raw/imu/game_rv",
+            "raw_game_rv_order": (
+                "x,y,z,w; preserved as Android SensorEvent order. Official "
+                "RoNIN compiler reorders raw columns [timestamp,x,y,z,w] to "
+                "synced [w,x,y,z], not the reverse."
+            ),
             "input_time_basis": "raw IMU Android system timestamp, sequence-relative",
             "callback_time_limitation": (
                 "artifact does not retain callback timestamps; "
@@ -248,7 +248,7 @@ def load_ronin_raw_fixture(
         },
     )
     fixture_hash = hashlib.sha256(
-        f"{member_sha256}:ronin-raw-hdf5-v1:{target_rate_hz}".encode("utf-8")
+        f"{member_sha256}:ronin-raw-hdf5-v2:{target_rate_hz}".encode("utf-8")
     ).hexdigest()
     return RoNINFixture(
         session=session,

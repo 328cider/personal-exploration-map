@@ -2,7 +2,7 @@
 
 - Date: 2026-08-09
 - Artifact: official RoNIN FRDR unseen-subject test archive
-- Input adapter: `ronin-raw-hdf5-v1`
+- Input adapter: `ronin-raw-hdf5-v2`
 - Product integration: none
 - Decision: stop the current B0/B1 configurations; continue research without a personal pilot
 
@@ -13,7 +13,7 @@ current baseline configurations is a product candidate. B0 is unsupported
 because the compatible adapter does not mix the raw Step Counter with the
 dataset's cross-device synchronization metadata. Every supported B1 run has at
 least one catastrophic distance, heading, turn, or mirror failure. Turn MAE is
-about 43–60 degrees across 76 evaluated turn events; platform-orientation runs
+about 43–83 degrees across 76 evaluated turn events; platform-orientation runs
 cross the separate 45-degree catastrophic-turn threshold.
 
 This is a useful negative result. The synthetic matrix had already exposed phone
@@ -21,10 +21,11 @@ orientation as a dominant risk; the public sequence confirms that device
 Game Rotation Vector is not body heading and that the current generic
 acceleration-peak step/stride rule substantially over-counts distance.
 
-B1 v1.1.0 also corrects the rotation-vector conversion to Android's documented
-`atan2(R[1], R[4])` azimuth convention before these results are calculated. The
-semantic correction lowers platform heading MAE but does not remove mirror or
-turn failures, so it does not weaken the Stop decision.
+B1 v1.1.0 uses Android's documented `atan2(R[1], R[4])` azimuth convention.
+Adapter v2 separately corrects the raw RoNIN quaternion order from the erroneous
+v1 assumption to Android `x,y,z,w`. The earlier platform figures are superseded:
+corrected device-orientation heading is worse than the gyro baseline and leaves
+mirror and catastrophic-turn failures, strengthening the Stop decision.
 
 ## Legal and retrieval gate
 
@@ -52,8 +53,10 @@ The raw accelerometer and gyro streams are about 334 Hz and Game Rotation Vector
 is about 201 Hz. These rates are source properties, not product requirements.
 The adapter performs causal bucket aggregation to 50/100 Hz and retains the
 last timestamp in each bucket. Game Rotation Vector is additionally capped at
-50 Hz. Its artifact quaternion order is explicitly converted from `w,x,y,z` to
-Android-like `x,y,z,w`.
+50 Hz. Its raw artifact quaternion order is Android-like `x,y,z,w` and is
+preserved. RoNIN's official compiler separately reorders raw `x,y,z,w` to
+synchronized `w,x,y,z`; treating the raw stream as synchronized order is a
+semantic error.
 
 The artifact does not retain callback time, sensor accuracy/capability metadata,
 FIFO, wake-up state, battery, thermal, or lifecycle gaps. Callback time is set
@@ -73,11 +76,11 @@ Ideal raw-stream results:
 | Rate | Profile | Truth / estimated distance | Distance-scale error | Endpoint drift | Heading MAE | Result |
 |---:|---|---:|---:|---:|---:|---|
 | 50 Hz | `imu6` | 381.2 / 570.2 m | 49.6% | 0.111 | 78.4° | catastrophic distance and heading |
-| 50 Hz | `platform-fused` | 381.2 / 570.2 m | 49.6% | 0.202 | 66.8° | mirrored plus catastrophic distance/heading/turn |
-| 50 Hz | `step-enabled` fallback | 381.2 / 570.2 m | 49.6% | 0.202 | 66.8° | same failure; no compatible step events |
+| 50 Hz | `platform-fused` | 381.2 / 570.2 m | 49.6% | 0.227 | 90.7° | mirrored plus catastrophic distance/heading/turn |
+| 50 Hz | `step-enabled` fallback | 381.2 / 570.2 m | 49.6% | 0.227 | 90.7° | same failure; no compatible step events |
 | 100 Hz | `imu6` | 381.2 / 613.2 m | 60.8% | 0.122 | 77.0° | catastrophic distance and heading |
-| 100 Hz | `platform-fused` | 381.2 / 613.2 m | 60.8% | 0.218 | 66.5° | mirrored plus catastrophic distance/heading/turn |
-| 100 Hz | `step-enabled` fallback | 381.2 / 613.2 m | 60.8% | 0.218 | 66.5° | same failure; no compatible step events |
+| 100 Hz | `platform-fused` | 381.2 / 613.2 m | 60.8% | 0.261 | 93.7° | mirrored plus catastrophic distance/heading/turn |
+| 100 Hz | `step-enabled` fallback | 381.2 / 613.2 m | 60.8% | 0.261 | 93.7° | same failure; no compatible step events |
 
 Endpoint drift alone would understate the `imu6` failure because distance scale
 and heading are catastrophic while turn MAE is also high. No shape or ICP
@@ -87,7 +90,8 @@ estimator never sees that information.
 
 ## Decision and next gate
 
-- **Public performance:** Stop B0/B1 through B1 version 1.1.0 as product
+- **Public performance:** Stop B0/B1 through B1 version 1.1.0 with raw adapter
+  v2 as product
   candidates in their current form. Keep them as diagnostic baselines.
 - **Android feasibility:** Not evaluated by this public sequence. The callback,
   screen-off, FIFO, OEM power, battery, and thermal gates remain open.

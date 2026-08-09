@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "model": "official RoNIN body-heading LSTM",
+  "evidence_kind": "metadata-only-benchmark-audit",
+  "artifact": {
+    "official_url": "https://www.frdr-dfdr.ca/repo/files/8/published/publication_538/submitted_data/Pretrained_Models/ronin_body_heading.zip",
+    "download_bytes": 593429,
+    "sha256": "83ea966b21e14ab9605511033e398aeb8b2e4ecfbc771624df4fdaa5e20a5634",
+    "checkpoint_member": "ronin_body_heading/checkpoints/ronin_body_heading.pt",
+    "checkpoint_sha256": "9a3109a52259ed9d337de2d5ed386f43fa7ce3ee82467854429134ab71d9badf",
+    "config_member": "ronin_body_heading/config.json",
+    "config_sha256": "3e3b6fc3c9873b737cdf92c03bc2014eb4a310bfe17817a7901d8fa47025583b",
+    "checkpoint_deserialized": false
+  },
+  "configuration": {
+    "required_rate_hz": 200,
+    "window_frames": 1000,
+    "window_seconds": 5.0,
+    "layers": 3,
+    "layer_size": 50,
+    "heading_norm": true
+  },
+  "input_contract": {
+    "model_features": ["3-axis angular rate", "3-axis acceleration including gravity"],
+    "test_orientation_source": "Android Game Rotation Vector",
+    "android_obtainable_subset": ["TYPE_GYROSCOPE", "TYPE_ACCELEROMETER", "TYPE_GAME_ROTATION_VECTOR", "SensorEvent.timestamp"],
+    "training_target": "sin/cos of evaluation-only body-heading label"
+  },
+  "provenance": {
+    "code_repository": "https://github.com/Sachini/ronin",
+    "code_revision": "805b7f0f28bb164ce89ada9ac05a9470dbe3d715",
+    "code_license": "GPL-3.0",
+    "official_readme_sha256": "db029236fd707344d37cda4c338b166fc952b84a5d6f6e1a67a16af0bac371c8",
+    "official_license_sha256": "683253758bc392e4d2b36bcac06d21ec3cfc3ce0a19b2e50839f1ac00f38ca5f"
+  },
+  "compatibility": {
+    "android_sensor_semantics": "subset is obtainable only when Game Rotation Vector exists",
+    "project_rate_contract": "incompatible with the initial 50-100 Hz target until separately retrained and validated",
+    "product_preprocessing": "not reproduced; official loader uses dataset calibration/alignment metadata",
+    "training_reproducibility": "not reproducible from the released public data because training included unpublished private data",
+    "untouched_test_evidence": "not established; released model is described as trained on the entire dataset",
+    "commercial_product_use": "prohibited by the official custom data/model license"
+  },
+  "decision": "benchmark-demo-only-do-not-run-or-ship"
+}

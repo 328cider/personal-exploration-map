@@ -39,7 +39,8 @@
     "pose/ekf_ori": {"shape": [75311, 4], "dtype": "float64"}
   },
   "inference_contract": {
-    "adapter": "ronin-raw-hdf5-v1",
+    "adapter": "ronin-raw-hdf5-v2",
+    "raw_game_rv_order": "x,y,z,w as emitted by Android SensorEvent; preserved without reordering",
     "input_fields": ["raw/imu/acce", "raw/imu/gyro", "raw/imu/game_rv"],
     "android_sensor_types": ["TYPE_ACCELEROMETER", "TYPE_GYROSCOPE", "TYPE_GAME_ROTATION_VECTOR"],
     "target_rates_hz": [50, 100],
@@ -58,11 +59,11 @@
     "heading_convention": "Android SensorManager.getOrientation azimuth atan2(R[1], R[4]); math heading = pi/2 - azimuth",
     "ideal_results": [
       {"target_rate_hz": 50, "profile": "imu6", "estimator_version": "1.1.0", "estimated_distance_m": 570.1789416466088, "truth_distance_m": 381.17030343346994, "distance_scale_error": 0.495864018027125, "endpoint_drift_ratio": 0.11140190740426835, "heading_mae_deg": 78.39257866416719, "turn_mae_deg": 44.30570314310145, "evaluated_turn_count": 76, "mirrored": false},
-      {"target_rate_hz": 50, "profile": "platform-fused", "estimator_version": "1.1.0", "estimated_distance_m": 570.1789416466088, "truth_distance_m": 381.170301436966, "distance_scale_error": 0.49586402586220135, "endpoint_drift_ratio": 0.20178962970330244, "heading_mae_deg": 66.81433569822498, "turn_mae_deg": 60.357197752392096, "evaluated_turn_count": 76, "mirrored": true},
-      {"target_rate_hz": 50, "profile": "step-enabled", "estimator_version": "1.1.0", "estimated_distance_m": 570.1789416466088, "truth_distance_m": 381.170301436966, "distance_scale_error": 0.49586402586220135, "endpoint_drift_ratio": 0.20178962970330244, "heading_mae_deg": 66.81433569822498, "turn_mae_deg": 60.357197752392096, "evaluated_turn_count": 76, "mirrored": true},
+      {"target_rate_hz": 50, "profile": "platform-fused", "estimator_version": "1.1.0", "estimated_distance_m": 570.1789416466087, "truth_distance_m": 381.170301436966, "distance_scale_error": 0.49586402586220113, "endpoint_drift_ratio": 0.22670819050479274, "heading_mae_deg": 90.65108019249924, "turn_mae_deg": 75.71187681573431, "evaluated_turn_count": 76, "mirrored": true},
+      {"target_rate_hz": 50, "profile": "step-enabled", "estimator_version": "1.1.0", "estimated_distance_m": 570.1789416466087, "truth_distance_m": 381.170301436966, "distance_scale_error": 0.49586402586220113, "endpoint_drift_ratio": 0.22670819050479274, "heading_mae_deg": 90.65108019249924, "turn_mae_deg": 75.71187681573431, "evaluated_turn_count": 76, "mirrored": true},
       {"target_rate_hz": 100, "profile": "imu6", "estimator_version": "1.1.0", "estimated_distance_m": 613.1785168623305, "truth_distance_m": 381.2249435487922, "distance_scale_error": 0.6084428032287217, "endpoint_drift_ratio": 0.12225280768523403, "heading_mae_deg": 77.02714983867703, "turn_mae_deg": 43.467683789482926, "evaluated_turn_count": 76, "mirrored": false},
-      {"target_rate_hz": 100, "profile": "platform-fused", "estimator_version": "1.1.0", "estimated_distance_m": 613.1785168623305, "truth_distance_m": 381.2249417939134, "distance_scale_error": 0.6084428106328077, "endpoint_drift_ratio": 0.2183334900745315, "heading_mae_deg": 66.47852495746649, "turn_mae_deg": 58.89116089207958, "evaluated_turn_count": 76, "mirrored": true},
-      {"target_rate_hz": 100, "profile": "step-enabled", "estimator_version": "1.1.0", "estimated_distance_m": 613.1785168623305, "truth_distance_m": 381.2249417939134, "distance_scale_error": 0.6084428106328077, "endpoint_drift_ratio": 0.2183334900745315, "heading_mae_deg": 66.47852495746649, "turn_mae_deg": 58.89116089207958, "evaluated_turn_count": 76, "mirrored": true}
+      {"target_rate_hz": 100, "profile": "platform-fused", "estimator_version": "1.1.0", "estimated_distance_m": 613.1785168623306, "truth_distance_m": 381.2249417939134, "distance_scale_error": 0.6084428106328079, "endpoint_drift_ratio": 0.26145326540681585, "heading_mae_deg": 93.67469405119117, "turn_mae_deg": 82.64234147280145, "evaluated_turn_count": 76, "mirrored": true},
+      {"target_rate_hz": 100, "profile": "step-enabled", "estimator_version": "1.1.0", "estimated_distance_m": 613.1785168623306, "truth_distance_m": 381.2249417939134, "distance_scale_error": 0.6084428106328079, "endpoint_drift_ratio": 0.26145326540681585, "heading_mae_deg": 93.67469405119117, "turn_mae_deg": 82.64234147280145, "evaluated_turn_count": 76, "mirrored": true}
     ]
   },
   "decision": {

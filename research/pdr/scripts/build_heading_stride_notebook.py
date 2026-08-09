@@ -53,7 +53,8 @@ def build():
 ## tl;dr
 
 - B1 v1.1.0 now follows Android `SensorManager.getOrientation()` azimuth semantics.
-- Correct semantics lower platform heading MAE to about 66.5–66.8°, but mirror and catastrophic turn failures remain.
+- Adapter v2 fixes RoNIN raw Game Rotation Vector order to Android `x,y,z,w`; the earlier 66.5–66.8° figures are invalid.
+- Corrected platform heading MAE is 90.7–93.7°, with 75.7–82.6° turn MAE and mirrored paths.
 - A predeclared stride-gain sweep shows that distance is calibration-sensitive; no gain is selected from this test sequence.
 - The current step detector is also rate-sensitive because identical data produces materially different distance at 50 and 100 Hz.
 - Decision: keep Stop, do not start a personal pilot, and fix body-heading and rate stability before calibration.
@@ -75,7 +76,7 @@ import json
 import subprocess
 import sys
 
-report_path = Path("/outputs/ronin-a054_1-heading-stride.json")
+report_path = Path("/outputs/ronin-a054_1-heading-stride-v2.json")
 sequence_root = Path("/data/ronin/a054_1")
 if not report_path.exists():
     subprocess.run(
@@ -115,6 +116,7 @@ for record in report["records"]:
             """
 assert report["record_count"] == 16
 assert report["future_sample_violations"] == 0
+assert report["source_adapter_id"] == "ronin-raw-hdf5-v2"
 assert report["stride_sensitivity"]["gains"] == [0.364, 0.4, 0.45, 0.64]
 assert "do not select" in report["stride_sensitivity"]["selection_rule"]
 assert report["decision"]["heading"] == "stop-device-orientation-as-body-heading"
@@ -142,7 +144,7 @@ print("All causality, predeclared-sweep, monotonic-distance, and no-selection as
             """
 ## Takeaways
 
-1. Android coordinate semantics are now explicit and tested, but device heading remains distinct from body heading.
+1. Android coordinate and raw quaternion semantics are now explicit and tested; the corrected device heading remains distinct from body heading.
 2. The low distance error at one fixed coefficient is not a valid selection result because this is the test sequence and the coefficient is placement/person dependent.
 3. Distance disagreement between 50 and 100 Hz must be addressed before calibration.
 4. Public-sequence performance and Android lifecycle feasibility remain separate decisions.
