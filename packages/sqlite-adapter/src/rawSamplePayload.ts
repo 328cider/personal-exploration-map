@@ -321,7 +321,7 @@ export function decodeSqliteRawSamplePayload(
     );
   }
 
-  const source = requiredString(value, "source", "$" ) as PositionSource;
+  const source = requiredString(value, "source", "$") as PositionSource;
   if (!POSITION_SOURCES.has(source)) {
     throw new SqliteRawSamplePayloadError(
       "invalid-field",
