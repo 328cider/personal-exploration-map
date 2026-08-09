@@ -63,22 +63,14 @@ function Convert-ToWorkspacePath {
 }
 
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$resolvedBundle = Resolve-RepositoryPath \
-    -InputPath $BundlePath \
-    -RepositoryRoot $repositoryRoot
-$containerBundle = Convert-ToWorkspacePath \
-    -HostPath $resolvedBundle \
-    -RepositoryRoot $repositoryRoot
+$resolvedBundle = Resolve-RepositoryPath -InputPath $BundlePath -RepositoryRoot $repositoryRoot
+$containerBundle = Convert-ToWorkspacePath -HostPath $resolvedBundle -RepositoryRoot $repositoryRoot
 
+$resolvedOutput = ""
 $containerOutput = ""
 if ($OutputDirectory.Length -gt 0) {
-    $resolvedOutput = Resolve-RepositoryPath \
-        -InputPath $OutputDirectory \
-        -RepositoryRoot $repositoryRoot \
-        -CreateDirectory
-    $containerOutput = Convert-ToWorkspacePath \
-        -HostPath $resolvedOutput \
-        -RepositoryRoot $repositoryRoot
+    $resolvedOutput = Resolve-RepositoryPath -InputPath $OutputDirectory -RepositoryRoot $repositoryRoot -CreateDirectory
+    $containerOutput = Convert-ToWorkspacePath -HostPath $resolvedOutput -RepositoryRoot $repositoryRoot
 }
 
 $docker = Get-Command docker -ErrorAction SilentlyContinue
@@ -90,6 +82,7 @@ $arguments = @(
     "compose",
     "run",
     "--rm",
+    "-T",
     "shell",
     "node",
     "scripts/analyze-field-test-summary.mjs",
@@ -109,13 +102,6 @@ Write-Host "Input: $resolvedBundle"
 & $docker.Source @arguments
 $exitCode = $LASTEXITCODE
 
-if ($exitCode -eq 2) {
-    Write-Warning "Objective S0 status is FAIL. Do not repeat the walk. Keep the bundle and return the failure to code/emulator analysis."
-}
-elseif ($exitCode -ne 0) {
-    throw "Field-test analyzer failed with exit code $exitCode."
-}
-
 if ($containerOutput.Length -gt 0) {
     Write-Host "Reports: $resolvedOutput"
 }
@@ -123,4 +109,9 @@ else {
     Write-Host "Reports are under the selected bundle's analysis directory."
 }
 
-exit $exitCode
+if ($exitCode -eq 2) {
+    throw "Objective S0 status is FAIL. Do not repeat the walk. Keep the bundle and return the failure to code/emulator analysis."
+}
+if ($exitCode -ne 0) {
+    throw "Field-test analyzer failed with exit code $exitCode."
+}
