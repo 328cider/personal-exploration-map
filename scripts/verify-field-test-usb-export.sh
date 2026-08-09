@@ -51,18 +51,27 @@ assert len(databases) == 1, [str(path) for path in databases]
 database = databases[0]
 connection = sqlite3.connect(database)
 try:
-    rows = connection.execute(
+    user_version = connection.execute("PRAGMA user_version").fetchone()[0]
+    diagnostic_rows = connection.execute(
         "SELECT kind, payload_json FROM tracking_diagnostic_events "
         "WHERE kind IN ('environment.session.started','environment.session.ended') "
         "ORDER BY occurred_at"
     ).fetchall()
+    raw_rows = connection.execute(
+        "SELECT exploration_id, id, sample_ordinal, ordinal_provenance, "
+        "raw_payload_format, raw_payload_json, source, coordinate_kind "
+        "FROM position_samples "
+        "ORDER BY exploration_id, sample_ordinal"
+    ).fetchall()
 finally:
     connection.close()
 
-kinds = [row[0] for row in rows]
+assert user_version == 4, user_version
+
+kinds = [row[0] for row in diagnostic_rows]
 assert "environment.session.started" in kinds, kinds
 assert "environment.session.ended" in kinds, kinds
-payloads = [json.loads(row[1]) for row in rows if row[1]]
+payloads = [json.loads(row[1]) for row in diagnostic_rows if row[1]]
 required = {
     "manufacturer",
     "model",
@@ -76,6 +85,41 @@ required = {
 assert payloads, "environment payloads are missing"
 assert required.issubset(payloads[0]), sorted(payloads[0])
 assert payloads[0]["isDebuggable"] is True, payloads[0]
+
+assert raw_rows, "field-test database contains no canonical raw observations"
+ordinals_by_exploration = {}
+for (
+    exploration_id,
+    sample_id,
+    sample_ordinal,
+    ordinal_provenance,
+    raw_payload_format,
+    raw_payload_json,
+    source,
+    coordinate_kind,
+) in raw_rows:
+    assert raw_payload_format == "raw-position-sample-exact-v1", (
+        exploration_id,
+        sample_id,
+        raw_payload_format,
+    )
+    assert ordinal_provenance == "ingest-sequence-v1", (
+        exploration_id,
+        sample_id,
+        ordinal_provenance,
+    )
+    assert raw_payload_json is not None
+    raw_payload = json.loads(raw_payload_json)
+    assert raw_payload["schema"] == "raw-position-sample-exact-v1"
+    assert raw_payload["id"] == sample_id
+    assert raw_payload["source"] == source
+    assert raw_payload["position"]["kind"] == coordinate_kind
+    assert isinstance(raw_payload["recordedAtMs"], str)
+    assert isinstance(raw_payload["confidence"], str)
+    ordinals_by_exploration.setdefault(exploration_id, []).append(sample_ordinal)
+
+for exploration_id, ordinals in ordinals_by_exploration.items():
+    assert ordinals == list(range(len(ordinals))), (exploration_id, ordinals)
 
 manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
 assert manifest["packageName"] == "com.cider328.personalexplorationmap.fieldtest"
@@ -92,6 +136,9 @@ assert manifest["autoUpload"] is False
             "status": "passed",
             "bundleDirectory": str(bundle),
             "database": str(database),
+            "databaseUserVersion": user_version,
+            "exactRawSampleCount": len(raw_rows),
+            "exactRawExplorationCount": len(ordinals_by_exploration),
             "eventKinds": kinds,
             "manifest": manifest,
         },
