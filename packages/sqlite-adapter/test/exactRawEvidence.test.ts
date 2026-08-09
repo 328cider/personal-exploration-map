@@ -154,10 +154,10 @@ function specialSample(id: string): RawPositionSample {
 async function createMapAndExploration(
   repository: ReturnType<typeof createSqliteMappingRepository>,
   record: StoredExploration,
+  createMap: boolean,
 ): Promise<void> {
   await repository.runInTransaction(async (writer) => {
-    const existing = await repository.loadPersonalMapReplayInput(MAP.id);
-    if (existing === null) {
+    if (createMap) {
       await writer.createPersonalMap(MAP);
     }
     await writer.createExploration(record);
@@ -257,7 +257,7 @@ test("new raw evidence preserves exact numbers and provider order while projecti
     await migrateMappingDatabase(database);
     const repository = createSqliteMappingRepository(async () => database);
     const first = exploration("session-a", 1_000);
-    await createMapAndExploration(repository, first);
+    await createMapAndExploration(repository, first, true);
 
     const samples = [
       validSample("valid", 3_000),
@@ -393,8 +393,8 @@ test("sample identity is exploration-scoped and exact bundle reads use one snaps
     const repository = createSqliteMappingRepository(async () => database);
     const first = exploration("session-a", 1_000);
     const second = exploration("session-b", 5_000);
-    await createMapAndExploration(repository, first);
-    await createMapAndExploration(repository, second);
+    await createMapAndExploration(repository, first, true);
+    await createMapAndExploration(repository, second, false);
 
     await repository.runInTransaction((writer) =>
       writer.appendPositionSamples(first.id, [validSample("shared-id", 2_000)]),
