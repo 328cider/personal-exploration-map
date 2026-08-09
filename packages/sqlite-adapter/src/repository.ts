@@ -46,7 +46,6 @@ interface NextSampleOrdinalRow {
 }
 
 interface ExistingSampleRow {
-  readonly exploration_id: string;
   readonly raw_payload_format: string;
   readonly raw_payload_json: string | null;
 }
@@ -179,9 +178,10 @@ async function assertIdempotentExistingSample(
   exactPayload: string,
 ): Promise<void> {
   const existing = await database.getFirstAsync<ExistingSampleRow>(
-    `SELECT exploration_id, raw_payload_format, raw_payload_json
+    `SELECT raw_payload_format, raw_payload_json
      FROM position_samples
-     WHERE id = ?`,
+     WHERE exploration_id = ? AND id = ?`,
+    explorationId,
     sampleId,
   );
   if (existing === null) {
@@ -191,7 +191,6 @@ async function assertIdempotentExistingSample(
     );
   }
   if (
-    existing.exploration_id !== explorationId ||
     existing.raw_payload_format !== SQLITE_RAW_SAMPLE_PAYLOAD_FORMAT ||
     existing.raw_payload_json !== exactPayload
   ) {
