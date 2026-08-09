@@ -175,7 +175,7 @@ export const MIGRATE_V2_TO_V3_SQL = `
  */
 export const MIGRATE_V3_TO_V4_SQL = `
   CREATE TABLE position_samples_v4 (
-    id TEXT PRIMARY KEY NOT NULL,
+    id TEXT NOT NULL,
     exploration_id TEXT NOT NULL,
     sample_ordinal INTEGER NOT NULL CHECK (sample_ordinal >= 0),
     ordinal_provenance TEXT NOT NULL CHECK (
@@ -198,6 +198,7 @@ export const MIGRATE_V3_TO_V4_SQL = `
     heading_degrees REAL,
     speed_meters_per_second REAL,
     confidence REAL,
+    PRIMARY KEY (exploration_id, id),
     FOREIGN KEY (exploration_id) REFERENCES explorations(id) ON DELETE CASCADE,
     CHECK (
       (raw_payload_format = 'raw-position-sample-exact-v1' AND raw_payload_json IS NOT NULL)
