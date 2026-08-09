@@ -30,6 +30,10 @@ Start with:
   Stop, rate-instability diagnosis, and still-sealed validation groups;
 - `DIRECT_HEADING_PROTOCOL.md` for the preregistered direct circular recurrent
   headroom test that leaves those validation groups sealed;
+- `DIRECT_HEADING_RESULT.md` for its rate-stable but inaccurate 24-candidate
+  development Stop and the resulting public-evidence research boundary;
+- `RESEARCH_DECISION.md` for the consolidated answer on what is exhausted,
+  what remains externally blocked, and why no pilot or product adoption follows;
 - `datasets/registry.json` for the initial public-dataset audit;
 - `notebooks/01_synthetic_foundation.ipynb` for the executable Phase 1 example;
 - `notebooks/02_public_dataset_audit.ipynb` for the executed metadata audit;
@@ -45,6 +49,8 @@ Start with:
   rights, Android-input, target-fitness, and leakage audit.
 - `notebooks/09_learned_heading_headroom.ipynb` for the executed aggregate-only
   leave-one-group-out residual-ridge Stop.
+- `notebooks/10_direct_heading_headroom.ipynb` for the executed aggregate-only
+  direct circular recurrent Stop and rate-stability comparison.
 
 Run the research checks from the repository root:
 
