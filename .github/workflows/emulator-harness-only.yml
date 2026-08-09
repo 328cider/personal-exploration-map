@@ -11,6 +11,7 @@ on:
       - "scripts/android-emulator-coverage-modes.py"
       - "scripts/android-emulator-interaction-smoke.py"
       - "scripts/android-emulator-interaction-runner.py"
+      - "scripts/android-emulator-interaction-compat-runner.py"
       - "scripts/run-android-emulator-e2e.sh"
 
 permissions:
@@ -57,6 +58,7 @@ jobs:
                 scripts/android-emulator-coverage-modes.py|\
                 scripts/android-emulator-interaction-smoke.py|\
                 scripts/android-emulator-interaction-runner.py|\
+                scripts/android-emulator-interaction-compat-runner.py|\
                 scripts/run-android-emulator-e2e.sh)
                   echo "Harness-only: $path"
                   ;;
