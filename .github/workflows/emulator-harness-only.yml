@@ -5,6 +5,8 @@ on:
     paths:
       - ".github/workflows/emulator-harness-only.yml"
       - "scripts/android-emulator-smoke.py"
+      - "scripts/android-emulator-smoke-runner.py"
+      - "scripts/android-emulator-system-dialog-runner.py"
       - "scripts/android-emulator-coverage-modes.py"
       - "scripts/android-emulator-interaction-smoke.py"
       - "scripts/android-emulator-interaction-runner.py"
@@ -42,6 +44,8 @@ jobs:
             case "$path" in
               .github/workflows/emulator-harness-only.yml|\
               scripts/android-emulator-smoke.py|\
+              scripts/android-emulator-smoke-runner.py|\
+              scripts/android-emulator-system-dialog-runner.py|\
               scripts/android-emulator-coverage-modes.py|\
               scripts/android-emulator-interaction-smoke.py|\
               scripts/android-emulator-interaction-runner.py|\
