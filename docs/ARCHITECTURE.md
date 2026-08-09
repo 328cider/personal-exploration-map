@@ -4,7 +4,7 @@
 
 位置推定、地図の真実、application transaction、保存、表示、ゲーム体験を分離する。最も不確実な屋内PDRが失敗した場合や、将来ゲームアプリを増やした場合でも、PersonalMapの正本とraw evidenceを作り直さない構造にする。
 
-機能配置の詳細な判断基準は [`FEATURE_PLACEMENT.md`](FEATURE_PLACEMENT.md)、恒久判断は [ADR 0006](adr/0006-headless-mapping-engine-and-experience-boundary.md) と [ADR 0007](adr/0007-control-canonical-map-write-authority.md) を参照する。
+機能配置の詳細な判断基準は [`FEATURE_PLACEMENT.md`](FEATURE_PLACEMENT.md)、恒久判断は [ADR 0006](adr/0006-headless-mapping-engine-and-experience-boundary.md)、[ADR 0007](adr/0007-control-canonical-map-write-authority.md)、[ADR 0012](adr/0012-preserve-exact-raw-observation-payload-and-order.md) を参照する。
 
 ## Layer model
 
@@ -40,7 +40,7 @@ flowchart LR
     GNSS[Expo GNSS]
     PDR[Pocket PDR experimental]
     SQLite[(SQLite adapter)]
-    Files[GPX / GeoJSON files]
+    Files[GPX / GeoJSON / backup files]
   end
 
   Explorer --> Commands
@@ -130,19 +130,24 @@ engineはmutableなExplorationSessionやcore mutation関数をappへ渡さない
 - duplicate platform callbackはrepositoryでidempotentにする
 - tracking provider開始失敗時は作成途中のsession recordを補償削除する
 - 終了後に遅延到着したcallbackはrawに保持してもderived trackへ戻さない
+- lossless bundleの内容、hash、validation、staging、collision policyはplatform runtimeから独立させる
 
 ### `packages/sqlite-adapter`
 
 `mapping-engine`のrepository portを実装するlocal-first adapter。
 
 - Expo SQLiteと構造互換の最小async interfaceを使う
-- transaction callbackへ渡されたexclusive transaction objectだけでwriteを実行する
+- transaction callbackへ渡されたtransaction objectだけでcanonical writeを実行する
+- provider observationをSQLite numeric affinityより前にexact payloadとして保存する
+- numeric columnsはfinite-only query/filter projectionでありoriginal truthではない
+- session-local `sample_ordinal`でprovider受領順を保持する
+- sample identityは`(exploration_id, id)`とする
 - raw observationsと確認済みmarkersをcanonical recordとして保存する
-- PersonalMap snapshotは毎回replay inputから再生成する
-- DB v1からv2へ、既存exploration、raw samples、markers、app stateを保持して移行する
-- 旧explorationは同じIDのPersonalMapへ昇格し、将来のsessionを追加できるようにする
+- PersonalMap snapshotは毎回exact raw evidenceから再生成する
+- bundle export readは一つのconsistent read snapshot内で逐次実行する
+- legacy normalized rowをexact evidenceへ推測変換しない
 
-Nodeの実SQLiteを使い、migration、foreign-key integrity、rollback、再起動後のreplay、複数sessionのsegment保持を検証する。Expo固有のdatabase wrapperは`apps/mobile`に置き、generic adapterへExpoを依存させない。
+Nodeの実SQLiteを使い、migration、foreign-key integrity、rollback、再起動後のreplay、複数sessionのsegment保持、special number、ordinal、legacy fail-closedを検証する。Expo固有のdatabase wrapperは`apps/mobile`に置き、generic adapterへExpoを依存させない。
 
 ### Other platform adapters
 
@@ -150,6 +155,7 @@ Nodeの実SQLiteを使い、migration、foreign-key integrity、rollback、再�
 - future PDR sensor collector
 - manual / replay provider
 - GPX / GeoJSON writer
+- app-private backup writer
 - optional sync
 
 adapterはengine portを実装する。raw evidenceを取得・保存するが、accepted / rejected、segment接続、game rewardを決めない。
@@ -201,7 +207,7 @@ experienceにはmap command channelを与えない。ゲーム起点の地図修
 - rendererと任意experienceのcomposition
 - Expo SQLite / Location / TaskManager adapterのcomposition root
 
-DB migrationとcanonical SQLite repositoryはengine境界へ接続済みである。既存画面フローの直接repository呼び出しは互換期間だけ残し、Issue #1の後続でengine commandへ置き換える。
+DB migrationとcanonical SQLite repositoryはengine境界へ接続済みである。bundle repositoryはread-only compositionとして置き、現在のS0 UIへbackup操作を追加しない。
 
 将来のgame appはまず同一monorepoの`apps/game-*`として追加する。二つ目の実利用者ができるまで、remote plugin loaderやnpm公開を先行実装しない。
 
@@ -211,19 +217,34 @@ DB migrationとcanonical SQLite repositoryはengine境界へ接続済みであ�
 
 端末から得たサンプルを証拠として保持する。
 
+- sample IDとExplorationSession membership
+- provider受領順のsession-local ordinal
 - timestamp
 - source: gnss / pdr / manual / simulation
 - coordinate: geographic / local
 - accuracy and confidence
 - heading, speed, altitude when available
+- exact optional-field presence
+- `NaN`、`±Infinity`、`-0`を含む元number semantics
 
 異常値を削除しない。accepted / rejectedと理由は再生成可能な判定として保持する。
+
+SQLiteでは次を分ける。
+
+```text
+exact raw payload              normalized projection
+(raw-position-sample-exact-v1) (finite numeric columns)
+          │                              │
+          └── canonical replay/export    └── bounded query/filter support
+```
+
+両者が異なる場合、exact payloadがraw evidenceのauthorityである。
 
 ### ExplorationSession
 
 1回の記録開始から終了までを表す観測単位。
 
-- raw observationsと時系列
+- raw observationsと受領順
 - accepted / rejected
 - session-derived track
 - session markers
@@ -261,7 +282,7 @@ DB migrationとcanonical SQLite repositoryはengine境界へ接続済みであ�
 ```text
 OS callback
   → active explorationをrepositoryから解決
-  → raw sampleを追記
+  → exact raw payloadとsample ordinalをtransactionで追記
   → engineがcore replayを実行
   → PersonalMap snapshotとeventsを公開
   → app復帰時にqueryして描画
@@ -279,16 +300,46 @@ v2
 PersonalMap 1 ── * ExplorationSession
                    ├─ raw position samples
                    └─ confirmed markers
+
+v3
+tracking diagnostic eventsをcanonical mapと別tableで追加
+
+v4
+position_samples
+  ├─ exact raw payload
+  ├─ session-local sample ordinal
+  ├─ ordinal / payload provenance
+  └─ finite-only normalized projection
 ```
 
-v1からの移行では、各旧explorationを同IDのPersonalMapへ昇格する。これにより既存参照とapp stateを保ったまま、次回以降の探索sessionを同じPersonalMapへ追加できる。
+v1からの移行では、各旧explorationを同IDのPersonalMapへ昇格する。v4以前のraw rowsは既存値を保持し、従来の`recorded_at, id`順をmigration-derived ordinalとして記録するが、元のspecial numberやprovider受領順を復元したとは主張しない。
 
 schema migrationは次を満たすまで完了とみなさない。
 
 - `PRAGMA user_version`が期待版になる
 - `PRAGMA foreign_key_check`が空になる
 - raw samplesとmarkersの件数が保持される
+- failure時に旧tableとversionへrollbackする
 - PersonalMap削除時にsession、sample、markerがcascadeする
+- new exact rowがspecial numberとoptional absenceを往復する
+- duplicate retryでordinalを余分に消費しない
+- legacy rowをlossless bundleへ暗黙に昇格しない
+
+## Bundle read snapshot
+
+tracking中のbackup readは、map/session inventoryとraw/markerを別時点から混ぜない。
+
+```text
+serialized database queue
+  → one read transaction / snapshot
+      → map
+      → frame inputs
+      → explorations
+      → batched raw groups
+      → batched marker groups
+```
+
+transaction内readは並行実行せず順番にawaitする。logical builder、hash、container writerはsnapshot外のplatform boundaryで続行できる。
 
 ## Game-initiated corrections
 
@@ -306,4 +357,4 @@ game inference / quest suggestion
 
 ## Privacy and data ownership
 
-MVPはlocal-firstとし、アカウントやクラウドを要求しない。game stateもcanonical location historyと分離する。同期、共有、ランキング、分析を追加する前に、明示的送信、削除、export、保持期間、暗号化、漏えい影響を設計する。
+MVPはlocal-firstとし、アカウントやクラウドを要求しない。exact raw payloadは座標・時刻を含む高感度canonical evidenceであり、log、analytics、public Issue、通常チャットへ出さない。game stateもcanonical location historyと分離する。同期、共有、ランキング、分析を追加する前に、明示的送信、削除、export、保持期間、暗号化、漏えい影響を設計する。
