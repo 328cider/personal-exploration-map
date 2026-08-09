@@ -1,7 +1,7 @@
 # Android-compatible PDR data science plan
 
-- Status: foundation and one strict public-sequence replay implemented; native
-  capture and personal pilot are gated
+- Status: public/synthetic estimator program closed with no survivor; standalone
+  Android capture-readiness mechanism implemented; personal walking remains gated
 - Product issue: #5
 - Product gate: `docs/PDR_TECHNOLOGY_GATE.md`
 - Research branches: `codex/pdr-research` plus isolated `codex/pdr/*` work branches
@@ -14,9 +14,11 @@ reproduce from retained raw evidence. Dataset ground truth, Tango/VIO pose,
 motion capture, corrected body heading, future trajectory, and dataset-specific
 EKF pose are labels or evaluation evidence, never product inference input.
 
-This phase is offline research. It changes neither canonical map truth nor the
-product capture path. A native logger and a personal walking pilot remain blocked
-until public/synthetic work has narrowed the sensor and capture requirements.
+This phase changes neither canonical map truth nor the product capture path. The
+public/synthetic work narrowed the minimum profile to raw accelerometer,
+gyroscope, and monotonic clocks, with all other sensors optional. A later explicit
+instruction authorized a standalone research logger for that profile. It does
+not reopen the estimator decision or authorize a personal walking pilot.
 
 ## Android input contract
 
@@ -155,12 +157,14 @@ resolved before calibration, native capture, or a personal pilot.
 Replay identical input per estimator and report results by capability profile.
 Keep live estimates distinct from post-session smoothing.
 
-### Phase 4 — native capability probe (gated; no walking)
+### Phase 4 — native capability probe and logger (desk implementation complete; no walking)
 
-Only after Phase 2/3 narrow the inputs, derive sensor types, rates, batch latency,
-permissions, and storage. Implement a probe that records availability, FIFO,
-rate, wake-up, and permission capabilities without asking the user to walk.
-Re-run the compatibility decision with actual device capabilities.
+The standalone Kotlin APK and offline validator now implement the derived sensor
+types, 50/100 Hz live/batch modes, permissions, capability metadata, FIFO flush,
+app-private bundle lifecycle, hashes, lifecycle/resource diagnostics, and local
+export. Android 15 CI uses a no-walking batched run. The next C0 step is a real
+device capability/stationary probe only; it is not estimator or pocket-walking
+evidence.
 
 ### Phase 5 — minimal personal pilot (gated)
 

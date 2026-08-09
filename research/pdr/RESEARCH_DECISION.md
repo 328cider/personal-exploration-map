@@ -5,8 +5,12 @@ Date: 2026-08-09
 ## Decision
 
 The registered low-cost public/synthetic program is complete enough to make its
-intended decision: **do not integrate a PDR estimator, do not define a field-test
-capture specification, and do not ask for a personal walking pilot.**
+intended accuracy decision: **do not integrate a PDR estimator and do not treat
+a personal walking pilot as authorized accuracy evidence.** A later explicit
+instruction authorized a separate capture-readiness workstream: define the data
+contract and KPI plan, build the standalone Android capability probe/logger, and
+exhaust emulator/desk validation. That work does not reopen estimator tuning or
+authorize product adoption.
 
 This is not a universal claim that pedestrian dead reckoning is impossible. It
 is a bounded conclusion that the currently auditable Android-compatible inputs,
@@ -37,7 +41,8 @@ those quantities and no real Android lifecycle evidence.
 | Learned residual heading | 36 candidates / 144 held-out fits; 0 survive; best diagnostic mean MAE 91.388° and severe rate drift | **Stop** |
 | Direct circular recurrent heading | 24 candidates / 96 held-out fits; 0 survive; rate stability improves, but best diagnostic mean MAE 84.303° and turn MAE 65.941° | **Stop** |
 | Released RoNIN heading model | Requires 200 Hz, includes private/non-reproducible training data, and is non-commercial | **Benchmark demo only; do not run or ship** |
-| Android screen-off/OEM/battery/pocket lifecycle | Public data cannot measure it; no accuracy candidate survived to justify a field-test capture contract | **Not evaluated; deliberately gated** |
+| Android capture mechanism | Standalone research APK and offline bundle gate are now the authorized next layer; it must pass Docker/emulator checks before any no-walking device probe | **Implementation/desk validation authorized; not product evidence** |
+| Android screen-off/OEM/battery/pocket lifecycle | Public data and emulator cannot measure it | **Not evaluated; real-device walking still gated** |
 | One-person/one-device pilot | Cannot establish generalization or repair missing rights/training evidence | **Not authorized** |
 
 Across the three registered body-heading families, **150 configurations** were
@@ -105,16 +110,24 @@ for an artifact license, immutable schema/version, grouped identifiers, and
 explicit derived-weight terms. `DATA_RIGHTS_CLARIFICATION_PACK.md` records the
 questions.
 
-A no-walking Android capability probe may later confirm sensor availability,
-FIFO, rate, wake-up mode, and permission behavior. It cannot substitute for an
-accuracy survivor, so the current plan does not use it to advance to a pilot.
+A no-walking Android capability probe and raw logger are now implemented as a
+separate evidence-quality prerequisite. They confirm schema, availability,
+FIFO, requested/delivered rate, wake-up mode, lifecycle, file integrity, and
+permission behavior. They cannot substitute for an accuracy survivor. The
+machine-readable collection template remains explicitly marked
+`desk-template-not-authorized-for-personal-collection`; walking starts only
+after its emulator and no-walking capability gates pass and a separately
+reviewed APK revision enables it. The current APK enforces this boundary by
+rejecting `walk` and `mixed` requests in the foreground service, not only by
+hiding them in the UI.
 
 ## Repository and product boundary
 
-All work remains under `research/pdr/` on `codex/pdr-research`. Raw datasets,
-outputs, and model weights are outside Git. `main`, product APIs, database
-schema, `TrackingProviderPort`, canonical-map commands, renderer, and game
-layers remain unchanged.
+Implementation remains under `research/pdr/` on `codex/pdr-research`, with one
+isolated GitHub Actions workflow that builds/tests only that standalone APK.
+Raw datasets, captures, outputs, and model weights are outside Git. `main`,
+product APIs, database schema, `TrackingProviderPort`, canonical-map commands,
+renderer, and game layers remain unchanged.
 
 Main development can continue independently. Adoption requires a new explicit
 decision naming the estimator version, capability profile, license basis,

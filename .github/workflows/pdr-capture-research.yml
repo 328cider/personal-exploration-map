@@ -1,0 +1,132 @@
+name: PDR capture research
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - codex/pdr-research
+    paths:
+      - ".github/workflows/pdr-capture-research.yml"
+      - "research/pdr/android-capture/**"
+      - "research/pdr/capture-schema/**"
+      - "research/pdr/pdr_research/capture_quality.py"
+      - "research/pdr/scripts/summarize_capture_program.py"
+      - "research/pdr/scripts/validate_capture_bundle.py"
+      - "research/pdr/tests/test_capture_quality.py"
+      - "research/pdr/CAPTURE_KPI_PLAN.md"
+      - "research/pdr/ANDROID_CAPTURE_PROTOCOL.md"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pdr-capture-research-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  capture-contract:
+    name: Capture schema and quality gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run PDR tests in the pinned research container
+        run: docker compose -f research/pdr/compose.yaml run --rm pdr-audit
+
+  android-apk:
+    name: Standalone capture APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Install pinned Android platform packages
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "build-tools;34.0.0"
+      - name: Unit test and assemble app plus instrumentation APK
+        env:
+          PDR_RESEARCH_REVISION: ${{ github.sha }}
+        run: >-
+          gradle --no-daemon --stacktrace
+          -p research/pdr/android-capture
+          testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+      - name: Verify APK signature and permission surface
+        run: |
+          app_apk="research/pdr/android-capture/app/build/outputs/apk/debug/app-debug.apk"
+          build_tools="$ANDROID_HOME/build-tools/35.0.0"
+          "$build_tools/apksigner" verify --verbose "$app_apk"
+          "$build_tools/aapt2" dump permissions "$app_apk" | tee research/pdr/android-capture/app/build/permissions.txt
+          ! grep -q "android.permission.INTERNET" research/pdr/android-capture/app/build/permissions.txt
+          ! grep -q "android.permission.HIGH_SAMPLING_RATE_SENSORS" research/pdr/android-capture/app/build/permissions.txt
+          grep -q "android.permission.FOREGROUND_SERVICE" research/pdr/android-capture/app/build/permissions.txt
+          grep -q "android.permission.WAKE_LOCK" research/pdr/android-capture/app/build/permissions.txt
+      - name: Stage exact APK pair and permission evidence
+        run: |
+          mkdir -p artifacts/pdr-capture
+          cp research/pdr/android-capture/app/build/outputs/apk/debug/app-debug.apk \
+            artifacts/pdr-capture/app-debug.apk
+          cp research/pdr/android-capture/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk \
+            artifacts/pdr-capture/app-debug-androidTest.apk
+          cp research/pdr/android-capture/app/build/permissions.txt \
+            artifacts/pdr-capture/permissions.txt
+          sha256sum artifacts/pdr-capture/*.apk > artifacts/pdr-capture/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pdr-capture-debug-apks
+          path: artifacts/pdr-capture/
+          if-no-files-found: error
+          retention-days: 14
+
+  emulator-e2e:
+    name: Android 15 no-walking batch/flush gate
+    needs: android-apk
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: actions/download-artifact@v4
+        with:
+          name: pdr-capture-debug-apks
+          path: artifacts/pdr-capture
+      - name: Enable KVM group permissions
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Start, record, finalize, extract, and validate on Android 15
+        uses: ReactiveCircus/android-emulator-runner@v2.37.0
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel
+          cores: 2
+          ram-size: 4096M
+          emulator-boot-timeout: 600
+          emulator-options: >-
+            -no-window -gpu swiftshader_indirect -no-snapshot -noaudio
+            -no-boot-anim -camera-back none -camera-front none
+          disable-animations: true
+          script: >-
+            bash research/pdr/android-capture/scripts/run-emulator-e2e.sh
+            artifacts/pdr-capture/app-debug.apk
+            artifacts/pdr-capture/app-debug-androidTest.apk
+            artifacts/pdr-capture/emulator-evidence
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pdr-capture-emulator-evidence
+          path: artifacts/pdr-capture/emulator-evidence/
+          if-no-files-found: warn
+          retention-days: 14

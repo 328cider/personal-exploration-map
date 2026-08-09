@@ -3,6 +3,9 @@ __pycache__/
 .ipynb_checkpoints/
 .venv/
 data/
+captures/
+truth/
+private-plans/
 models/*
 !models/registry.json
 outputs/

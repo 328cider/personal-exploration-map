@@ -1,0 +1,101 @@
+{
+  "schema_version": "pdr-capture/v1",
+  "contract_version": 1,
+  "streams": {
+    "sensor_events": {
+      "grain": "one Android SensorEvent callback",
+      "fields": {
+        "schema_version": {"role": "evaluation-only", "android_api": null, "unit": "identifier", "required": true},
+        "record_type": {"role": "evaluation-only", "android_api": null, "unit": "identifier", "required": true},
+        "session_id": {"role": "evaluation-only", "android_api": null, "unit": "identifier", "required": true},
+        "sequence_id": {"role": "evaluation-only", "android_api": null, "unit": "count", "required": true},
+        "sensor_type": {"role": "live-input", "android_api": "Sensor.getType() / Sensor.TYPE_*", "unit": "Android sensor type name", "required": true},
+        "sensor_timestamp_ns": {"role": "live-input", "android_api": "SensorEvent.timestamp", "unit": "nanoseconds since boot", "required": true},
+        "callback_elapsed_realtime_ns": {"role": "evaluation-only", "android_api": "SystemClock.elapsedRealtimeNanos()", "unit": "nanoseconds since boot", "required": true},
+        "accuracy": {"role": "live-input", "android_api": "SensorEvent.accuracy", "unit": "SensorManager accuracy constant", "required": true},
+        "values": {"role": "live-input", "android_api": "SensorEvent.values", "unit": "sensor-specific SI units", "required": true},
+        "value_count": {"role": "evaluation-only", "android_api": "SensorEvent.values.size", "unit": "count", "required": true}
+      }
+    },
+    "location_events": {
+      "grain": "one android.location.Location callback",
+      "fields": {
+        "schema_version": {"role": "evaluation-only", "android_api": null, "unit": "identifier", "required": true},
+        "record_type": {"role": "evaluation-only", "android_api": null, "unit": "identifier", "required": true},
+        "session_id": {"role": "evaluation-only", "android_api": null, "unit": "identifier", "required": true},
+        "sequence_id": {"role": "evaluation-only", "android_api": null, "unit": "count", "required": true},
+        "provider": {"role": "live-input", "android_api": "Location.getProvider()", "unit": "identifier", "required": true},
+        "location_elapsed_realtime_ns": {"role": "live-input", "android_api": "Location.getElapsedRealtimeNanos()", "unit": "nanoseconds since boot", "required": true},
+        "has_elapsed_realtime_uncertainty": {"role": "live-input", "android_api": "Location.hasElapsedRealtimeUncertaintyNanos()", "unit": "boolean", "required": true},
+        "elapsed_realtime_uncertainty_ns": {"role": "live-input", "android_api": "Location.getElapsedRealtimeUncertaintyNanos()", "unit": "nanoseconds at 68% confidence", "required": false},
+        "callback_elapsed_realtime_ns": {"role": "evaluation-only", "android_api": "SystemClock.elapsedRealtimeNanos()", "unit": "nanoseconds since boot", "required": true},
+        "wall_time_ms": {"role": "evaluation-only", "android_api": "Location.getTime()", "unit": "Unix epoch milliseconds; never used for ordering", "required": true},
+        "latitude_deg": {"role": "live-input", "android_api": "Location.getLatitude()", "unit": "degrees WGS84", "required": true},
+        "longitude_deg": {"role": "live-input", "android_api": "Location.getLongitude()", "unit": "degrees WGS84", "required": true},
+        "has_accuracy": {"role": "live-input", "android_api": "Location.hasAccuracy()", "unit": "boolean", "required": true},
+        "accuracy_m": {"role": "live-input", "android_api": "Location.getAccuracy()", "unit": "meters at 68% confidence", "required": false},
+        "has_altitude": {"role": "live-input", "android_api": "Location.hasAltitude()", "unit": "boolean", "required": true},
+        "altitude_m": {"role": "live-input", "android_api": "Location.getAltitude()", "unit": "meters above WGS84 ellipsoid", "required": false},
+        "has_vertical_accuracy": {"role": "live-input", "android_api": "Location.hasVerticalAccuracy()", "unit": "boolean", "required": true},
+        "vertical_accuracy_m": {"role": "live-input", "android_api": "Location.getVerticalAccuracyMeters()", "unit": "meters at 68% confidence", "required": false},
+        "has_speed": {"role": "live-input", "android_api": "Location.hasSpeed()", "unit": "boolean", "required": true},
+        "speed_mps": {"role": "live-input", "android_api": "Location.getSpeed()", "unit": "meters per second", "required": false},
+        "has_speed_accuracy": {"role": "live-input", "android_api": "Location.hasSpeedAccuracy()", "unit": "boolean", "required": true},
+        "speed_accuracy_mps": {"role": "live-input", "android_api": "Location.getSpeedAccuracyMetersPerSecond()", "unit": "meters per second at 68% confidence", "required": false},
+        "has_bearing": {"role": "live-input", "android_api": "Location.hasBearing()", "unit": "boolean", "required": true},
+        "bearing_deg": {"role": "live-input", "android_api": "Location.getBearing()", "unit": "degrees direction of travel", "required": false},
+        "has_bearing_accuracy": {"role": "live-input", "android_api": "Location.hasBearingAccuracy()", "unit": "boolean", "required": true},
+        "bearing_accuracy_deg": {"role": "live-input", "android_api": "Location.getBearingAccuracyDegrees()", "unit": "degrees at 68% confidence", "required": false},
+        "is_mock": {"role": "evaluation-only", "android_api": "Location.isMock() / Location.isFromMockProvider()", "unit": "boolean", "required": true}
+      }
+    },
+    "capabilities": {
+      "grain": "one Sensor returned by SensorManager.getSensorList(TYPE_ALL)",
+      "fields": {
+        "schema_version": {"role": "evaluation-only", "android_api": null, "unit": "identifier", "required": true},
+        "record_type": {"role": "evaluation-only", "android_api": null, "unit": "identifier", "required": true},
+        "session_id": {"role": "evaluation-only", "android_api": null, "unit": "identifier", "required": true},
+        "sensor_type": {"role": "evaluation-only", "android_api": "Sensor.getType()", "unit": "Android sensor type name", "required": true},
+        "sensor_type_id": {"role": "evaluation-only", "android_api": "Sensor.getType()", "unit": "integer", "required": true},
+        "name": {"role": "evaluation-only", "android_api": "Sensor.getName()", "unit": "text", "required": true},
+        "vendor": {"role": "evaluation-only", "android_api": "Sensor.getVendor()", "unit": "text", "required": true},
+        "version": {"role": "evaluation-only", "android_api": "Sensor.getVersion()", "unit": "integer", "required": true},
+        "resolution": {"role": "evaluation-only", "android_api": "Sensor.getResolution()", "unit": "sensor-specific", "required": true},
+        "maximum_range": {"role": "evaluation-only", "android_api": "Sensor.getMaximumRange()", "unit": "sensor-specific", "required": true},
+        "power_ma": {"role": "evaluation-only", "android_api": "Sensor.getPower()", "unit": "mA", "required": true},
+        "min_delay_us": {"role": "evaluation-only", "android_api": "Sensor.getMinDelay()", "unit": "microseconds", "required": true},
+        "max_delay_us": {"role": "evaluation-only", "android_api": "Sensor.getMaxDelay()", "unit": "microseconds", "required": true},
+        "fifo_reserved_event_count": {"role": "evaluation-only", "android_api": "Sensor.getFifoReservedEventCount()", "unit": "count", "required": true},
+        "fifo_max_event_count": {"role": "evaluation-only", "android_api": "Sensor.getFifoMaxEventCount()", "unit": "count", "required": true},
+        "is_wake_up": {"role": "evaluation-only", "android_api": "Sensor.isWakeUpSensor()", "unit": "boolean", "required": true},
+        "reporting_mode": {"role": "evaluation-only", "android_api": "Sensor.getReportingMode()", "unit": "Sensor reporting mode", "required": true}
+      }
+    },
+    "diagnostic_events": {
+      "grain": "one lifecycle, writer, battery, thermal, permission, screen, or registration event",
+      "open_payload": true,
+      "fields": {
+        "schema_version": {"role": "evaluation-only", "android_api": null, "unit": "identifier", "required": true},
+        "record_type": {"role": "evaluation-only", "android_api": null, "unit": "identifier", "required": true},
+        "session_id": {"role": "evaluation-only", "android_api": null, "unit": "identifier", "required": true},
+        "sequence_id": {"role": "evaluation-only", "android_api": null, "unit": "count", "required": true},
+        "elapsed_realtime_ns": {"role": "evaluation-only", "android_api": "SystemClock.elapsedRealtimeNanos()", "unit": "nanoseconds since boot", "required": true},
+        "event": {"role": "evaluation-only", "android_api": "Android lifecycle or service callback", "unit": "identifier", "required": true},
+        "payload": {"role": "evaluation-only", "android_api": "event-specific Android API", "unit": "object", "required": true}
+      }
+    }
+  },
+  "forbidden_name_fragments": [
+    "truth_",
+    "label_",
+    "ground_truth",
+    "true_heading",
+    "body_heading_label",
+    "tango_pose",
+    "vicon_pose",
+    "motion_capture",
+    "future_",
+    "reference_pose",
+    "ekf_pose"
+  ]
+}

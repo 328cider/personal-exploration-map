@@ -1,0 +1,123 @@
+{
+  "schema_version": "pdr-sensor-value-layouts/v1",
+  "coordinate_rule": "Preserve Android device coordinates exactly; do not rotate into body/world coordinates in the capture layer.",
+  "sensors": {
+    "TYPE_ACCELEROMETER": {
+      "android_constant": "Sensor.TYPE_ACCELEROMETER",
+      "required": true,
+      "min_values": 3,
+      "max_values": 3,
+      "values": ["x_acceleration", "y_acceleration", "z_acceleration"],
+      "unit": "m/s^2 including gravity",
+      "frame": "Android device axes"
+    },
+    "TYPE_GYROSCOPE": {
+      "android_constant": "Sensor.TYPE_GYROSCOPE",
+      "required": true,
+      "min_values": 3,
+      "max_values": 3,
+      "values": ["x_angular_rate", "y_angular_rate", "z_angular_rate"],
+      "unit": "rad/s",
+      "frame": "Android device axes"
+    },
+    "TYPE_ACCELEROMETER_UNCALIBRATED": {
+      "android_constant": "Sensor.TYPE_ACCELEROMETER_UNCALIBRATED",
+      "required": false,
+      "min_values": 6,
+      "max_values": 6,
+      "values": ["x_uncalibrated", "y_uncalibrated", "z_uncalibrated", "x_bias", "y_bias", "z_bias"],
+      "unit": "m/s^2",
+      "frame": "Android device axes"
+    },
+    "TYPE_GYROSCOPE_UNCALIBRATED": {
+      "android_constant": "Sensor.TYPE_GYROSCOPE_UNCALIBRATED",
+      "required": false,
+      "min_values": 6,
+      "max_values": 6,
+      "values": ["x_uncalibrated", "y_uncalibrated", "z_uncalibrated", "x_drift_bias", "y_drift_bias", "z_drift_bias"],
+      "unit": "rad/s",
+      "frame": "Android device axes"
+    },
+    "TYPE_MAGNETIC_FIELD": {
+      "android_constant": "Sensor.TYPE_MAGNETIC_FIELD",
+      "required": false,
+      "min_values": 3,
+      "max_values": 3,
+      "values": ["x_field", "y_field", "z_field"],
+      "unit": "microtesla",
+      "frame": "Android device axes"
+    },
+    "TYPE_MAGNETIC_FIELD_UNCALIBRATED": {
+      "android_constant": "Sensor.TYPE_MAGNETIC_FIELD_UNCALIBRATED",
+      "required": false,
+      "min_values": 6,
+      "max_values": 6,
+      "values": ["x_uncalibrated", "y_uncalibrated", "z_uncalibrated", "x_hard_iron_bias", "y_hard_iron_bias", "z_hard_iron_bias"],
+      "unit": "microtesla",
+      "frame": "Android device axes"
+    },
+    "TYPE_ROTATION_VECTOR": {
+      "android_constant": "Sensor.TYPE_ROTATION_VECTOR",
+      "required": false,
+      "min_values": 5,
+      "max_values": 5,
+      "values": ["quaternion_x_sin_half_angle", "quaternion_y_sin_half_angle", "quaternion_z_sin_half_angle", "quaternion_w_cos_half_angle", "estimated_heading_accuracy"],
+      "unit": "dimensionless; heading accuracy in radians",
+      "frame": "device orientation relative to platform reference frame"
+    },
+    "TYPE_GAME_ROTATION_VECTOR": {
+      "android_constant": "Sensor.TYPE_GAME_ROTATION_VECTOR",
+      "required": false,
+      "min_values": 4,
+      "max_values": 4,
+      "values": ["quaternion_x_sin_half_angle", "quaternion_y_sin_half_angle", "quaternion_z_sin_half_angle", "quaternion_w_cos_half_angle"],
+      "unit": "dimensionless",
+      "frame": "platform game rotation reference; heading may drift"
+    },
+    "TYPE_GRAVITY": {
+      "android_constant": "Sensor.TYPE_GRAVITY",
+      "required": false,
+      "min_values": 3,
+      "max_values": 3,
+      "values": ["x_gravity", "y_gravity", "z_gravity"],
+      "unit": "m/s^2",
+      "frame": "Android device axes"
+    },
+    "TYPE_LINEAR_ACCELERATION": {
+      "android_constant": "Sensor.TYPE_LINEAR_ACCELERATION",
+      "required": false,
+      "min_values": 3,
+      "max_values": 3,
+      "values": ["x_linear_acceleration", "y_linear_acceleration", "z_linear_acceleration"],
+      "unit": "m/s^2 excluding gravity",
+      "frame": "Android device axes"
+    },
+    "TYPE_STEP_DETECTOR": {
+      "android_constant": "Sensor.TYPE_STEP_DETECTOR",
+      "required": false,
+      "min_values": 1,
+      "max_values": 1,
+      "values": ["step_event_one"],
+      "unit": "1.0 per detected step",
+      "frame": "not applicable"
+    },
+    "TYPE_STEP_COUNTER": {
+      "android_constant": "Sensor.TYPE_STEP_COUNTER",
+      "required": false,
+      "min_values": 1,
+      "max_values": 1,
+      "values": ["cumulative_steps_since_reboot_while_activated"],
+      "unit": "steps",
+      "frame": "not applicable"
+    },
+    "TYPE_PRESSURE": {
+      "android_constant": "Sensor.TYPE_PRESSURE",
+      "required": false,
+      "min_values": 1,
+      "max_values": 1,
+      "values": ["ambient_pressure"],
+      "unit": "hPa (millibar)",
+      "frame": "not applicable"
+    }
+  }
+}
