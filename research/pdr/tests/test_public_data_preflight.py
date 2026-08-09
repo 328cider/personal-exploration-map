@@ -53,7 +53,10 @@ class PublicDataPreflightTests(unittest.TestCase):
     def test_source_evidence_is_revision_pinned(self) -> None:
         payload = json.loads((ROOT / "datasets" / "source_evidence.json").read_text(encoding="utf-8"))
         self.assertEqual(payload["retrieved_on"], "2026-08-09")
-        self.assertEqual({source["dataset"] for source in payload["sources"]}, {"RoNIN", "OxIOD", "RIDI"})
+        source_groups = {source["dataset"] for source in payload["sources"]}
+        self.assertTrue({"RoNIN", "OxIOD", "RIDI"}.issubset(source_groups))
+        self.assertIn("Android platform", source_groups)
+        self.assertIn("stride-model reference", source_groups)
         for source in payload["sources"]:
             self.assertTrue(source["url"].startswith("https://"))
             self.assertTrue(source["revision"])

@@ -1,7 +1,7 @@
 # Android-compatible PDR data science plan
 
-- Status: foundation implemented; public-data download, native capture, and
-  personal pilot are gated
+- Status: foundation and one strict public-sequence replay implemented; native
+  capture and personal pilot are gated
 - Product issue: #5
 - Product gate: `docs/PDR_TECHNOLOGY_GATE.md`
 - Research branches: `codex/pdr-research` plus isolated `codex/pdr/*` work branches
@@ -144,6 +144,13 @@ explicit unsupported/fallback states, live temporal causality, 50/100 Hz,
 callback batching, gaps, magnetic rejection, and catastrophic failure reporting.
 These synthetic results are pipeline evidence only and cannot produce a product
 Go/Narrow/Stop decision.
+
+The first public replay produces a Stop for B1 through v1.1.0. Correcting the
+rotation-vector conversion to Android's documented azimuth convention does not
+remove mirror, heading, or turn failures. A predeclared Weinberg-gain sweep
+shows that distance is coefficient-sensitive, but no coefficient may be chosen
+from the test sequence. The current 50/100 Hz distance disagreement must be
+resolved before calibration, native capture, or a personal pilot.
 
 Replay identical input per estimator and report results by capability profile.
 Keep live estimates distinct from post-session smoothing.

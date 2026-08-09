@@ -31,7 +31,7 @@ ORIENTATION_SENSORS = frozenset({ROTATION_VECTOR, GAME_ROTATION_VECTOR})
 
 B0_REQUIREMENT = EstimatorRequirement(
     estimator="B0 step + platform orientation + fixed stride",
-    version="1.0.0",
+    version="1.0.1",
     required_capability_profile="step-enabled",
     required_sensor_types=frozenset({STEP_DETECTOR}),
     any_of_sensor_types=(ORIENTATION_SENSORS,),
@@ -82,7 +82,7 @@ def _unsupported(
     )
 
 
-def _yaw_from_rotation_vector(values: tuple[float, ...]) -> float:
+def _math_heading_from_rotation_vector(values: tuple[float, ...]) -> float:
     if len(values) < 3:
         raise ValueError("Rotation vector requires at least x/y/z")
     x, y, z = values[:3]
@@ -90,7 +90,15 @@ def _yaw_from_rotation_vector(values: tuple[float, ...]) -> float:
         w = values[3]
     else:
         w = math.sqrt(max(0.0, 1.0 - x * x - y * y - z * z))
-    return _wrap_angle(math.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z)))
+    # Android SensorManager.getOrientation() defines azimuth as atan2(R[1],
+    # R[4]) for the row-major 3x3 matrix produced from a rotation vector. Its
+    # zero points along world north (+Y) and positive angles rotate eastward.
+    # Convert that azimuth to the estimator's mathematical heading, whose zero
+    # is +X and whose positive angles are counter-clockwise.
+    rotation_01 = 2.0 * (x * y - w * z)
+    rotation_11 = 1.0 - 2.0 * (x * x + z * z)
+    android_azimuth = math.atan2(rotation_01, rotation_11)
+    return _wrap_angle(math.pi / 2.0 - android_azimuth)
 
 
 def _orientation_heading_timeline(
@@ -105,7 +113,10 @@ def _orientation_heading_timeline(
         sensor_samples = _samples(session, sensor_type)
         if sensor_samples:
             raw_timeline = tuple(
-                (sample.sensor_timestamp_ns, _yaw_from_rotation_vector(sample.values))
+                (
+                    sample.sensor_timestamp_ns,
+                    _math_heading_from_rotation_vector(sample.values),
+                )
                 for sample in sensor_samples
             )
             initial_heading = raw_timeline[0][1]
@@ -191,10 +202,15 @@ def _nearest_amplitude(
     return amplitude if abs(nearest_timestamp - timestamp_ns) <= 250_000_000 else None
 
 
-def _adaptive_stride(amplitude: float | None, *, fallback_stride_m: float) -> float:
+def _adaptive_stride(
+    amplitude: float | None,
+    *,
+    fallback_stride_m: float,
+    weinberg_gain: float,
+) -> float:
     if amplitude is None:
         return fallback_stride_m
-    return min(0.90, max(0.45, 0.64 * amplitude ** 0.25))
+    return min(0.90, max(0.30, weinberg_gain * amplitude ** 0.25))
 
 
 def _observation_gap_timeline(
@@ -249,6 +265,7 @@ def _build_output(
     heading_timeline: tuple[tuple[int, float], ...],
     fallback_stride_m: float,
     adaptive: bool,
+    weinberg_gain: float = 0.64,
     terminal_sensor_types: frozenset[str],
 ) -> EstimatorOutput:
     if not steps or not heading_timeline:
@@ -279,7 +296,11 @@ def _build_output(
             continue
         heading = _latest_heading(heading_timeline, timestamp_ns)
         stride_m = (
-            _adaptive_stride(amplitude, fallback_stride_m=fallback_stride_m)
+            _adaptive_stride(
+                amplitude,
+                fallback_stride_m=fallback_stride_m,
+                weinberg_gain=weinberg_gain,
+            )
             if adaptive
             else fallback_stride_m
         )
@@ -354,12 +375,17 @@ def run_b0(session: NormalizedSensorSession, *, fixed_stride_m: float = 0.72) ->
     )
 
 
-def _b1_requirement(capability_profile: str) -> EstimatorRequirement:
+def _b1_requirement(
+    capability_profile: str, *, weinberg_gain: float
+) -> EstimatorRequirement:
     if capability_profile not in PROFILES:
         raise ValueError(f"Unknown capability profile: {capability_profile}")
+    version = "1.1.0"
+    if not math.isclose(weinberg_gain, 0.64):
+        version += f"+weinberg-k{weinberg_gain:.3f}"
     return EstimatorRequirement(
         estimator=f"B1 classical PDR/{capability_profile}",
-        version="1.0.0",
+        version=version,
         required_capability_profile=capability_profile,
         required_sensor_types=frozenset({ACCELEROMETER, GYROSCOPE}),
         optional_sensor_types=frozenset(
@@ -373,8 +399,13 @@ def run_b1(
     *,
     capability_profile: str = "imu6",
     fallback_stride_m: float = 0.66,
+    weinberg_gain: float = 0.64,
 ) -> EstimatorRun:
-    requirement = _b1_requirement(capability_profile)
+    if not 0.1 <= weinberg_gain <= 1.0:
+        raise ValueError("Weinberg gain must be between 0.1 and 1.0")
+    requirement = _b1_requirement(
+        capability_profile, weinberg_gain=weinberg_gain
+    )
     available = _available_sensor_types(session)
     missing = _missing_requirements(requirement, available)
     if missing:
@@ -404,6 +435,7 @@ def run_b1(
         )
     if not steps:
         return _unsupported(requirement, ("walking-events:not-detected",))
+    fallback_flags.add(f"weinberg-gain-{weinberg_gain:.3f}")
 
     prefer_platform_heading = capability_profile != "imu6"
     heading_result = (
@@ -434,6 +466,7 @@ def run_b1(
         heading_timeline=heading_timeline,
         fallback_stride_m=fallback_stride_m,
         adaptive=True,
+        weinberg_gain=weinberg_gain,
         terminal_sensor_types=frozenset(used_sensor_types),
     )
     return EstimatorRun(

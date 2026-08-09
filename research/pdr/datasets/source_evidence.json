@@ -64,6 +64,27 @@
       "url": "https://github.com/higerra/TangoIMURecorder/tree/ca8657b9460a1157c3e9570ec8a6c16e0072b263",
       "revision": "ca8657b9460a1157c3e9570ec8a6c16e0072b263",
       "supports": ["Android sensor files", "Tango pose separation", "collector workflow"]
+    },
+    {
+      "dataset": "Android platform",
+      "source_kind": "official-code",
+      "url": "https://android.googlesource.com/platform/frameworks/base/+/android16-qpr2-release/core/java/android/hardware/SensorManager.java",
+      "revision": "android16-qpr2-release",
+      "supports": ["rotation-vector matrix construction", "getOrientation azimuth formula atan2(R[1], R[4])", "Android quaternion ordering"]
+    },
+    {
+      "dataset": "stride-model reference",
+      "source_kind": "paper",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10935304/",
+      "revision": "PMCID PMC10935304",
+      "supports": ["Weinberg fourth-root formula", "empirical K=0.364 example", "non-universal experimental calibration"]
+    },
+    {
+      "dataset": "stride-model reference",
+      "source_kind": "paper",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9782146/",
+      "revision": "PMCID PMC9782146",
+      "supports": ["Weinberg coefficient dependence on walking speed, gender, and phone-carrying mode"]
     }
   ]
 }

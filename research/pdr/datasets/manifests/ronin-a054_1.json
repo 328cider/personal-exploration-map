@@ -55,19 +55,20 @@
     "batch_metrics_equal_ideal": true,
     "gap_increased_uncertainty_all_supported_estimators": true,
     "b0_supported_records": 0,
+    "heading_convention": "Android SensorManager.getOrientation azimuth atan2(R[1], R[4]); math heading = pi/2 - azimuth",
     "ideal_results": [
-      {"target_rate_hz": 50, "profile": "imu6", "estimated_distance_m": 570.454376827303, "truth_distance_m": 381.17030343346994, "distance_scale_error": 0.4965866220133568, "endpoint_drift_ratio": 0.11104429053444699, "heading_mae_deg": 78.39257866416719, "turn_mae_deg": 44.30570314310145, "evaluated_turn_count": 76, "mirrored": false},
-      {"target_rate_hz": 50, "profile": "platform-fused", "estimated_distance_m": 570.4543768273027, "truth_distance_m": 381.170301436966, "distance_scale_error": 0.49658662985221724, "endpoint_drift_ratio": 0.9911395262743303, "heading_mae_deg": 75.88434316950575, "turn_mae_deg": 37.99709525802657, "evaluated_turn_count": 76, "mirrored": true},
-      {"target_rate_hz": 50, "profile": "step-enabled", "estimated_distance_m": 570.4543768273027, "truth_distance_m": 381.170301436966, "distance_scale_error": 0.49658662985221724, "endpoint_drift_ratio": 0.9911395262743303, "heading_mae_deg": 75.88434316950575, "turn_mae_deg": 37.99709525802657, "evaluated_turn_count": 76, "mirrored": true},
-      {"target_rate_hz": 100, "profile": "imu6", "estimated_distance_m": 613.4023585565745, "truth_distance_m": 381.2249435487922, "distance_scale_error": 0.6090299675736364, "endpoint_drift_ratio": 0.1221294960083101, "heading_mae_deg": 77.02714983867703, "turn_mae_deg": 43.467683789482926, "evaluated_turn_count": 76, "mirrored": false},
-      {"target_rate_hz": 100, "profile": "platform-fused", "estimated_distance_m": 613.4023585565743, "truth_distance_m": 381.2249417939134, "distance_scale_error": 0.6090299749804247, "endpoint_drift_ratio": 1.0974192678471357, "heading_mae_deg": 76.0761290153332, "turn_mae_deg": 38.22077221496148, "evaluated_turn_count": 76, "mirrored": true},
-      {"target_rate_hz": 100, "profile": "step-enabled", "estimated_distance_m": 613.4023585565743, "truth_distance_m": 381.2249417939134, "distance_scale_error": 0.6090299749804247, "endpoint_drift_ratio": 1.0974192678471357, "heading_mae_deg": 76.0761290153332, "turn_mae_deg": 38.22077221496148, "evaluated_turn_count": 76, "mirrored": true}
+      {"target_rate_hz": 50, "profile": "imu6", "estimator_version": "1.1.0", "estimated_distance_m": 570.1789416466088, "truth_distance_m": 381.17030343346994, "distance_scale_error": 0.495864018027125, "endpoint_drift_ratio": 0.11140190740426835, "heading_mae_deg": 78.39257866416719, "turn_mae_deg": 44.30570314310145, "evaluated_turn_count": 76, "mirrored": false},
+      {"target_rate_hz": 50, "profile": "platform-fused", "estimator_version": "1.1.0", "estimated_distance_m": 570.1789416466088, "truth_distance_m": 381.170301436966, "distance_scale_error": 0.49586402586220135, "endpoint_drift_ratio": 0.20178962970330244, "heading_mae_deg": 66.81433569822498, "turn_mae_deg": 60.357197752392096, "evaluated_turn_count": 76, "mirrored": true},
+      {"target_rate_hz": 50, "profile": "step-enabled", "estimator_version": "1.1.0", "estimated_distance_m": 570.1789416466088, "truth_distance_m": 381.170301436966, "distance_scale_error": 0.49586402586220135, "endpoint_drift_ratio": 0.20178962970330244, "heading_mae_deg": 66.81433569822498, "turn_mae_deg": 60.357197752392096, "evaluated_turn_count": 76, "mirrored": true},
+      {"target_rate_hz": 100, "profile": "imu6", "estimator_version": "1.1.0", "estimated_distance_m": 613.1785168623305, "truth_distance_m": 381.2249435487922, "distance_scale_error": 0.6084428032287217, "endpoint_drift_ratio": 0.12225280768523403, "heading_mae_deg": 77.02714983867703, "turn_mae_deg": 43.467683789482926, "evaluated_turn_count": 76, "mirrored": false},
+      {"target_rate_hz": 100, "profile": "platform-fused", "estimator_version": "1.1.0", "estimated_distance_m": 613.1785168623305, "truth_distance_m": 381.2249417939134, "distance_scale_error": 0.6084428106328077, "endpoint_drift_ratio": 0.2183334900745315, "heading_mae_deg": 66.47852495746649, "turn_mae_deg": 58.89116089207958, "evaluated_turn_count": 76, "mirrored": true},
+      {"target_rate_hz": 100, "profile": "step-enabled", "estimator_version": "1.1.0", "estimated_distance_m": 613.1785168623305, "truth_distance_m": 381.2249417939134, "distance_scale_error": 0.6084428106328077, "endpoint_drift_ratio": 0.2183334900745315, "heading_mae_deg": 66.47852495746649, "turn_mae_deg": 58.89116089207958, "evaluated_turn_count": 76, "mirrored": true}
     ]
   },
   "decision": {
     "public_performance": "stop-current-b0-b1-configurations",
     "android_capture_feasibility": "not-evaluated-by-public-data",
     "personal_pilot": "not-authorized-by-this-evidence",
-    "reason": "B0 lacks a compatible step-event path and every supported B1 ideal run has catastrophic distance, heading, or mirror flags; turn error is also high. One public sequence cannot establish generalization."
+    "reason": "B0 lacks a compatible step-event path and every supported B1 ideal run has catastrophic distance, heading, turn, or mirror flags. One public sequence cannot establish generalization."
   }
 }

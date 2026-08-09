@@ -12,14 +12,19 @@ The strict Android-input gate works on a real public sequence, but none of the
 current baseline configurations is a product candidate. B0 is unsupported
 because the compatible adapter does not mix the raw Step Counter with the
 dataset's cross-device synchronization metadata. Every supported B1 run has at
-least one catastrophic distance, heading, endpoint, or mirror failure. Turn MAE
-is also high at about 38–44 degrees across 76 evaluated turn events, but remains
-below the separate 45-degree catastrophic-turn threshold.
+least one catastrophic distance, heading, turn, or mirror failure. Turn MAE is
+about 43–60 degrees across 76 evaluated turn events; platform-orientation runs
+cross the separate 45-degree catastrophic-turn threshold.
 
 This is a useful negative result. The synthetic matrix had already exposed phone
 orientation as a dominant risk; the public sequence confirms that device
 Game Rotation Vector is not body heading and that the current generic
 acceleration-peak step/stride rule substantially over-counts distance.
+
+B1 v1.1.0 also corrects the rotation-vector conversion to Android's documented
+`atan2(R[1], R[4])` azimuth convention before these results are calculated. The
+semantic correction lowers platform heading MAE but does not remove mirror or
+turn failures, so it does not weaken the Stop decision.
 
 ## Legal and retrieval gate
 
@@ -67,23 +72,23 @@ Ideal raw-stream results:
 
 | Rate | Profile | Truth / estimated distance | Distance-scale error | Endpoint drift | Heading MAE | Result |
 |---:|---|---:|---:|---:|---:|---|
-| 50 Hz | `imu6` | 381.2 / 570.5 m | 49.7% | 0.111 | 78.4° | catastrophic distance and heading |
-| 50 Hz | `platform-fused` | 381.2 / 570.5 m | 49.7% | 0.991 | 75.9° | mirrored plus catastrophic distance/endpoint/heading |
-| 50 Hz | `step-enabled` fallback | 381.2 / 570.5 m | 49.7% | 0.991 | 75.9° | same failure; no compatible step events |
-| 100 Hz | `imu6` | 381.2 / 613.4 m | 60.9% | 0.122 | 77.0° | catastrophic distance and heading |
-| 100 Hz | `platform-fused` | 381.2 / 613.4 m | 60.9% | 1.097 | 76.1° | mirrored plus catastrophic distance/endpoint/heading |
-| 100 Hz | `step-enabled` fallback | 381.2 / 613.4 m | 60.9% | 1.097 | 76.1° | same failure; no compatible step events |
+| 50 Hz | `imu6` | 381.2 / 570.2 m | 49.6% | 0.111 | 78.4° | catastrophic distance and heading |
+| 50 Hz | `platform-fused` | 381.2 / 570.2 m | 49.6% | 0.202 | 66.8° | mirrored plus catastrophic distance/heading/turn |
+| 50 Hz | `step-enabled` fallback | 381.2 / 570.2 m | 49.6% | 0.202 | 66.8° | same failure; no compatible step events |
+| 100 Hz | `imu6` | 381.2 / 613.2 m | 60.8% | 0.122 | 77.0° | catastrophic distance and heading |
+| 100 Hz | `platform-fused` | 381.2 / 613.2 m | 60.8% | 0.218 | 66.5° | mirrored plus catastrophic distance/heading/turn |
+| 100 Hz | `step-enabled` fallback | 381.2 / 613.2 m | 60.8% | 0.218 | 66.5° | same failure; no compatible step events |
 
 Endpoint drift alone would understate the `imu6` failure because distance scale
 and heading are catastrophic while turn MAE is also high. No shape or ICP
-alignment is used.
-Tango orientation and the evaluation-only `align_tango_to_body` label define
-body heading and the evaluation frame; the estimator never sees that information.
+alignment is used. Tango orientation and the evaluation-only
+`align_tango_to_body` label define body heading and the evaluation frame; the
+estimator never sees that information.
 
 ## Decision and next gate
 
-- **Public performance:** Stop B0/B1 version 1.0.0 as product candidates in
-  their current form. Keep them as diagnostic baselines.
+- **Public performance:** Stop B0/B1 through B1 version 1.1.0 as product
+  candidates in their current form. Keep them as diagnostic baselines.
 - **Android feasibility:** Not evaluated by this public sequence. The callback,
   screen-off, FIFO, OEM power, battery, and thermal gates remain open.
 - **Personal pilot:** Do not start. Current methods already fail a cheaper public
