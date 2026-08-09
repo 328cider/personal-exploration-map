@@ -116,7 +116,22 @@ const requiredAnchors = new Map([
   ],
   [
     "apps/mobile/src/storage/explorationRepository.ts",
-    ["getExplorationSummary", "getLiveExplorationStats", "loadExplorationMap"],
+    [
+      "getExplorationSummary",
+      "getLiveExplorationStats",
+      "loadExplorationMap",
+      "sqliteMappingRepository.loadExploration",
+      "sample_ordinal DESC",
+    ],
+  ],
+  [
+    "apps/mobile/src/storage/personalMapBundleRepository.ts",
+    [
+      "createSqlitePersonalMapBundleReadRepository",
+      "getMappingDatabase",
+      "personalMapBundleReadRepository",
+      "not exposed through the current S0 UI",
+    ],
   ],
 ]);
 
@@ -173,16 +188,23 @@ if (backgroundTask.includes("explorationRepository")) {
   );
 }
 
-const readRepository = requireFile(
+for (const readRepositoryPath of [
   "apps/mobile/src/storage/explorationRepository.ts",
-)
-  ? read("apps/mobile/src/storage/explorationRepository.ts")
-  : "";
-for (const token of [".runAsync(", ".execAsync(", "withExclusiveTransactionAsync"]) {
-  if (readRepository.includes(token)) {
-    failures.push(
-      `Read-only explorationRepository contains a write-capable SQLite call: ${token}`,
-    );
+  "apps/mobile/src/storage/personalMapBundleRepository.ts",
+]) {
+  const content = requireFile(readRepositoryPath)
+    ? read(readRepositoryPath)
+    : "";
+  for (const token of [
+    ".runAsync(",
+    ".execAsync(",
+    "withExclusiveTransactionAsync",
+  ]) {
+    if (content.includes(token)) {
+      failures.push(
+        `Read-only repository contains a write-capable SQLite call: ${readRepositoryPath}: ${token}`,
+      );
+    }
   }
 }
 
