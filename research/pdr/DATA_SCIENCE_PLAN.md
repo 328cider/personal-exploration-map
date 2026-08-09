@@ -4,7 +4,7 @@
   personal pilot are gated
 - Product issue: #5
 - Product gate: `docs/PDR_TECHNOLOGY_GATE.md`
-- Research branches: `codex/pdr-research` and `codex/pdr/ds-foundation`
+- Research branches: `codex/pdr-research` plus isolated `codex/pdr/*` work branches
 
 ## Decision
 
@@ -116,7 +116,7 @@ and rate reduction. Golden tests must expose 90-degree rotation, mirror image,
 false self-intersection, and distance-scale error. Synthetic motion validates the
 pipeline and metrics; it is not evidence that pocket PDR works.
 
-### Phase 2 — public-data audit (scaffolded, data not downloaded)
+### Phase 2 — public-data audit (metadata audit implemented; data not downloaded)
 
 Complete sequence-level reports for OxIOD, RoNIN, and RIDI. Evaluate B0/B1 first
 using only Android-compatible fields. Audit official pretrained-model inputs and
@@ -124,11 +124,18 @@ licenses before execution. Replay the same sequences at 50/100 Hz and with gaps,
 batching, and missing optional sensors. Split by dataset/user/device/placement and
 sequence before windowing.
 
-### Phase 3 — common baselines (gated)
+### Phase 3 — common baselines (synthetic replay implemented; public data gated)
 
 - B0: Android step events, optional rotation vector, fixed stride.
 - B1: accelerometer and gyroscope with optional platform orientation/magnetometer
   for step, stride, and body-heading estimation.
+
+The implemented research baseline replays B0 plus B1 `imu6`, `platform-fused`,
+and `step-enabled` configurations over identical synthetic sessions. It validates
+explicit unsupported/fallback states, live temporal causality, 50/100 Hz,
+callback batching, gaps, magnetic rejection, and catastrophic failure reporting.
+These synthetic results are pipeline evidence only and cannot produce a product
+Go/Narrow/Stop decision.
 
 Replay identical input per estimator and report results by capability profile.
 Keep live estimates distinct from post-session smoothing.

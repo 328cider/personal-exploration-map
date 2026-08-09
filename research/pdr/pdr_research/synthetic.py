@@ -11,6 +11,9 @@ import random
 from .contracts import NormalizedSensorSession, SensorMetadata, SensorSample
 
 
+STEP_FREQUENCY_HZ = 1.9
+
+
 @dataclass(frozen=True)
 class TruthPoint:
     timestamp_ns: int
@@ -36,6 +39,7 @@ ROUTES: dict[str, tuple[tuple[float, float], ...]] = {
 
 
 def _metadata(sensor_type: str) -> SensorMetadata:
+    event_driven = sensor_type in {"TYPE_STEP_DETECTOR", "TYPE_STEP_COUNTER"}
     return SensorMetadata(
         sensor_type=sensor_type,
         android_api="android.hardware.SensorEvent",
@@ -44,12 +48,12 @@ def _metadata(sensor_type: str) -> SensorMetadata:
         resolution=0.001,
         maximum_range=100.0,
         power_ma=0.0,
-        min_delay_us=10_000,
+        min_delay_us=0 if event_driven else 10_000,
         max_delay_us=1_000_000,
         fifo_reserved_count=0,
         fifo_max_count=0,
         is_wake_up=False,
-        reporting_mode="continuous",
+        reporting_mode="special-trigger" if event_driven else "continuous",
     )
 
 
@@ -74,13 +78,19 @@ def _dense_truth(
                     x_m=start[0] + dx * fraction,
                     y_m=start[1] + dy * fraction,
                     body_heading_rad=heading,
-                    stride_m=0.72,
+                    stride_m=speed_mps / STEP_FREQUENCY_HZ,
                 )
             )
             elapsed_ns += period_ns
     final_heading = result[-1].body_heading_rad
     result.append(
-        TruthPoint(elapsed_ns, vertices[-1][0], vertices[-1][1], final_heading, 0.72)
+        TruthPoint(
+            elapsed_ns,
+            vertices[-1][0],
+            vertices[-1][1],
+            final_heading,
+            speed_mps / STEP_FREQUENCY_HZ,
+        )
     )
     return tuple(result)
 
@@ -94,6 +104,9 @@ def generate_fixture(
     gaps: tuple[tuple[float, float], ...] = (),
     timestamp_jitter_us: int = 0,
     include_magnetometer: bool = False,
+    include_rotation_vector: bool = False,
+    include_game_rotation_vector: bool = False,
+    include_step_detector: bool = False,
     magnetic_anomaly: tuple[float, float] | None = None,
     device_yaw_changes: tuple[tuple[float, float], ...] = (),
 ) -> SyntheticFixture:
@@ -108,12 +121,25 @@ def generate_fixture(
     sensor_types = ["TYPE_ACCELEROMETER", "TYPE_GYROSCOPE"]
     if include_magnetometer:
         sensor_types.append("TYPE_MAGNETIC_FIELD")
+    if include_rotation_vector:
+        sensor_types.append("TYPE_ROTATION_VECTOR")
+    if include_game_rotation_vector:
+        sensor_types.append("TYPE_GAME_ROTATION_VECTOR")
+    if include_step_detector:
+        sensor_types.append("TYPE_STEP_DETECTOR")
     samples: list[SensorSample] = []
     previous_ts = -1
     previous_device_yaw_rad = 0.0
     sequence_id = 0
+    next_step_time_s = 0.25 / STEP_FREQUENCY_HZ
     for index, point in enumerate(truth):
         t_s = point.timestamp_ns / 1_000_000_000
+        half_period_s = (period_ns / 1_000_000_000) / 2.0
+        step_due = False
+        while next_step_time_s <= t_s + half_period_s:
+            if next_step_time_s >= t_s - half_period_s:
+                step_due = True
+            next_step_time_s += 1.0 / STEP_FREQUENCY_HZ
         if any(start <= t_s < end for start, end in gaps):
             continue
         jitter = rng.randint(-timestamp_jitter_us, timestamp_jitter_us) * 1_000
@@ -125,7 +151,7 @@ def generate_fixture(
         else:
             callback_ts = sensor_ts
             batch_id = index
-        phase = 2.0 * math.pi * 1.9 * t_s
+        phase = 2.0 * math.pi * STEP_FREQUENCY_HZ * t_s
         device_yaw_rad = math.radians(
             sum(change_deg for change_s, change_deg in device_yaw_changes if change_s <= t_s)
         )
@@ -157,14 +183,38 @@ def generate_fixture(
             "TYPE_ACCELEROMETER": acceleration,
             "TYPE_GYROSCOPE": gyro,
         }
+        absolute_device_yaw = _wrap_angle(point.body_heading_rad + device_yaw_rad)
+        rotation_vector = (
+            0.0,
+            0.0,
+            math.sin(absolute_device_yaw / 2.0),
+            math.cos(absolute_device_yaw / 2.0),
+        )
+        if include_rotation_vector:
+            values_by_type["TYPE_ROTATION_VECTOR"] = rotation_vector
+        if include_game_rotation_vector:
+            values_by_type["TYPE_GAME_ROTATION_VECTOR"] = rotation_vector
         if include_magnetometer:
-            disturbed = magnetic_anomaly is not None and magnetic_anomaly[0] <= t_s < magnetic_anomaly[1]
+            disturbed = (
+                magnetic_anomaly is not None
+                and magnetic_anomaly[0] <= t_s < magnetic_anomaly[1]
+            )
             values_by_type["TYPE_MAGNETIC_FIELD"] = (
                 (90.0 if disturbed else 18.0) + rng.gauss(0.0, 0.3),
                 (-70.0 if disturbed else 2.0) + rng.gauss(0.0, 0.3),
                 (120.0 if disturbed else 43.0) + rng.gauss(0.0, 0.3),
             )
-        for sensor_type in sensor_types:
+        emitted_sensor_types = list(sensor_types)
+        if include_rotation_vector and sample_rate_hz == 100 and index % 2:
+            emitted_sensor_types.remove("TYPE_ROTATION_VECTOR")
+        if include_game_rotation_vector and sample_rate_hz == 100 and index % 2:
+            emitted_sensor_types.remove("TYPE_GAME_ROTATION_VECTOR")
+        if include_step_detector:
+            if step_due:
+                values_by_type["TYPE_STEP_DETECTOR"] = (1.0,)
+            else:
+                emitted_sensor_types.remove("TYPE_STEP_DETECTOR")
+        for sensor_type in emitted_sensor_types:
             samples.append(
                 SensorSample(
                     sensor_type=sensor_type,
@@ -197,6 +247,9 @@ def generate_fixture(
         "gaps": gaps,
         "timestamp_jitter_us": timestamp_jitter_us,
         "include_magnetometer": include_magnetometer,
+        "include_rotation_vector": include_rotation_vector,
+        "include_game_rotation_vector": include_game_rotation_vector,
+        "include_step_detector": include_step_detector,
         "magnetic_anomaly": magnetic_anomaly,
         "device_yaw_changes": device_yaw_changes,
     }
@@ -211,14 +264,29 @@ def downsample_session(
 ) -> NormalizedSensorSession:
     if source_rate_hz % target_rate_hz:
         raise ValueError("Target rate must divide source rate for deterministic replay")
-    divisor = source_rate_hz // target_rate_hz
-    counters: dict[str, int] = {}
+    target_period_ns = round(1_000_000_000 / target_rate_hz)
+    continuous_types = {
+        metadata.sensor_type
+        for metadata in session.sensor_metadata
+        if metadata.reporting_mode == "continuous"
+    }
+    rate_limited_types = continuous_types & {
+        "TYPE_ACCELEROMETER",
+        "TYPE_ACCELEROMETER_UNCALIBRATED",
+        "TYPE_GYROSCOPE",
+        "TYPE_GYROSCOPE_UNCALIBRATED",
+        "TYPE_LINEAR_ACCELERATION",
+    }
+    last_kept_timestamp: dict[str, int] = {}
     kept: list[SensorSample] = []
     for sample in session.samples:
-        counter = counters.get(sample.sensor_type, 0)
-        if counter % divisor == 0:
+        last_timestamp = last_kept_timestamp.get(sample.sensor_type)
+        keep = sample.sensor_type not in rate_limited_types or last_timestamp is None
+        if not keep and sample.sensor_timestamp_ns - last_timestamp >= target_period_ns:
+            keep = True
+        if keep:
             kept.append(replace(sample, sequence_id=len(kept)))
-        counters[sample.sensor_type] = counter + 1
+            last_kept_timestamp[sample.sensor_type] = sample.sensor_timestamp_ns
     return replace(session, samples=tuple(kept))
 
 
@@ -226,6 +294,59 @@ def drop_sensor(session: NormalizedSensorSession, sensor_type: str) -> Normalize
     metadata = tuple(item for item in session.sensor_metadata if item.sensor_type != sensor_type)
     samples = tuple(item for item in session.samples if item.sensor_type != sensor_type)
     return replace(session, sensor_metadata=metadata, samples=samples)
+
+
+def drop_time_ranges(
+    session: NormalizedSensorSession, ranges_s: tuple[tuple[float, float], ...]
+) -> NormalizedSensorSession:
+    samples = tuple(
+        sample
+        for sample in session.samples
+        if not any(
+            start <= sample.sensor_timestamp_ns / 1_000_000_000 < end
+            for start, end in ranges_s
+        )
+    )
+    return replace(
+        session,
+        samples=tuple(replace(sample, sequence_id=index) for index, sample in enumerate(samples)),
+    )
+
+
+def rebatch_session(
+    session: NormalizedSensorSession, *, batch_latency_ms: int
+) -> NormalizedSensorSession:
+    if batch_latency_ms < 0:
+        raise ValueError("Batch latency cannot be negative")
+    if batch_latency_ms == 0:
+        return replace(
+            session,
+            samples=tuple(
+                replace(
+                    sample,
+                    callback_timestamp_ns=sample.sensor_timestamp_ns,
+                    batch_id=index,
+                    sequence_id=index,
+                )
+                for index, sample in enumerate(session.samples)
+            ),
+        )
+    batch_ns = batch_latency_ms * 1_000_000
+    return replace(
+        session,
+        samples=tuple(
+            replace(
+                sample,
+                callback_timestamp_ns=(
+                    (sample.sensor_timestamp_ns + batch_ns - 1) // batch_ns
+                )
+                * batch_ns,
+                batch_id=(sample.sensor_timestamp_ns + batch_ns - 1) // batch_ns,
+                sequence_id=index,
+            )
+            for index, sample in enumerate(session.samples)
+        ),
+    )
 
 
 def transform_truth(
