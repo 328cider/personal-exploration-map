@@ -171,10 +171,10 @@ export const MIGRATE_V2_TO_V3_SQL = `
 /**
  * Legacy rows have no recoverable provider-received ordinal. Keep that fact as
  * NULL and retain the prior deterministic `(recorded_at, id)` fallback rather
- * than manufacturing an ordinal. The migration remains one bounded SQL copy
- * and uses no window functions, custom extensions, or per-row bridge calls.
+ * than manufacturing an ordinal. The migration uses no window functions,
+ * custom extensions, or per-row bridge calls.
  */
-export const MIGRATE_V3_TO_V4_SQL = `
+export const CREATE_POSITION_SAMPLES_V4_SQL = `
   CREATE TABLE position_samples_v4 (
     id TEXT NOT NULL,
     exploration_id TEXT NOT NULL,
@@ -219,7 +219,9 @@ export const MIGRATE_V3_TO_V4_SQL = `
       )
     )
   );
+`;
 
+export const COPY_AND_FINALIZE_POSITION_SAMPLES_V4_SQL = `
   INSERT INTO position_samples_v4(
     id,
     exploration_id,
@@ -275,6 +277,9 @@ export const MIGRATE_V3_TO_V4_SQL = `
 
   PRAGMA user_version = 4;
 `;
+
+export const MIGRATE_V3_TO_V4_SQL =
+  CREATE_POSITION_SAMPLES_V4_SQL + COPY_AND_FINALIZE_POSITION_SAMPLES_V4_SQL;
 
 interface UserVersionRow {
   readonly user_version: number;
@@ -369,7 +374,8 @@ export async function migrateMappingDatabase(
 
   if (version < 4) {
     await runExclusive(database, async (transaction) => {
-      await transaction.execAsync(MIGRATE_V3_TO_V4_SQL);
+      await transaction.execAsync(CREATE_POSITION_SAMPLES_V4_SQL);
+      await transaction.execAsync(COPY_AND_FINALIZE_POSITION_SAMPLES_V4_SQL);
     });
     await assertForeignKeyIntegrity(database);
     version = 4;
