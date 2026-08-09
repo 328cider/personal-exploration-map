@@ -5,6 +5,7 @@ on:
     paths:
       - ".github/workflows/emulator-harness-only.yml"
       - "scripts/android-emulator-smoke.py"
+      - "scripts/android-emulator-smoke-runner.py"
       - "scripts/android-emulator-coverage-modes.py"
       - "scripts/android-emulator-interaction-smoke.py"
       - "scripts/android-emulator-interaction-runner.py"
@@ -42,6 +43,7 @@ jobs:
             case "$path" in
               .github/workflows/emulator-harness-only.yml|\
               scripts/android-emulator-smoke.py|\
+              scripts/android-emulator-smoke-runner.py|\
               scripts/android-emulator-coverage-modes.py|\
               scripts/android-emulator-interaction-smoke.py|\
               scripts/android-emulator-interaction-runner.py|\
@@ -75,37 +77,46 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Find the newest compatible Field-test APK from this PR branch
+      - name: Find the newest compatible Field-test APK from this PR stack
         id: source
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_BRANCH: ${{ github.head_ref }}
+          BASE_BRANCH: ${{ github.base_ref }}
         run: |
           set -euo pipefail
           selected=""
-          while IFS= read -r run_id; do
-            artifact_count="$(
-              gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/artifacts" \
-                --jq '[.artifacts[] | select(.name == "personal-exploration-map-field-test" and .expired == false)] | length'
-            )"
-            if [ "$artifact_count" -gt 0 ]; then
-              selected="$run_id"
+          selected_branch=""
+          for branch in "$HEAD_BRANCH" "$BASE_BRANCH"; do
+            while IFS= read -r run_id; do
+              artifact_count="$(
+                gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/artifacts" \
+                  --jq '[.artifacts[] | select(.name == "personal-exploration-map-field-test" and .expired == false)] | length'
+              )"
+              if [ "$artifact_count" -gt 0 ]; then
+                selected="$run_id"
+                selected_branch="$branch"
+                break
+              fi
+            done < <(
+              gh api \
+                "repos/$GITHUB_REPOSITORY/actions/workflows/devex-field-test.yml/runs?event=pull_request&branch=$branch&status=completed&per_page=30" \
+                --jq '.workflow_runs[].id'
+            )
+            if [ -n "$selected" ]; then
               break
             fi
-          done < <(
-            gh api \
-              "repos/$GITHUB_REPOSITORY/actions/workflows/devex-field-test.yml/runs?event=pull_request&branch=$HEAD_BRANCH&status=completed&per_page=30" \
-              --jq '.workflow_runs[].id'
-          )
+          done
 
           if [ -z "$selected" ]; then
-            echo "No non-expired Field-test APK artifact exists for branch $HEAD_BRANCH." >&2
+            echo "No non-expired Field-test APK artifact exists for $HEAD_BRANCH or $BASE_BRANCH." >&2
             echo "Run the full devex-field-test workflow after an app/package change." >&2
             exit 1
           fi
 
           echo "run_id=$selected" >> "$GITHUB_OUTPUT"
-          echo "Reusing Field-test APK from workflow run $selected"
+          echo "source_branch=$selected_branch" >> "$GITHUB_OUTPUT"
+          echo "Reusing Field-test APK from workflow run $selected on $selected_branch"
 
       - name: Download the previously built and signed APK
         uses: actions/download-artifact@v4
@@ -126,6 +137,7 @@ jobs:
             "target": "google_apis",
             "arch": "x86_64",
             "apkWorkflowRunId": "${{ steps.source.outputs.run_id }}",
+            "apkSourceBranch": "${{ steps.source.outputs.source_branch }}",
             "mode": "harness-only"
           }
           JSON
