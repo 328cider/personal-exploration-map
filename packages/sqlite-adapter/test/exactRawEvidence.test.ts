@@ -164,7 +164,7 @@ async function createMapAndExploration(
   });
 }
 
-test("v4 migration labels legacy numeric rows without inventing exact payload or original order", async () => {
+test("v4 migration keeps legacy order explicit without inventing an ordinal or exact payload", async () => {
   const database = new NodeSqliteDatabase();
   try {
     await database.execAsync("PRAGMA foreign_keys = ON;");
@@ -205,31 +205,40 @@ test("v4 migration labels legacy numeric rows without inventing exact payload or
         `SELECT id, sample_ordinal, ordinal_provenance,
                 raw_payload_format, raw_payload_json
          FROM position_samples
-         ORDER BY sample_ordinal`,
+         ORDER BY recorded_at ASC, id ASC`,
       ),
       [
         {
           id: "earlier-a",
-          sample_ordinal: 0,
+          sample_ordinal: null,
           ordinal_provenance: "legacy-recorded-at-id-v1",
           raw_payload_format: "legacy-normalized-v1",
           raw_payload_json: null,
         },
         {
           id: "earlier-b",
-          sample_ordinal: 1,
+          sample_ordinal: null,
           ordinal_provenance: "legacy-recorded-at-id-v1",
           raw_payload_format: "legacy-normalized-v1",
           raw_payload_json: null,
         },
         {
           id: "later-id",
-          sample_ordinal: 2,
+          sample_ordinal: null,
           ordinal_provenance: "legacy-recorded-at-id-v1",
           raw_payload_format: "legacy-normalized-v1",
           raw_payload_json: null,
         },
       ],
+    );
+
+    const mappingRepository = createSqliteMappingRepository(
+      async () => database,
+    );
+    const replay = await mappingRepository.loadExploration("legacy", "legacy");
+    assert.deepEqual(
+      replay?.replay.samples.map((sample) => sample.id),
+      ["earlier-a", "earlier-b", "later-id"],
     );
 
     const bundleRepository = createSqlitePersonalMapBundleReadRepository(
@@ -246,6 +255,10 @@ test("v4 migration labels legacy numeric rows without inventing exact payload or
       },
     );
     assert.equal(database.readTransactionCount, 1);
+    assert.deepEqual(
+      await database.getAllAsync("PRAGMA foreign_key_check"),
+      [],
+    );
   } finally {
     database.close();
   }
