@@ -6,3 +6,4 @@ export * from "./export.ts";
 export * from "./exportFilename.ts";
 export * from "./personalMapBundle.ts";
 export * from "./personalMapBundleNumber.ts";
+export * from "./personalMapBundleReadModel.ts";
