@@ -13,6 +13,9 @@ Start with:
 - `PUBLIC_SEQUENCE_REPLAY.md` for the first raw-Android public sequence result;
 - `HEADING_STRIDE_DIAGNOSTIC.md` for the Android azimuth correction and
   predeclared stride-gain sensitivity;
+- `RATE_STABILITY_PROTOCOL.md` for the preregistered split and validation gates;
+- `RATE_STABILITY_RESULT.md` for the frozen detector result and the post-freeze
+  Android Step Counter comparison;
 - `datasets/registry.json` for the initial public-dataset audit;
 - `notebooks/01_synthetic_foundation.ipynb` for the executable Phase 1 example;
 - `notebooks/02_public_dataset_audit.ipynb` for the executed metadata audit;
@@ -20,6 +23,8 @@ Start with:
 - `notebooks/04_ronin_public_sequence.ipynb` for the first raw public replay;
 - `notebooks/05_heading_stride_diagnostic.ipynb` for the executed heading and
   stride sensitivity diagnostic.
+- `notebooks/06_rate_stable_step_detector.ipynb` for leakage-controlled
+  development/validation and independent result QA.
 
 Run the research checks from the repository root:
 
