@@ -105,7 +105,12 @@ class SqlitePersonalMapBundleSnapshotReader
     }
 
     const byExploration = new Map<string, RawPositionSample[]>(
-      explorationIds.map((explorationId) => [explorationId, []]),
+      explorationIds.map(
+        (explorationId): [string, RawPositionSample[]] => [
+          explorationId,
+          [],
+        ],
+      ),
     );
     const rows = await this.database.getAllAsync<PositionRow>(
       `SELECT * FROM position_samples
@@ -146,7 +151,9 @@ class SqlitePersonalMapBundleSnapshotReader
     }
 
     const byExploration = new Map<string, MapMarker[]>(
-      explorationIds.map((explorationId) => [explorationId, []]),
+      explorationIds.map(
+        (explorationId): [string, MapMarker[]] => [explorationId, []],
+      ),
     );
     const rows = await this.database.getAllAsync<MarkerRow>(
       `SELECT * FROM markers
@@ -185,11 +192,16 @@ class SqlitePersonalMapBundleSnapshotReader
     const explorationIds = explorations.map((record) => record.id);
     const rawGroups = await this.loadRawSampleGroups(explorationIds);
     const markerGroups = await this.loadMarkerGroups(explorationIds);
-    const rawByExploration = new Map(
-      rawGroups.map((group) => [group.explorationId, group.samples]),
+    const rawByExploration = new Map<
+      string,
+      readonly RawPositionSample[]
+    >(
+      rawGroups.map((group) => [group.explorationId, group.samples] as const),
     );
-    const markersByExploration = new Map(
-      markerGroups.map((group) => [group.explorationId, group.markers]),
+    const markersByExploration = new Map<string, readonly MapMarker[]>(
+      markerGroups.map(
+        (group) => [group.explorationId, group.markers] as const,
+      ),
     );
     const replayInputs: ReplayExplorationInput[] = explorations.map(
       (record) => ({
