@@ -3,6 +3,11 @@ name: explored-space-fixtures
 on:
   workflow_dispatch:
   pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
     paths:
       - ".github/workflows/explored-space-fixtures.yml"
       - "scripts/render-explored-space-fixtures.ts"
@@ -21,6 +26,9 @@ concurrency:
 
 jobs:
   fixture-matrix:
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.draft == false
     name: Simulated uncertainty and passage-cell matrix
     runs-on: ubuntu-latest
     timeout-minutes: 10

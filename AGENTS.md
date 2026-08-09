@@ -12,6 +12,7 @@
 4. `docs/PRODUCT.md`、`docs/UX_PRINCIPLES.md`、`docs/ARCHITECTURE.md`
 5. `docs/FEATURE_PLACEMENT.md` — core / engine / adapter / renderer / gameの配置規則
 6. 対象Issue、関連PR、実験文書
+7. export / import / share / backupを扱う場合は`docs/EXPORT_BOUNDARY.md`
 
 `CURRENT_DIRECTION.md`、Issue、PR、実装が憲章と矛盾する場合は、下位文書を優先してはならない。実装都合で憲章を暗黙に変更せず、専用IssueとADRで明示する。
 
@@ -62,6 +63,7 @@ IssueまたはPRに次を残す。該当しない場合も理由を書く。
 - map / exploration lifecycle、transaction、repository / tracking port、event publication
 - 現在採用している地図への唯一の書き込み窓口
 - mutable sessionやcore mutationをapp / gameへ公開しない
+- read-only serializerは置けるが、file system、share sheet、React Native、Expo、SQLite、Node runtimeへ依存しない
 
 `mapping-engine`という名称やAPIはADRで変更できるが、canonical writeを制御されたapplication boundaryへ集約する憲章原則は維持する。
 
@@ -69,6 +71,7 @@ IssueまたはPRに次を残す。該当しない場合も理由を書く。
 
 - OS、sensor、DB、file、network
 - 観測と保存を担うが、map truthや報酬を決めない
+- export file作成、temporary file、share sheet、platform permissionはここまたはapp shellで扱う
 
 ### Renderer
 
@@ -80,6 +83,19 @@ IssueまたはPRに次を残す。該当しない場合も理由を書く。
 - read-only snapshotとeventから別管理のstate、overlay、cueを生成
 - raw、accepted / rejected、基本track、marker evidenceを直接変更しない
 - 地図修正はユーザー確認後にappがengine commandへ変換する
+
+## Export / import boundary
+
+- GPXとgeographic GeoJSONはWGS84のgeographic PersonalMapだけを対象にする。
+- local / unresolved frameを緯度経度0,0や任意のWGS84座標へ偽装しない。
+- ExplorationSessionごとのsegmentを維持し、未観測区間を人工pointで接続しない。
+- GPX / GeoJSONは相互運用用のderived exportであり、raw evidenceを含むbackupではない。
+- `PersonalMapSnapshot`だけをJSON化してlossless bundleと呼ばない。raw / rejected / provider / frame provenanceを保持するrepository export modelを使う。
+- diagnostic、uncertainty、confirmed evidence、game overlayを同一profileへ暗黙に混ぜない。
+- raw位置を含むbundleはユーザーの明示操作だけで生成し、自動uploadしない。
+- share sheetを自動で開かず、temporary fileを不要後に削除する。
+- importしたderived snapshotをcanonical mapへ直接昇格させない。schema、hash、frame、provenanceを検証し、transactionとcanonical commandを通す。
+- default filenameへ住所、地図名、正確な場所名を入れない。
 
 ## Engineering rules
 
@@ -97,6 +113,19 @@ IssueまたはPRに次を残す。該当しない場合も理由を書く。
 - 実地試験はユーザーコストが高い。Android Emulatorで再現可能な起動・権限済み導線・擬似GNSS・live preview・終了・永続化を先に通す。
 - `Android emulator user-flow gate`が失敗したField-test APKを、ユーザーへ実地試験候補として渡さない。
 - エミュレータ合格を、実GNSS、OEM省電力、電池、ポケットUXの合格と混同しない。
+
+## GitHub Actions budget (mandatory)
+
+`docs/CI_BUDGET_POLICY.md` は人間、Codex、ChatGPT、その他すべての開発エージェントに適用する。
+
+- 実装・レビュー修正・format・ローカル検証中はPRをDraftに保つ。GitHub Actionsをedit-test loopとして使わない。
+- 反復中は対象テストを実行し、Readyにする前の最終headで`npm run check`を実行する。mobileまたはadapter変更では、ローカル環境が対応する限り`npm run mobile:check`も実行する。
+- CIを起動するためだけのpush、未変更headのrerun、安心目的のAPK・emulator・benchmark・fixture拡張をしない。
+- 通常のpackage/static/governance検証はReady PRで実行する。Docker、Field-test APK、Android Emulatorは変更分類が所有する境界だけで実行し、週次fullを分類漏れの安全網にする。
+- 純粋な`mapping-core`、`mapping-engine`、`experience-sdk`変更だけを理由にAPKやemulatorを実行しない。mobile/native/SQLite/dependency/harness変更はfail-closedで必要レーンを選ぶ。
+- Field-test APKのCI ABIは`arm64-v8a`と`x86_64`に限定する。明示的な対応端末要件なしに4 ABIへ戻さない。
+- CIが製品不具合を検出した場合はローカルで再現・修正し、修正をまとめて1回pushする。runner、network、cache、registry、Android SDK等の具体的な外部障害がログで確認できる場合だけ失敗jobをrerunし、PRへ根拠を残す。
+- workflowとCI policyの変更は`node scripts/check-ci-budget-policy.mjs`を通し、分類機構自身を軽量扱いしない。チェックを通すために規則を弱めない。
 
 ## Constitution changes
 
@@ -116,6 +145,7 @@ IssueまたはPRに次を残す。該当しない場合も理由を書く。
 ```bash
 node scripts/check-product-governance.mjs
 node scripts/check-architecture-boundaries.mjs
+node scripts/check-ci-budget-policy.mjs
 npm test
 npm run typecheck
 ```

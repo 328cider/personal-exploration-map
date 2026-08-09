@@ -9,6 +9,11 @@ const val CAPTURE_ROOT = "pdr-captures"
 const val ROTATE_BYTES = 32L * 1024L * 1024L
 const val STATE_PREFERENCES = "pdr_capture_state"
 const val PREF_ACTIVE_SESSION = "active_session"
+const val ESTIMATED_MAX_BYTES_PER_SECOND = 512L * 1024L
+const val MIN_STORAGE_HEADROOM_BYTES = 64L * 1024L * 1024L
+
+fun requiredStorageHeadroomBytes(plannedDurationSeconds: Int): Long =
+    MIN_STORAGE_HEADROOM_BYTES + plannedDurationSeconds.toLong() * ESTIMATED_MAX_BYTES_PER_SECOND
 
 object CaptureActions {
     const val START = "com.personalexplorationmap.pdrcapture.START"
@@ -21,6 +26,8 @@ object CaptureActions {
     const val EXTRA_ACTIVITY_SOURCE = "activity_source"
     const val EXTRA_SESSION_ID = "session_id"
     const val EXTRA_BUNDLE_PATH = "bundle_path"
+    const val EXTRA_OUTCOME = "outcome"
+    const val EXTRA_REASON = "reason"
 }
 
 enum class LifecycleProtocol(val key: String) {

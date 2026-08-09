@@ -26,6 +26,7 @@ PROGRAM_TEMPLATE = ROOT / "capture-schema" / "v1" / "capture-program.template.js
 TRUTH_CONTRACT = ROOT / "capture-schema" / "v1" / "truth-sidecar-contract.json"
 SENSOR_LAYOUTS = ROOT / "capture-schema" / "v1" / "sensor-value-layouts.json"
 ANDROID_CAPTURE = ROOT / "android-capture"
+PDR_WORKFLOW = ROOT.parents[1] / ".github" / "workflows" / "pdr-capture-research.yml"
 
 
 def _json_line(value: object) -> bytes:
@@ -499,6 +500,12 @@ class CaptureQualityTests(unittest.TestCase):
         self.assertIn("android.permission.FOREGROUND_SERVICE", manifest)
         self.assertIn("android.permission.WAKE_LOCK", manifest)
 
+    def test_apk_badging_gate_uses_current_aapt2_min_sdk_label(self) -> None:
+        workflow = PDR_WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("minSdkVersion:'28'", workflow)
+        self.assertIn("targetSdkVersion:'35'", workflow)
+        self.assertNotIn('grep -q "sdkVersion:', workflow)
+
     def test_capture_adapter_does_not_import_product_mapping_layers(self) -> None:
         kotlin_root = ANDROID_CAPTURE / "app" / "src" / "main" / "java"
         source = "\n".join(path.read_text(encoding="utf-8") for path in kotlin_root.rglob("*.kt"))
@@ -512,6 +519,42 @@ class CaptureQualityTests(unittest.TestCase):
         self.assertIn("unsafe or duplicate manifest evidence path", script)
         self.assertNotIn("ls files/pdr-captures", script)
         self.assertIn("validate_emulator_capture.py", script)
+
+    def test_emulator_gate_exercises_install_lifecycle_export_and_relaunch(self) -> None:
+        script = (ANDROID_CAPTURE / "scripts" / "run-emulator-e2e.sh").read_text(encoding="utf-8")
+        required_steps = (
+            'adb uninstall "$package"',
+            'adb install --no-streaming "$app_apk"',
+            'adb shell am start -W -n "$package/.MainActivity"',
+            'adb shell pm revoke "$package" android.permission.ACCESS_FINE_LOCATION',
+            'adb shell am force-stop "$package"',
+            'cache/emulator-e2e.zip',
+            'adb logcat -b crash',
+            'pdr-emulator-device-readiness/v1',
+        )
+        for step in required_steps:
+            self.assertIn(step, script)
+        self.assertIn('"product_usable": False', script)
+        self.assertIn('"counts_toward_capture_kpis": False', script)
+
+    def test_capture_ui_defaults_to_stationary_c0_not_walking_c1(self) -> None:
+        activity = (
+            ANDROID_CAPTURE
+            / "app"
+            / "src"
+            / "main"
+            / "java"
+            / "com"
+            / "personalexplorationmap"
+            / "pdrcapture"
+            / "MainActivity.kt"
+        ).read_text(encoding="utf-8")
+        self.assertIn('"c0-screen-on-live50"', activity)
+        self.assertIn('"stationary-device-probe"', activity)
+        self.assertIn('placement.setSelection(PLACEMENTS.indexOf("hand"))', activity)
+        self.assertNotIn('textField(content, "Frozen protocol cell ID", "c1-', activity)
+        self.assertIn("Start blocked: required IMU6 capability is unavailable", activity)
+        self.assertIn("requiredStorageHeadroomBytes", activity)
 
     def test_emulator_plumbing_gate_does_not_promote_virtual_timing_to_usable(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

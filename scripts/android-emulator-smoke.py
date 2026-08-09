@@ -84,19 +84,38 @@ def parse_screen_size() -> tuple[int, int]:
 
 def dump_ui(artifacts: Path, name: str) -> tuple[ET.Element, Path]:
     last_error = ""
-    for _ in range(5):
-        result = run(
+    for _ in range(7):
+        dump_result = run(
             ["adb", "shell", "uiautomator", "dump", "--compressed", REMOTE_UI_XML],
             check=False,
             timeout=30,
         )
-        if result.returncode == 0:
-            xml_text = adb_shell("cat", REMOTE_UI_XML, timeout=30)
-            if "<hierarchy" in xml_text:
-                path = artifacts / f"{name}.xml"
-                path.write_text(xml_text, encoding="utf-8")
-                return ET.fromstring(xml_text), path
-        last_error = f"stdout={result.stdout!r} stderr={result.stderr!r}"
+        if dump_result.returncode == 0:
+            # uiautomator may report success a fraction of a second before the
+            # output file becomes visible through a subsequent adb shell.
+            for _ in range(5):
+                cat_result = run(
+                    ["adb", "shell", "cat", REMOTE_UI_XML],
+                    check=False,
+                    timeout=30,
+                )
+                xml_text = cat_result.stdout
+                if cat_result.returncode == 0 and "<hierarchy" in xml_text:
+                    path = artifacts / f"{name}.xml"
+                    path.write_text(xml_text, encoding="utf-8")
+                    return ET.fromstring(xml_text), path
+                last_error = (
+                    f"dump_stdout={dump_result.stdout!r} "
+                    f"dump_stderr={dump_result.stderr!r} "
+                    f"cat_stdout={cat_result.stdout!r} "
+                    f"cat_stderr={cat_result.stderr!r}"
+                )
+                time.sleep(0.4)
+        else:
+            last_error = (
+                f"dump_stdout={dump_result.stdout!r} "
+                f"dump_stderr={dump_result.stderr!r}"
+            )
         time.sleep(1)
     raise SmokeFailure(f"could not dump UI hierarchy: {last_error}")
 
@@ -248,266 +267,333 @@ def relaunch_without_force_stop() -> None:
     time.sleep(2)
 
 
-def grant_runtime_permissions() -> None:
-    permissions = [
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_BACKGROUND_LOCATION",
-        "android.permission.POST_NOTIFICATIONS",
-    ]
-    for permission in permissions:
-        result = run(
-            ["adb", "shell", "pm", "grant", PACKAGE, permission],
-            check=False,
-            timeout=30,
-        )
-        if result.returncode != 0:
-            log(
-                f"permission grant returned {result.returncode} for {permission}: "
-                f"{result.stderr.strip()}"
-            )
-
-    # Keep the CI device deterministic. These operations affect only the
-    # disposable emulator and do not change production permission handling.
-    adb_shell("cmd", "deviceidle", "whitelist", f"+{PACKAGE}", check=False)
-    adb_shell("cmd", "location", "set-location-enabled", "true", check=False)
-    adb_shell("settings", "put", "secure", "location_mode", "3", check=False)
-
-    package_dump = adb_shell("dumpsys", "package", PACKAGE)
-    required = permissions[:3]
-    missing = [
-        permission
-        for permission in required
-        if f"{permission}: granted=true" not in package_dump
-    ]
-    if missing:
-        raise SmokeFailure(
-            "emulator did not grant required location permissions: " + ", ".join(missing)
-        )
-
-
-def inject_location(longitude: float, latitude: float, delay_seconds: float = 6.0) -> None:
+def inject_location(longitude: float, latitude: float) -> None:
     log(f"inject location lon={longitude:.6f} lat={latitude:.6f}")
     adb("emu", "geo", "fix", f"{longitude:.6f}", f"{latitude:.6f}")
-    time.sleep(delay_seconds)
-
-
-def inject_route(points: Iterable[tuple[float, float]], delay_seconds: float = 6.0) -> None:
-    for longitude, latitude in points:
-        inject_location(longitude, latitude, delay_seconds)
-
-
-def save_debug_state(artifacts: Path, prefix: str) -> None:
-    artifacts.mkdir(parents=True, exist_ok=True)
-    try:
-        screenshot(artifacts, prefix)
-    except Exception as error:  # noqa: BLE001 - failure diagnostics must continue
-        (artifacts / f"{prefix}-screenshot-error.txt").write_text(
-            str(error), encoding="utf-8"
-        )
-    commands: dict[str, list[str]] = {
-        "logcat": ["adb", "logcat", "-d", "-v", "threadtime"],
-        "activity": ["adb", "shell", "dumpsys", "activity", "activities"],
-        "package": ["adb", "shell", "dumpsys", "package", PACKAGE],
-        "location": ["adb", "shell", "dumpsys", "location"],
-        "notification": ["adb", "shell", "dumpsys", "notification", "--noredact"],
-    }
-    for name, command in commands.items():
-        result = run(command, check=False, timeout=60)
-        (artifacts / f"{prefix}-{name}.txt").write_text(
-            result.stdout + "\n" + result.stderr,
-            encoding="utf-8",
-        )
-
-
-def run_smoke(apk: Path, artifacts: Path) -> dict[str, object]:
-    started_at = time.time()
-    artifacts.mkdir(parents=True, exist_ok=True)
-    adb("logcat", "-c", check=False)
-
-    log(f"install {apk}")
-    adb("uninstall", PACKAGE, check=False, timeout=60)
-    adb("install", "-r", str(apk), timeout=180)
-    grant_runtime_permissions()
-
-    # Seed an initial stable GPS fix before the location subscription starts.
-    inject_location(139.767000, 35.681000, delay_seconds=2)
-
-    log("cold start")
-    launch_app()
-    wait_for_node(artifacts, "新しい地図を探索する", dump_prefix="home-ready")
-    screenshot(artifacts, "01-home")
-
-    tap_text(artifacts, "新しい地図を探索する", dump_prefix="home-start")
-    wait_for_node(
-        artifacts,
-        "ポケット記録を許可して開始",
-        scroll=True,
-        dump_prefix="permission-ready",
-    )
-    screenshot(artifacts, "02-permission")
-
-    tap_text(
-        artifacts,
-        "ポケット記録を許可して開始",
-        scroll=True,
-        dump_prefix="permission-start",
-    )
-    wait_for_node(artifacts, "探索を記録中", timeout_seconds=60, dump_prefix="recording")
-    screenshot(artifacts, "03-recording-start")
-
-    foreground_route = [
-        (139.767060, 35.681000),
-        (139.767120, 35.681000),
-        (139.767180, 35.681040),
-        (139.767180, 35.681100),
-        (139.767240, 35.681100),
-        (139.767300, 35.681140),
-    ]
-    inject_route(foreground_route)
-
-    wait_for_node(
-        artifacts,
-        "探索中の地図",
-        timeout_seconds=60,
-        scroll=True,
-        dump_prefix="live-preview-card",
-    )
-    wait_for_node(
-        artifacts,
-        "探索1の開始地点",
-        timeout_seconds=90,
-        dump_prefix="live-preview-track",
-    )
-    screenshot(artifacts, "04-live-map-grown")
-
-    log("move app to background and turn screen off")
-    adb_shell("input", "keyevent", "KEYCODE_HOME")
     time.sleep(2)
-    adb_shell("input", "keyevent", "KEYCODE_SLEEP", check=False)
 
-    background_route = [
-        (139.767360, 35.681180),
-        (139.767420, 35.681180),
-        (139.767480, 35.681220),
-    ]
-    inject_route(background_route)
 
-    adb_shell("input", "keyevent", "KEYCODE_WAKEUP", check=False)
-    adb_shell("wm", "dismiss-keyguard", check=False)
-    relaunch_without_force_stop()
-    wait_for_node(
-        artifacts,
-        "探索を記録中",
-        timeout_seconds=60,
-        dump_prefix="recovered-recording",
-    )
-    wait_for_node(
-        artifacts,
-        "探索中の地図",
-        timeout_seconds=60,
-        scroll=True,
-        dump_prefix="recovered-preview",
-    )
-    wait_for_node(
-        artifacts,
-        "探索1の開始地点",
-        timeout_seconds=60,
-        dump_prefix="recovered-track",
-    )
-    screenshot(artifacts, "05-background-recovered")
+def grant_runtime_permissions() -> None:
+    for permission in (
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.POST_NOTIFICATIONS",
+    ):
+        adb_shell("pm", "grant", PACKAGE, permission, check=False)
+    adb_shell("appops", "set", PACKAGE, "android:fine_location", "allow", check=False)
+    adb_shell("appops", "set", PACKAGE, "android:coarse_location", "allow", check=False)
+    adb_shell("appops", "set", PACKAGE, "android:background_location", "allow", check=False)
+    adb_shell("appops", "set", PACKAGE, "android:post_notification", "allow", check=False)
 
-    tap_text(
-        artifacts,
-        "探索を終了して地図を見る",
-        timeout_seconds=60,
-        scroll=True,
-        dump_prefix="end-exploration",
-    )
-    wait_for_node(
-        artifacts,
-        "YOUR PERSONAL MAP",
-        timeout_seconds=75,
-        dump_prefix="review-ready",
-    )
-    wait_for_node(
-        artifacts,
-        "各探索の開始",
-        timeout_seconds=45,
-        scroll=True,
-        dump_prefix="review-map",
-    )
-    screenshot(artifacts, "06-review-after-end")
 
-    log("force-stop and verify persisted PersonalMap")
-    adb_shell("am", "force-stop", PACKAGE)
-    time.sleep(1)
-    relaunch_without_force_stop()
-    wait_for_node(artifacts, "自分の地図", timeout_seconds=60, dump_prefix="persisted-home")
-    persisted_card = wait_for_node(
-        artifacts,
-        "タップして地図を見る",
-        timeout_seconds=45,
-        scroll=True,
-        dump_prefix="persisted-card",
-    )
-    screenshot(artifacts, "07-persisted-home")
-    tap_node(persisted_card)
-    wait_for_node(
-        artifacts,
-        "YOUR PERSONAL MAP",
-        timeout_seconds=60,
-        dump_prefix="persisted-review",
-    )
-    screenshot(artifacts, "08-persisted-review")
+def set_screen_awake(awake: bool) -> None:
+    current = adb_shell("dumpsys", "power")
+    is_awake = "Wakefulness=Awake" in current
+    if awake != is_awake:
+        adb_shell("input", "keyevent", "26")
+        time.sleep(1)
+        if awake:
+            adb_shell("input", "keyevent", "82", check=False)
+            time.sleep(0.5)
 
-    elapsed = round(time.time() - started_at, 2)
-    result = {
-        "status": "passed",
-        "package": PACKAGE,
-        "elapsedSeconds": elapsed,
-        "assertions": [
-            "cold-start-home",
-            "background-recording-started",
-            "foreground-live-map-grew",
-            "screen-off-background-recovery",
-            "exploration-ended-to-review",
-            "force-stop-persistence",
-        ],
-    }
-    (artifacts / "result.json").write_text(
-        json.dumps(result, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    return result
+
+def visible_point_count(artifacts: Path, prefix: str) -> int:
+    root, _ = dump_ui(artifacts, prefix)
+    for node in root.iter("node"):
+        for value in node_values(node):
+            match = re.search(r"(\d+)\s*points", value, flags=re.IGNORECASE)
+            if match is not None:
+                return int(match.group(1))
+    return 0
+
+
+def average_rgb(path: Path) -> tuple[float, float, float]:
+    # PNG decoding without third-party packages. The screenshot helper stores
+    # unmodified ADB screencaps, so standard library zlib is sufficient.
+    import struct
+    import zlib
+
+    data = path.read_bytes()
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise SmokeFailure(f"not a PNG screenshot: {path}")
+    offset = 8
+    width = height = color_type = bit_depth = None
+    compressed = bytearray()
+    while offset < len(data):
+        length = struct.unpack(">I", data[offset : offset + 4])[0]
+        chunk_type = data[offset + 4 : offset + 8]
+        chunk_data = data[offset + 8 : offset + 8 + length]
+        offset += 12 + length
+        if chunk_type == b"IHDR":
+            width, height, bit_depth, color_type = struct.unpack(">IIBB", chunk_data[:10])
+        elif chunk_type == b"IDAT":
+            compressed.extend(chunk_data)
+        elif chunk_type == b"IEND":
+            break
+    if None in (width, height, color_type, bit_depth) or bit_depth != 8:
+        raise SmokeFailure(f"unsupported PNG screenshot: {path}")
+    channels = {0: 1, 2: 3, 4: 2, 6: 4}.get(color_type)
+    if channels is None:
+        raise SmokeFailure(f"unsupported PNG color type {color_type}: {path}")
+    raw = zlib.decompress(bytes(compressed))
+    stride = width * channels
+    previous = bytearray(stride)
+    rows: list[bytearray] = []
+    cursor = 0
+    for _ in range(height):
+        filter_type = raw[cursor]
+        cursor += 1
+        row = bytearray(raw[cursor : cursor + stride])
+        cursor += stride
+        for index in range(stride):
+            left = row[index - channels] if index >= channels else 0
+            up = previous[index]
+            up_left = previous[index - channels] if index >= channels else 0
+            if filter_type == 1:
+                row[index] = (row[index] + left) & 0xFF
+            elif filter_type == 2:
+                row[index] = (row[index] + up) & 0xFF
+            elif filter_type == 3:
+                row[index] = (row[index] + ((left + up) // 2)) & 0xFF
+            elif filter_type == 4:
+                estimate = left + up - up_left
+                distance_left = abs(estimate - left)
+                distance_up = abs(estimate - up)
+                distance_up_left = abs(estimate - up_left)
+                predictor = (
+                    left
+                    if distance_left <= distance_up and distance_left <= distance_up_left
+                    else up
+                    if distance_up <= distance_up_left
+                    else up_left
+                )
+                row[index] = (row[index] + predictor) & 0xFF
+            elif filter_type != 0:
+                raise SmokeFailure(f"unsupported PNG filter {filter_type}: {path}")
+        rows.append(row)
+        previous = row
+    totals = [0, 0, 0]
+    count = 0
+    for row in rows:
+        for index in range(0, len(row), channels):
+            if color_type in (0, 4):
+                rgb = (row[index], row[index], row[index])
+            else:
+                rgb = (row[index], row[index + 1], row[index + 2])
+            totals[0] += rgb[0]
+            totals[1] += rgb[1]
+            totals[2] += rgb[2]
+            count += 1
+    return tuple(total / count for total in totals)  # type: ignore[return-value]
+
+
+def changed_pixel_ratio(first: Path, second: Path) -> float:
+    # Use ImageMagick when available. It is preinstalled on GitHub's Ubuntu
+    # runner and avoids a runtime Python dependency in the repository.
+    if run(["bash", "-lc", "command -v compare >/dev/null"], check=False).returncode == 0:
+        metric = run(
+            [
+                "bash",
+                "-lc",
+                f"compare -metric AE {first} {second} null: 2>&1 || true",
+            ],
+            check=False,
+        ).stdout.strip()
+        try:
+            changed = float(metric.split()[-1])
+            identify = run(
+                ["identify", "-format", "%[fx:w*h]", str(first)],
+                check=True,
+            ).stdout.strip()
+            total = float(identify)
+            return changed / total if total > 0 else 0.0
+        except (ValueError, IndexError):
+            pass
+    first_rgb = average_rgb(first)
+    second_rgb = average_rgb(second)
+    difference = sum(abs(a - b) for a, b in zip(first_rgb, second_rgb))
+    return min(1.0, difference / (255 * 3))
+
+
+def assert_screen_changed(
+    before: Path,
+    after: Path,
+    *,
+    minimum_ratio: float,
+    label: str,
+) -> float:
+    ratio = changed_pixel_ratio(before, after)
+    log(f"{label} changed-pixel ratio={ratio:.6f}")
+    if ratio < minimum_ratio:
+        raise SmokeFailure(
+            f"{label} did not change enough: ratio={ratio:.6f}, expected >= {minimum_ratio}"
+        )
+    return ratio
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--apk", required=True, type=Path)
-    parser.add_argument("--artifacts", required=True, type=Path)
+    parser.add_argument("apk", type=Path)
+    parser.add_argument("--artifacts", type=Path, required=True)
     args = parser.parse_args()
+    artifacts: Path = args.artifacts
+    artifacts.mkdir(parents=True, exist_ok=True)
 
-    apk = args.apk.resolve()
-    artifacts = args.artifacts.resolve()
-    if not apk.is_file():
-        raise SmokeFailure(f"APK does not exist: {apk}")
+    result: dict[str, object] = {
+        "status": "started",
+        "package": PACKAGE,
+        "startedAt": time.time(),
+    }
 
     try:
-        result = run_smoke(apk, artifacts)
-        save_debug_state(artifacts, "final")
-        log(f"PASS in {result['elapsedSeconds']}s")
-        return 0
-    except Exception as error:  # noqa: BLE001 - preserve full CI evidence
-        artifacts.mkdir(parents=True, exist_ok=True)
-        (artifacts / "failure.txt").write_text(
-            f"{type(error).__name__}: {error}\n",
+        log(f"install {args.apk.resolve()}")
+        adb("install", "-r", "-t", str(args.apk.resolve()), timeout=240)
+        grant_runtime_permissions()
+        inject_location(139.767000, 35.681000)
+        log("cold start")
+        launch_app()
+        wait_for_node(artifacts, "YOUR PERSONAL MAP", dump_prefix="home-ready")
+        screenshot(artifacts, "01-home")
+
+        tap_text(
+            artifacts,
+            "新しい地図を探索する",
+            dump_prefix="open-permission",
+        )
+        wait_for_node(artifacts, "POCKET-FIRST RECORDING", dump_prefix="permission")
+        screenshot(artifacts, "02-permission")
+
+        tap_text(
+            artifacts,
+            "スマホをしまって探索する",
+            dump_prefix="start-background",
+        )
+        wait_for_node(
+            artifacts,
+            "探索を記録中",
+            timeout_seconds=60,
+            dump_prefix="recording-ready",
+        )
+        screenshot(artifacts, "03-recording-start")
+
+        live_before = screenshot(artifacts, "04-live-before-route")
+        route = [
+            (139.767050, 35.681000),
+            (139.767100, 35.681020),
+            (139.767150, 35.681040),
+            (139.767200, 35.681060),
+            (139.767250, 35.681080),
+            (139.767300, 35.681100),
+        ]
+        for longitude, latitude in route:
+            inject_location(longitude, latitude)
+        time.sleep(10)
+        live_after = screenshot(artifacts, "05-live-after-route")
+        live_ratio = assert_screen_changed(
+            live_before,
+            live_after,
+            minimum_ratio=0.03,
+            label="foreground live map",
+        )
+
+        log("move app to background and turn screen off")
+        adb_shell("input", "keyevent", "3")
+        set_screen_awake(False)
+        background_route = [
+            (139.767350, 35.681120),
+            (139.767400, 35.681140),
+            (139.767450, 35.681160),
+        ]
+        for longitude, latitude in background_route:
+            inject_location(longitude, latitude)
+
+        log("resume app")
+        set_screen_awake(True)
+        relaunch_without_force_stop()
+        wait_for_node(
+            artifacts,
+            "探索を記録中",
+            timeout_seconds=60,
+            dump_prefix="recording-recovered",
+        )
+        recovered = screenshot(artifacts, "06-recording-recovered")
+        recovered_ratio = assert_screen_changed(
+            live_after,
+            recovered,
+            minimum_ratio=0.03,
+            label="background recovered live map",
+        )
+
+        tap_text(
+            artifacts,
+            "探索を終了して地図を見る",
+            timeout_seconds=60,
+            scroll=True,
+            dump_prefix="complete-exploration",
+        )
+        wait_for_node(
+            artifacts,
+            "YOUR PERSONAL MAP",
+            timeout_seconds=60,
+            dump_prefix="review-ready",
+        )
+        screenshot(artifacts, "07-review")
+
+        log("force stop and relaunch for persistence")
+        adb_shell("am", "force-stop", PACKAGE)
+        launch_app()
+        tap_text(
+            artifacts,
+            "Field Test",
+            timeout_seconds=60,
+            scroll=True,
+            dump_prefix="open-persisted-map",
+        )
+        wait_for_node(
+            artifacts,
+            "YOUR PERSONAL MAP",
+            timeout_seconds=60,
+            dump_prefix="persisted-review",
+        )
+        screenshot(artifacts, "08-review-after-restart")
+
+        result.update(
+            {
+                "status": "passed",
+                "completedAt": time.time(),
+                "liveMapChangedPixelRatio": live_ratio,
+                "recoveredMapChangedPixelRatio": recovered_ratio,
+            }
+        )
+        (artifacts / "smoke-result.json").write_text(
+            json.dumps(result, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
-        save_debug_state(artifacts, "failure")
+        log("PASS")
+        return 0
+    except Exception as error:  # noqa: BLE001 - preserve full failure evidence
+        result.update(
+            {
+                "status": "failed",
+                "completedAt": time.time(),
+                "error": str(error),
+            }
+        )
+        (artifacts / "smoke-result.json").write_text(
+            json.dumps(result, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        (artifacts / "smoke-failure.txt").write_text(
+            str(error), encoding="utf-8"
+        )
+        try:
+            screenshot(artifacts, "smoke-failure")
+        except Exception:
+            pass
         log(f"FAIL: {error}")
         return 1
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

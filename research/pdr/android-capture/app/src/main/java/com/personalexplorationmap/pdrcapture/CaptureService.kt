@@ -103,11 +103,16 @@ class CaptureService : Service(), SensorEventListener2, LocationListener {
                     try {
                         startCapture(CaptureRequest.fromIntent(intent))
                     } catch (error: Throwable) {
+                        val reason = "start_${error.javaClass.simpleName}"
                         if (::writer.isInitialized) {
-                            writer.markFatal("start_${error.javaClass.simpleName}:${error.message}")
+                            writer.markFatal(reason)
                             stopCapture("start_failure", "invalid")
                         } else {
-                            stopSelf()
+                            val sessionId = runCatching { CaptureRequest.fromIntent(intent).sessionId }
+                                .getOrDefault("unknown")
+                            notifyFinished(sessionId, null, "invalid", reason)
+                            stopForeground(STOP_FOREGROUND_REMOVE)
+                            stopSelf(startId)
                         }
                     }
                 } else if (::writer.isInitialized) {
@@ -132,13 +137,17 @@ class CaptureService : Service(), SensorEventListener2, LocationListener {
 
     private fun startCapture(captureRequest: CaptureRequest) {
         check(BuildConfig.RESEARCH_SCHEMA_VERSION == SCHEMA_VERSION) { "Build/schema contract mismatch" }
+        request = captureRequest
+        startedElapsedRealtimeNs = SystemClock.elapsedRealtimeNanos()
+        // startForegroundService callers give the service only a short deadline to promote itself.
+        // Promote before validating a rejected request so fail-closed input cannot crash the app.
+        // No writer or sensor registration exists at this point, so this is not capture evidence.
+        startForegroundCompat(buildNotification(), false)
         require(isMotionCaptureAuthorized(captureRequest.motionCondition)) {
             "This APK revision is not authorized for personal walking capture"
         }
-        request = captureRequest
-        startedElapsedRealtimeNs = SystemClock.elapsedRealtimeNanos()
         val actualLocation = request.requestLocation && hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)
-        startForegroundCompat(buildNotification(), actualLocation)
+        if (actualLocation) startForegroundCompat(buildNotification(), true)
 
         val root = File(filesDir, CAPTURE_ROOT).apply { mkdirs() }
         writer = BundleWriter(root, request.sessionId, startRecord(actualLocation))
@@ -154,8 +163,7 @@ class CaptureService : Service(), SensorEventListener2, LocationListener {
                 .put("missing_required", JSONArray(capability.requiredMissing.sorted().map(SensorNames::of))),
         )
         val availableBytes = StatFs(filesDir.absolutePath).availableBytes
-        val requiredHeadroomBytes = MIN_STORAGE_HEADROOM_BYTES +
-            request.plannedDurationSeconds.toLong() * ESTIMATED_MAX_BYTES_PER_SECOND
+        val requiredHeadroomBytes = requiredStorageHeadroomBytes(request.plannedDurationSeconds)
         diagnostic(
             "storage_preflight",
             JSONObject()
@@ -568,14 +576,14 @@ class CaptureService : Service(), SensorEventListener2, LocationListener {
             }
 
             val completed = runCatching {
-                finalizeBundle(writer, request, startedElapsedRealtimeNs, finalReason, finalStatus)
+                finalizeBundle(writer, finalReason, finalStatus)
             }
-            val finishedIntent = Intent(CaptureActions.FINISHED)
-                .setPackage(packageName)
-                .putExtra(CaptureActions.EXTRA_SESSION_ID, request.sessionId)
-            completed.getOrNull()?.let { finishedIntent.putExtra(CaptureActions.EXTRA_BUNDLE_PATH, it.absolutePath) }
+            if (completed.isFailure) {
+                finalStatus = "invalid"
+                finalReason = "${finalReason}_finalize_${completed.exceptionOrNull()?.javaClass?.simpleName ?: "failure"}"
+            }
             getSharedPreferences(STATE_PREFERENCES, MODE_PRIVATE).edit().remove(PREF_ACTIVE_SESSION).apply()
-            sendBroadcast(finishedIntent)
+            notifyFinished(request.sessionId, completed.getOrNull(), finalStatus, finalReason)
             sensorThread.quitSafely()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
@@ -697,6 +705,16 @@ class CaptureService : Service(), SensorEventListener2, LocationListener {
             .build()
     }
 
+    private fun notifyFinished(sessionId: String, bundle: File?, outcome: String, reason: String) {
+        val finishedIntent = Intent(CaptureActions.FINISHED)
+            .setPackage(packageName)
+            .putExtra(CaptureActions.EXTRA_SESSION_ID, sessionId)
+            .putExtra(CaptureActions.EXTRA_OUTCOME, outcome)
+            .putExtra(CaptureActions.EXTRA_REASON, reason)
+        bundle?.let { finishedIntent.putExtra(CaptureActions.EXTRA_BUNDLE_PATH, it.absolutePath) }
+        sendBroadcast(finishedIntent)
+    }
+
     private fun createNotificationChannel() {
         val channel = NotificationChannel(
             CHANNEL_ID,
@@ -712,7 +730,5 @@ class CaptureService : Service(), SensorEventListener2, LocationListener {
     companion object {
         private const val CHANNEL_ID = "pdr-research-capture"
         private const val NOTIFICATION_ID = 4105
-        private const val ESTIMATED_MAX_BYTES_PER_SECOND = 512L * 1024L
-        private const val MIN_STORAGE_HEADROOM_BYTES = 64L * 1024L * 1024L
     }
 }

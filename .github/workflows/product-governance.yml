@@ -2,6 +2,11 @@ name: product-governance
 
 on:
   pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
     paths:
       - "PRODUCT_CONSTITUTION.md"
       - "AGENTS.md"
@@ -14,9 +19,10 @@ on:
       - "package.json"
       - ".github/ISSUE_TEMPLATE/**"
       - ".github/pull_request_template.md"
+      - ".github/workflows/**"
       - "scripts/check-product-governance.mjs"
       - "scripts/check-architecture-boundaries.mjs"
-      - ".github/workflows/product-governance.yml"
+      - "scripts/check-ci-budget-policy.mjs"
   push:
     branches: [main]
     paths:
@@ -31,15 +37,23 @@ on:
       - "package.json"
       - ".github/ISSUE_TEMPLATE/**"
       - ".github/pull_request_template.md"
+      - ".github/workflows/**"
       - "scripts/check-product-governance.mjs"
       - "scripts/check-architecture-boundaries.mjs"
-      - ".github/workflows/product-governance.yml"
+      - "scripts/check-ci-budget-policy.mjs"
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   guardrails:
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -62,3 +76,6 @@ jobs:
 
       - name: Check architecture boundaries
         run: node scripts/check-architecture-boundaries.mjs
+
+      - name: Check GitHub Actions budget policy
+        run: node scripts/check-ci-budget-policy.mjs

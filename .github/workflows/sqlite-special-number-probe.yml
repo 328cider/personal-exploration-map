@@ -1,0 +1,67 @@
+name: sqlite-special-number-probe
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+    paths:
+      - ".github/workflows/sqlite-special-number-probe.yml"
+      - "scripts/experiments/sqlite-special-number-probe.mjs"
+      - "docs/research/2026-08-sqlite-special-number-roundtrip.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Record Node SQLite numeric round-trip behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          node --no-warnings scripts/experiments/sqlite-special-number-probe.mjs \
+            > artifacts/sqlite-special-number-probe.json
+          node -e '
+            const fs = require("node:fs");
+            const payload = JSON.parse(
+              fs.readFileSync("artifacts/sqlite-special-number-probe.json", "utf8"),
+            );
+            if (
+              payload.schema !==
+              "personal-exploration-map.sqlite-special-number-probe.v1"
+            ) {
+              throw new Error("Unexpected probe schema");
+            }
+            if (
+              payload.results.length !==
+              payload.cases.length * payload.columns.length
+            ) {
+              throw new Error("Probe result matrix is incomplete");
+            }
+          '
+          cat artifacts/sqlite-special-number-probe.json
+      - name: Upload bounded experiment evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: sqlite-special-number-probe-node22
+          path: artifacts/sqlite-special-number-probe.json
+          if-no-files-found: error
+          retention-days: 7
