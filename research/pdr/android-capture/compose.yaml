@@ -1,0 +1,23 @@
+services:
+  android-capture-build:
+    build:
+      context: ../../..
+      dockerfile: research/pdr/android-capture/docker/Dockerfile
+    working_dir: /workspace/research/pdr/android-capture
+    volumes:
+      - .:/workspace/research/pdr/android-capture
+      - android_capture_gradle_cache:/gradle-cache
+    environment:
+      GRADLE_USER_HOME: /gradle-cache
+      PDR_RESEARCH_REVISION: ${PDR_RESEARCH_REVISION:-local-docker-unpinned}
+    command:
+      - gradle
+      - --no-daemon
+      - --stacktrace
+      - testDebugUnitTest
+      - lintDebug
+      - assembleDebug
+      - assembleDebugAndroidTest
+
+volumes:
+  android_capture_gradle_cache:

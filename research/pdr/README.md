@@ -44,6 +44,14 @@ Start with:
   be answered before protected rows or learned weights are touched;
 - `RESEARCH_DECISION.md` for the consolidated answer on what is exhausted,
   what remains externally blocked, and why no pilot or product adoption follows;
+- `CAPTURE_KPI_PLAN.md` for the exact capture-usability, mandatory-IMU coverage,
+  evidence-readiness, resource, and sample-size decision rules;
+- `ANDROID_CAPTURE_PROTOCOL.md` for fields, clocks, bundle lifecycle, truth
+  separation, collection stages, privacy, and Stop conditions;
+- `capture-schema/v1/` for the machine-readable Android field roles, exact
+  sensor value layouts, external truth boundary, and E0/C0/C1 preregistration
+  template;
+- `android-capture/` for the standalone Kotlin capability probe and raw logger;
 - `datasets/registry.json` for the initial public-dataset audit;
 - `notebooks/01_synthetic_foundation.ipynb` for the executable Phase 1 example;
 - `notebooks/02_public_dataset_audit.ipynb` for the executed metadata audit;
@@ -77,6 +85,9 @@ docker compose -f research/pdr/compose.yaml run --rm pdr-audit `
   python -m unittest discover -s research/pdr/tests -v
 docker compose -f research/pdr/compose.yaml run --rm pdr-audit `
   python research/pdr/scripts/audit_datasets.py --strict-ready
+docker compose -f research/pdr/android-capture/compose.yaml build
+docker compose -f research/pdr/android-capture/compose.yaml run --rm `
+  android-capture-build
 ```
 
 Mount legally obtained archives under the ignored `research/pdr/data/` path.
@@ -99,6 +110,13 @@ docker compose -f research/pdr/compose.yaml run --rm pdr-audit `
 `pdr-fetch` is the only research service with network access. `pdr-audit` stays
 network-disabled. Both install dependencies inside Docker; no Windows npm or
 Python environment is created.
+
+The Android capture build likewise installs Gradle and Android SDK components
+only in its Docker image/volume. It does not use the repository's npm graph or
+install Android tooling on Windows. Exported capture ZIPs are checked with
+`scripts/validate_capture_bundle.py` before estimator replay. The Android 15 CI
+gate uses a batched no-walking run so FIFO flush/finalization is exercised on a
+real framework, not only by unit fixtures.
 
 The network range fetcher uses only the Python standard library. HDF5/notebook
 work uses version-pinned Python packages inside the research Docker image. Raw

@@ -1,0 +1,37 @@
+{
+  "schema_version": "pdr-truth-sidecar/v1",
+  "storage_rule": "separate-from-android-capture-bundle",
+  "allowed_in_capture_bundle": false,
+  "grain": "one timestamped observation from an independent reference system",
+  "fields": {
+    "schema_version": {"role": "evaluation-only", "required": true},
+    "session_id": {"role": "evaluation-only", "required": true},
+    "truth_source_id": {"role": "evaluation-only", "required": true},
+    "truth_source_version": {"role": "evaluation-only", "required": true},
+    "truth_timestamp_ns": {"role": "evaluation-only", "required": true},
+    "truth_clock_domain": {"role": "evaluation-only", "required": true},
+    "capture_elapsed_realtime_ns_aligned": {"role": "evaluation-only", "required": false},
+    "alignment_uncertainty_ms": {"role": "evaluation-only", "required": true},
+    "frame_id": {"role": "evaluation-only", "required": true},
+    "position_x_m": {"role": "training-label", "required": false},
+    "position_y_m": {"role": "training-label", "required": false},
+    "position_z_m": {"role": "training-label", "required": false},
+    "body_heading_rad": {"role": "training-label", "required": false},
+    "orientation_quaternion_xyzw": {"role": "training-label", "required": false},
+    "position_uncertainty_m": {"role": "evaluation-only", "required": false},
+    "heading_uncertainty_rad": {"role": "evaluation-only", "required": false},
+    "valid": {"role": "evaluation-only", "required": true},
+    "invalid_reason": {"role": "evaluation-only", "required": false}
+  },
+  "session_metadata_required": [
+    "rights_record_id",
+    "consent_record_id",
+    "truth_method",
+    "truth_accuracy_claim",
+    "clock_alignment_method",
+    "matched_start_marker",
+    "matched_end_marker",
+    "alignment_residual_ms",
+    "allowed_uses"
+  ]
+}

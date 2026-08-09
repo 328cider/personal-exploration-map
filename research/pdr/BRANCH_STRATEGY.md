@@ -2,6 +2,7 @@
 
 - Research integration branch: `codex/pdr-research`, created from `origin/main`.
 - First work branch: `codex/pdr/ds-foundation`.
+- Capture-readiness work branch: `codex/pdr/capture-readiness`.
 - Future topics: `codex/pdr/<topic>`.
 - Every PDR work PR targets `codex/pdr-research`, never `main`.
 - Updates from `main` are merged into `codex/pdr-research` periodically.
