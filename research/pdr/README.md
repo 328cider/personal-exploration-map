@@ -36,6 +36,10 @@ Start with:
   xDR, public stride artifacts, and recent paper claims;
 - `EVIDENCE_UNBLOCKER_V2_RESULT.md` for the zero-training-source result, IPIN
   duplicate-lineage proof, and bounded classical-benchmark authorization;
+- `IPIN_CLASSICAL_PROTOCOL.md` for the raw-member allowlist, different-user
+  split, fixed estimator, one-run validation seal, and claim boundary;
+- `IPIN_CLASSICAL_RESULT.md` for the four-sequence pipeline-compatibility pass,
+  optional-magnet validation, and unchanged accuracy/product/pilot Stop;
 - `DATA_RIGHTS_CLARIFICATION_PACK.md` for artifact-specific questions that must
   be answered before protected rows or learned weights are touched;
 - `RESEARCH_DECISION.md` for the consolidated answer on what is exhausted,
@@ -46,19 +50,21 @@ Start with:
 - `notebooks/03_common_baselines.ipynb` for the executed common-baseline matrix;
 - `notebooks/04_ronin_public_sequence.ipynb` for the first raw public replay;
 - `notebooks/05_heading_stride_diagnostic.ipynb` for the executed heading and
-  stride sensitivity diagnostic.
+  stride sensitivity diagnostic;
 - `notebooks/06_rate_stable_step_detector.ipynb` for leakage-controlled
   development/validation and independent result QA;
 - `notebooks/07_body_heading_gate.ipynb` for the executed body-heading Stop and
-  metadata-only official-model audit.
+  metadata-only official-model audit;
 - `notebooks/08_learned_training_data_gate.ipynb` for the executed aggregate-only
-  rights, Android-input, target-fitness, and leakage audit.
+  rights, Android-input, target-fitness, and leakage audit;
 - `notebooks/09_learned_heading_headroom.ipynb` for the executed aggregate-only
-  leave-one-group-out residual-ridge Stop.
+  leave-one-group-out residual-ridge Stop;
 - `notebooks/10_direct_heading_headroom.ipynb` for the executed aggregate-only
-  direct circular recurrent Stop and rate-stability comparison.
+  direct circular recurrent Stop and rate-stability comparison;
 - `notebooks/11_evidence_unblocker_v2.ipynb` for the executed aggregate-only
-  second-source audit and Android-input/label-isolation checks.
+  second-source audit and Android-input/label-isolation checks; and
+- `notebooks/12_ipin_classical_replay.ipynb` for the executed aggregate-only
+  development/untouched-validation result and boundary assertions.
 
 Run the research checks from the repository root:
 
