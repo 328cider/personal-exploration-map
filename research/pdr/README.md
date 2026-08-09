@@ -22,6 +22,8 @@ Start with:
   development Stop, untouched validation state, and official-model audit;
 - `LEARNED_TRAINING_DATA_PROTOCOL.md` for the preregistered rights, Android
   semantics, target-fitness, and clean-split gate before any learned model;
+- `LEARNED_TRAINING_DATA_RESULT.md` for the eight-source audit, zero-compatible
+  Stop decision, and the boundary before any learned model or personal pilot;
 - `datasets/registry.json` for the initial public-dataset audit;
 - `notebooks/01_synthetic_foundation.ipynb` for the executable Phase 1 example;
 - `notebooks/02_public_dataset_audit.ipynb` for the executed metadata audit;
@@ -33,6 +35,8 @@ Start with:
   development/validation and independent result QA;
 - `notebooks/07_body_heading_gate.ipynb` for the executed body-heading Stop and
   metadata-only official-model audit.
+- `notebooks/08_learned_training_data_gate.ipynb` for the executed aggregate-only
+  rights, Android-input, target-fitness, and leakage audit.
 
 Run the research checks from the repository root:
 
