@@ -177,16 +177,15 @@ async function loadFromSnapshot(
     );
   }
 
-  const [frameAtExport, records] = await Promise.all([
-    reader.loadFrameAtExport(options.personalMapId),
-    reader.listExplorationRecords(options.personalMapId),
-  ]);
+  // Keep these reads sequential inside the adapter-owned snapshot. Expo SQLite
+  // and similar native wrappers can release/reuse statements incorrectly when
+  // multiple operations are issued concurrently from the same transaction.
+  const frameAtExport = await reader.loadFrameAtExport(options.personalMapId);
+  const records = await reader.listExplorationRecords(options.personalMapId);
   const explorations = orderedExplorations(options.personalMapId, records);
   const explorationIds = explorations.map((record) => record.id);
-  const [rawGroups, markerGroups] = await Promise.all([
-    reader.loadRawSampleGroups(explorationIds),
-    reader.loadMarkerGroups(explorationIds),
-  ]);
+  const rawGroups = await reader.loadRawSampleGroups(explorationIds);
+  const markerGroups = await reader.loadMarkerGroups(explorationIds);
   const rawByExploration = indexGroups(
     "raw samples",
     explorationIds,
