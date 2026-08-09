@@ -1,6 +1,6 @@
 # PersonalMap Bundle v1 — Logical Format
 
-- Status: implemented logical contract / platform backup incomplete
+- Status: implemented logical contract / app-private writer incomplete
 - Schema version: `1`
 - Number encoding: `ecmascript-number-string-v1`
 - Updated: 2026-08-10
@@ -100,11 +100,11 @@ IDとuser-authored labelはrestoreに必要なprivate content内へ保持する�
 
 ## `observations/<ordinal>.ndjson`
 
-1行1件の`RawPositionSample`をpersisted orderで保存する。
+1行1件の`RawPositionSample`を**session-local persisted ordinal order**で保存する。
 
 保持するもの:
 
-- sample ID
+- sample ID（ExplorationSession scope）
 - raw timestamp
 - source (`gnss / pdr / manual / simulation`)
 - geographicまたはlocal position
@@ -113,8 +113,9 @@ IDとuser-authored labelはrestoreに必要なprivate content内へ保持する�
 - heading
 - speed
 - confidence
+- optional fieldのpresence / absence
 
-invalid coordinateやconfidenceを理由にrejectedになったraw sampleも消さない。
+invalid coordinateやconfidenceを理由にrejectedになったraw sampleも消さない。sample IDは`(explorationId, sampleId)`で識別し、別sessionの同じIDを衝突と扱わない。
 
 ## Exact number encoding
 
@@ -134,25 +135,26 @@ Decoderは`01`、`1.0`、`+1`、`0e0`、前後空白、lowercase infinity等の�
 
 structural metadata（PersonalMap / session start/end等）はfiniteかつ整合していなければbundle buildを拒否する。一方、raw evidence内のinvalid numberは失敗の証拠なのでtoken化して保持する。
 
-### Canonical SQLite fidelity gate
+### Canonical SQLite source
 
-logical formatが特殊値を表現できることと、現行SQLiteがproviderの元値を保持していることは別である。
+PR #108 / Issue #99は、SQLite numeric columnだけでは`NaN`と`-0`を保持できないことを確認した。DB schema v4では次を分離する。
 
-PR #108 / Issue #99のGitHub Node `v22.23.1` / SQLite `3.51.3` probeは次を確認した。
+```text
+raw_payload_json                     normalized numeric columns
+raw-position-sample-exact-v1        finite-only projection
+        │                                      │
+        └── replay / lossless export authority └── query / filtering support
+```
 
-- nullable `REAL`の`NaN`は`NULL`へ変わる
-- `REAL NOT NULL` / `INTEGER NOT NULL`の`NaN`はinsert failureになる
-- `-0`は正の`0`へ変わる
-- `±Infinity`はREALとして往復する
+新規sampleはSQLite numeric affinityより前にexact payloadへserializeし、bundleと同じnumber tokenを使う。`sample_ordinal`はexclusive canonical transaction内でsessionごとに割り当てる。
 
-したがって、現在のnumeric columnsを後からtoken化するだけでは、すでに失われた`NaN`や`-0`を復元できない。Issue #109がoriginal raw payload、normalized projection、明示的sample ordinal、legacy migration、Expo / Android verificationを扱う。
+v3以前のsampleは次のprovenanceを持つ。
 
-このgateが完了するまで、次を区別する。
+- `raw_payload_format = legacy-normalized-v1`
+- `ordinal_provenance = legacy-recorded-at-id-v1`
+- `raw_payload_json = NULL`
 
-1. logical bundleは受け取ったJavaScript numberをexact encodeできる
-2. current canonical SQLite sourceは全original raw number / orderをexact保存しているとは限らない
-
-legacy dataの失われた値や順序を推測して「無損失」と呼ばない。
+legacy rowは通常replayに利用できるが、失われた`NaN`、`-0`、provider受領順を推測しない。legacy rowを含むPersonalMapのlossless bundle exportはfail closedする。
 
 ## `markers/<ordinal>.json`
 
@@ -179,6 +181,21 @@ interface PersonalMapBundleSha256Port {
 
 platform adapterがUTF-8 bytesをSHA-256化し、64文字lowercase hexを返す。builderは形式を検証し、各logical fileのbyte lengthとhashをmanifestへ記録する。
 
+## Repository snapshot
+
+SQLite adapterはbundle inputを一つのconsistent read transaction / snapshotから取得する。
+
+```text
+serialized database queue
+  → map
+  → frameを再生成するexact inputs
+  → ExplorationSession inventory
+  → batched exact raw groups
+  → batched marker groups
+```
+
+snapshot内queryはExpo SQLite native statementの重複利用を避けるため逐次awaitする。tracking callbackが並行しても、session inventoryとraw/markerを異なる時点から混ぜない。
+
 ## Build-time fail-closed rules
 
 - map / exploration IDとnameは空にしない
@@ -190,6 +207,8 @@ platform adapterがUTF-8 bytesをSHA-256化し、64文字lowercase hexを返す�
 - session内sample ID重複なし
 - bundle全体でmarker ID重複なし
 - hasher結果は64文字SHA-256 hex
+- exact SQLite payloadが欠損・改変・identity不一致なら拒否
+- legacy normalized evidenceをlossless inputとして扱わない
 
 raw sample自体を品質filterで捨てない。品質判定はrestore後のreplayに委ねる。
 
@@ -220,6 +239,7 @@ validatorが成功する前にcanonical transactionを開始しない。
 - temporary fileを不要後に削除
 - public Issueや通常チャットへraw bundleを添付しない
 - encryption / device migration threat modelはcontainer実装前に定義する
+- exact raw payloadをlog、analytics、crash messageへ出さない
 
 ## Current implementation state
 
@@ -236,18 +256,30 @@ Implemented in `mapping-engine`:
 - read-only `restore-new` collision preflight
 - unit and architecture-boundary tests
 
+Implemented in `sqlite-adapter` / mobile composition:
+
+- DB v4 exact raw payload and session-local ordinal
+- finite-only normalized projection
+- exploration-scoped sample identity
+- idempotent duplicate / conflicting-payload rejection
+- truthful legacy migration and rollback
+- exact replay from payload
+- lossless export rejection for legacy normalized rows
+- one-snapshot SQLite bundle reader
+- serialized Expo SQLite read transaction composition
+- Android emulator / USB database evidence gate for v4, exact payload, and contiguous ordinal
+- read-only bundle repository composition without S0 UI exposure
+
 Implemented evidence / policy:
 
 - privacy-safe default filenames
 - plaintext external raw backup rejection for normal v1 UX
 - app-private dogfood threat model
 - Node 22 SQLite special-number probe and seven-day JSON artifact
-- explicit storage follow-up #109 for exact raw payload and sample ordinal
+- ADR 0012 and durable architecture/agent guardrails
 
 Not yet implemented:
 
-- SQLite implementation of the repository snapshot contract
-- canonical exact raw payload / ordinal schema and migration (#109)
 - actual UTF-8 SHA-256 runtime adapter
 - app-private directory writer and atomic finalization
 - orphan temporary cleanup / cancellation
@@ -259,10 +291,10 @@ Not yet implemented:
 
 Current sequencing:
 
-1. do not close the SQLite-backed lossless gate until #109 is complete
-2. platform writer work may proceed independently with synthetic/exact logical inputs
-3. start with app-private dogfood only; no share sheet or automatic upload
-4. transactional restore remains gated by successful backup dogfood
-5. current real-device S0 candidate receives no backup UI or runtime change
+1. qualify DB v4 with package, Expo, APK, emulator, persistence, and USB gates
+2. keep the current S0 candidate unchanged until the new runtime artifact is fully qualified
+3. implement app-private writer without share sheet or automatic upload
+4. dogfood geographic / local / multi-session exact backup and restart integrity
+5. transactional restore remains gated by successful backup dogfood
 
 後続実装で本書と実体がずれた場合、同じPRで更新する。
