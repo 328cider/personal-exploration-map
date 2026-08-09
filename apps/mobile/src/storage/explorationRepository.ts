@@ -1,14 +1,12 @@
 import {
   createMapSnapshot,
   replayExploration,
-  type MapMarker,
   type MapSnapshot,
-  type MarkerCategory,
-  type RawPositionSample,
 } from "@exploration-map/mapping-core";
 
 import { getActiveTrackingContext } from "./activeTrackingState";
 import { getDatabase } from "./database";
+import { sqliteMappingRepository } from "./sqliteMappingRepository";
 
 export type TrackingMode = "background" | "foreground" | "demo";
 
@@ -46,38 +44,6 @@ interface ExplorationRow {
 interface SummaryRow extends ExplorationRow {
   readonly raw_sample_count: number;
   readonly marker_count: number;
-}
-
-interface PositionRow {
-  readonly id: string;
-  readonly recorded_at: number;
-  readonly source: RawPositionSample["source"];
-  readonly coordinate_kind: "geographic" | "local";
-  readonly latitude: number | null;
-  readonly longitude: number | null;
-  readonly altitude_meters: number | null;
-  readonly x_meters: number | null;
-  readonly y_meters: number | null;
-  readonly floor_level: number | null;
-  readonly horizontal_accuracy_meters: number | null;
-  readonly heading_degrees: number | null;
-  readonly speed_meters_per_second: number | null;
-  readonly confidence: number;
-}
-
-interface MarkerRow {
-  readonly id: string;
-  readonly recorded_at: number;
-  readonly category: MarkerCategory;
-  readonly label: string;
-  readonly note: string | null;
-  readonly coordinate_kind: "geographic" | "local" | null;
-  readonly latitude: number | null;
-  readonly longitude: number | null;
-  readonly altitude_meters: number | null;
-  readonly x_meters: number | null;
-  readonly y_meters: number | null;
-  readonly floor_level: number | null;
 }
 
 function trackingModeFromRow(row: ExplorationRow): TrackingMode {
@@ -184,12 +150,16 @@ export async function getLiveExplorationStats(
   );
   const latest = await database.getFirstAsync<{
     readonly horizontal_accuracy_meters: number | null;
-    readonly recorded_at: number;
+    readonly recorded_at: number | null;
   }>(
     `SELECT horizontal_accuracy_meters, recorded_at
      FROM position_samples
      WHERE exploration_id = ?
-     ORDER BY recorded_at DESC, id DESC
+     ORDER BY
+       CASE WHEN sample_ordinal IS NULL THEN 1 ELSE 0 END,
+       sample_ordinal DESC,
+       recorded_at DESC,
+       id DESC
      LIMIT 1`,
     explorationId,
   );
@@ -199,96 +169,6 @@ export async function getLiveExplorationStats(
     markerCount: Number(counts?.marker_count ?? 0),
     latestAccuracyMeters: latest?.horizontal_accuracy_meters ?? null,
     latestRecordedAtMs: latest?.recorded_at ?? null,
-  };
-}
-
-function rowToSample(row: PositionRow): RawPositionSample | null {
-  const shared = {
-    id: row.id,
-    recordedAtMs: row.recorded_at,
-    source: row.source,
-    confidence: row.confidence,
-    ...(row.horizontal_accuracy_meters === null
-      ? {}
-      : { horizontalAccuracyMeters: row.horizontal_accuracy_meters }),
-    ...(row.heading_degrees === null
-      ? {}
-      : { headingDegrees: row.heading_degrees }),
-    ...(row.speed_meters_per_second === null
-      ? {}
-      : { speedMetersPerSecond: row.speed_meters_per_second }),
-  };
-
-  if (
-    row.coordinate_kind === "geographic" &&
-    row.latitude !== null &&
-    row.longitude !== null
-  ) {
-    return {
-      ...shared,
-      position: {
-        kind: "geographic",
-        latitude: row.latitude,
-        longitude: row.longitude,
-        ...(row.altitude_meters === null
-          ? {}
-          : { altitudeMeters: row.altitude_meters }),
-      },
-    };
-  }
-
-  if (
-    row.coordinate_kind === "local" &&
-    row.x_meters !== null &&
-    row.y_meters !== null
-  ) {
-    return {
-      ...shared,
-      position: {
-        kind: "local",
-        xMeters: row.x_meters,
-        yMeters: row.y_meters,
-        ...(row.floor_level === null ? {} : { floor: row.floor_level }),
-      },
-    };
-  }
-
-  return null;
-}
-
-function rowToMarker(row: MarkerRow): MapMarker {
-  const sourcePosition =
-    row.coordinate_kind === "geographic" &&
-    row.latitude !== null &&
-    row.longitude !== null
-      ? {
-          kind: "geographic" as const,
-          latitude: row.latitude,
-          longitude: row.longitude,
-          ...(row.altitude_meters === null
-            ? {}
-            : { altitudeMeters: row.altitude_meters }),
-        }
-      : row.coordinate_kind === "local" &&
-          row.x_meters !== null &&
-          row.y_meters !== null
-        ? {
-            kind: "local" as const,
-            xMeters: row.x_meters,
-            yMeters: row.y_meters,
-            ...(row.floor_level === null ? {} : { floor: row.floor_level }),
-          }
-        : undefined;
-
-  return {
-    id: row.id,
-    recordedAtMs: row.recorded_at,
-    category: row.category,
-    label: row.label,
-    ...(row.note === null ? {} : { note: row.note }),
-    ...(sourcePosition === undefined ? {} : { sourcePosition }),
-    ...(row.x_meters === null ? {} : { xMeters: row.x_meters }),
-    ...(row.y_meters === null ? {} : { yMeters: row.y_meters }),
   };
 }
 
@@ -304,35 +184,16 @@ export async function loadExplorationMap(
     return null;
   }
 
-  const positionRows = await database.getAllAsync<PositionRow>(
-    `SELECT * FROM position_samples
-     WHERE exploration_id = ?
-     ORDER BY recorded_at ASC, id ASC`,
+  // Reuse the canonical repository decoder so foreground review and the
+  // mapping engine restore exact raw payloads in the same persisted order.
+  const loaded = await sqliteMappingRepository.loadExploration(
+    exploration.personal_map_id,
     explorationId,
   );
-  const markerRows = await database.getAllAsync<MarkerRow>(
-    `SELECT * FROM markers
-     WHERE exploration_id = ?
-     ORDER BY recorded_at ASC, id ASC`,
-    explorationId,
-  );
-
-  const samples = positionRows
-    .map(rowToSample)
-    .filter((sample): sample is RawPositionSample => sample !== null);
-  const markers = markerRows.map(rowToMarker);
-  const session = replayExploration({
-    id: exploration.id,
-    name: exploration.name,
-    startedAtMs: exploration.started_at,
-    ...(exploration.ended_at === null
-      ? {}
-      : { endedAtMs: exploration.ended_at }),
-    samples,
-    markers,
-    ...(exploration.frame_hint === null
-      ? {}
-      : { localFrameLabel: exploration.frame_hint }),
+  if (loaded === null) {
+    return null;
+  }
+  return createMapSnapshot(replayExploration(loaded.replay), {
+    simplifyToleranceMeters: 1.5,
   });
-  return createMapSnapshot(session, { simplifyToleranceMeters: 1.5 });
 }

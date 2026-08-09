@@ -46,6 +46,14 @@ function wrapExecutor(
 function wrapDatabase(database: SQLite.SQLiteDatabase): AsyncSqliteDatabase {
   return {
     ...wrapExecutor(database),
+    async withReadTransactionAsync(task) {
+      // The serialized outer database owns the queue slot for the full callback,
+      // so no unrelated operation can leak into Expo's non-exclusive read
+      // transaction. Queries inside this callback are awaited sequentially.
+      await database.withTransactionAsync(async () => {
+        await task(wrapExecutor(database));
+      });
+    },
     async withExclusiveTransactionAsync(task) {
       await database.withExclusiveTransactionAsync(async (transaction) => {
         await task(

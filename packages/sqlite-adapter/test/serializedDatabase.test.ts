@@ -69,6 +69,22 @@ class StrictAsyncDatabase implements AsyncSqliteDatabase {
     }
   }
 
+  private transactionExecutor(): AsyncSqliteExecutor {
+    return {
+      execAsync: (source) =>
+        this.transactionOperation(`exec:${source}`, undefined),
+      runAsync: (source, ..._params) =>
+        this.transactionOperation(`run:${source}`, {
+          lastInsertRowId: 1,
+          changes: 1,
+        }),
+      getFirstAsync: <T>(source: string, ..._params: readonly SqliteBindValue[]) =>
+        this.transactionOperation(`first:${source}`, source as T),
+      getAllAsync: <T>(source: string, ..._params: readonly SqliteBindValue[]) =>
+        this.transactionOperation(`all:${source}`, [source as T]),
+    };
+  }
+
   execAsync(source: string): Promise<void> {
     return this.topLevel(`exec:${source}`, async () => undefined);
   }
@@ -99,24 +115,20 @@ class StrictAsyncDatabase implements AsyncSqliteDatabase {
     return this.topLevel(`all:${source}`, async () => [source as T]);
   }
 
+  withReadTransactionAsync(
+    task: (transaction: AsyncSqliteExecutor) => Promise<void>,
+  ): Promise<void> {
+    return this.topLevel("read-transaction", () =>
+      task(this.transactionExecutor()),
+    );
+  }
+
   withExclusiveTransactionAsync(
     task: (transaction: AsyncSqliteExecutor) => Promise<void>,
   ): Promise<void> {
-    const transaction: AsyncSqliteExecutor = {
-      execAsync: (source) =>
-        this.transactionOperation(`exec:${source}`, undefined),
-      runAsync: (source, ..._params) =>
-        this.transactionOperation(`run:${source}`, {
-          lastInsertRowId: 1,
-          changes: 1,
-        }),
-      getFirstAsync: <T>(source: string, ..._params: readonly SqliteBindValue[]) =>
-        this.transactionOperation(`first:${source}`, source as T),
-      getAllAsync: <T>(source: string, ..._params: readonly SqliteBindValue[]) =>
-        this.transactionOperation(`all:${source}`, [source as T]),
-    };
-
-    return this.topLevel("transaction", () => task(transaction));
+    return this.topLevel("transaction", () =>
+      task(this.transactionExecutor()),
+    );
   }
 }
 
@@ -167,6 +179,32 @@ test("a transaction owns the queue slot while its internal operations remain usa
     "end:transaction",
     "start:first:outside",
     "end:first:outside",
+  ]);
+});
+
+test("a consistent read snapshot owns the queue and keeps reads sequential", async () => {
+  const underlying = new StrictAsyncDatabase();
+  const database = serializeAsyncSqliteDatabase(underlying);
+
+  const snapshot = database.withReadTransactionAsync(async (reader) => {
+    await reader.getFirstAsync("map");
+    await reader.getAllAsync("samples");
+  });
+  const outsideWrite = database.runAsync("outside-write");
+
+  await snapshot;
+  assert.equal((await outsideWrite).changes, 1);
+  assert.equal(underlying.maximumTopLevelConcurrency, 1);
+  assert.equal(underlying.maximumTransactionConcurrency, 1);
+  assert.deepEqual(underlying.events, [
+    "start:read-transaction",
+    "tx-start:first:map",
+    "tx-end:first:map",
+    "tx-start:all:samples",
+    "tx-end:all:samples",
+    "end:read-transaction",
+    "start:run:outside-write",
+    "end:run:outside-write",
   ]);
 });
 

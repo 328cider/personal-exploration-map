@@ -42,12 +42,16 @@ function collectSourceFiles(directory) {
 const requiredFiles = [
   "docs/FEATURE_PLACEMENT.md",
   "docs/adr/0006-headless-mapping-engine-and-experience-boundary.md",
+  "docs/adr/0012-preserve-exact-raw-observation-payload-and-order.md",
   "packages/mapping-engine/package.json",
   "packages/mapping-engine/src/index.ts",
   "packages/experience-sdk/package.json",
   "packages/experience-sdk/src/index.ts",
   "packages/sqlite-adapter/package.json",
   "packages/sqlite-adapter/src/index.ts",
+  "packages/sqlite-adapter/src/rawSamplePayload.ts",
+  "packages/sqlite-adapter/src/personalMapBundleReadRepository.ts",
+  "apps/mobile/src/storage/personalMapBundleRepository.ts",
 ];
 for (const file of requiredFiles) {
   requireFile(file);
@@ -73,6 +77,9 @@ const requiredAnchors = new Map([
       "Package responsibilities",
       "Game-initiated corrections",
       "apps/game-*",
+      "exact raw payload",
+      "sample_ordinal",
+      "Bundle read snapshot",
     ],
   ],
   [
@@ -82,6 +89,46 @@ const requiredAnchors = new Map([
       "## Layer ownership",
       "地図への唯一の書き込み窓口",
       "apps/game-*",
+      "## Exact raw storage boundary",
+      "raw-position-sample-exact-v1",
+      "legacy-normalized-v1",
+    ],
+  ],
+  [
+    "packages/sqlite-adapter/src/rawSamplePayload.ts",
+    [
+      "raw-position-sample-exact-v1",
+      "encodePersonalMapBundleNumber",
+      "decodePersonalMapBundleNumber",
+      "encodeSqliteRawSamplePayload",
+      "decodeSqliteRawSamplePayload",
+    ],
+  ],
+  [
+    "packages/sqlite-adapter/src/schema.ts",
+    [
+      "MAPPING_DATABASE_VERSION = 4",
+      "sample_ordinal",
+      "ingest-sequence-v1",
+      "legacy-recorded-at-id-v1",
+      "legacy-normalized-v1",
+    ],
+  ],
+  [
+    "packages/sqlite-adapter/src/personalMapBundleReadRepository.ts",
+    [
+      "createSqlitePersonalMapBundleReadRepository",
+      "withReadTransactionAsync",
+      "rowToExactSample",
+      "sample_ordinal ASC",
+    ],
+  ],
+  [
+    "apps/mobile/src/storage/personalMapBundleRepository.ts",
+    [
+      "createSqlitePersonalMapBundleReadRepository",
+      "getMappingDatabase",
+      "personalMapBundleReadRepository",
     ],
   ],
 ]);

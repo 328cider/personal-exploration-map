@@ -54,6 +54,19 @@ class NodeSqliteDatabase implements AsyncSqliteDatabase {
     return rows.map((row) => ({ ...row }) as T);
   }
 
+  async withReadTransactionAsync(
+    task: (transaction: AsyncSqliteExecutor) => Promise<void>,
+  ): Promise<void> {
+    this.database.exec("BEGIN");
+    try {
+      await task(this);
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
   async withExclusiveTransactionAsync(
     task: (transaction: AsyncSqliteExecutor) => Promise<void>,
   ): Promise<void> {
