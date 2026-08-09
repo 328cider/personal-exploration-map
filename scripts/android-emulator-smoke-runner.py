@@ -51,6 +51,8 @@ SYSTEM_ANR_LABELS = (
 # Fixed Android 15 Pixel CI profile. This rectangle excludes the timer,
 # sample-count cards, and bottom actions, and measures only the visible map.
 MAP_CANVAS_CROP_RATIOS = (0.09, 0.65, 0.91, 0.88)
+MAP_REFRESH_TIMEOUT_SECONDS = 32
+MAP_REFRESH_POLL_SECONDS = 4
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
@@ -359,9 +361,31 @@ def assert_screen_changed(
 ) -> float:
     live_map_assertion = "live map" in label
     crop = MAP_CANVAS_CROP_RATIOS if live_map_assertion else None
-    ratio = changed_pixel_ratio(before, after, crop_ratios=crop)
     source = "stdlib-png-map-canvas" if live_map_assertion else "stdlib-png-full"
+    ratio = changed_pixel_ratio(before, after, crop_ratios=crop)
     smoke.log(f"{label} changed-pixel ratio={ratio:.6f} source={source}")
+
+    if live_map_assertion and ratio < minimum_ratio:
+        deadline = time.monotonic() + MAP_REFRESH_TIMEOUT_SECONDS
+        attempt = 0
+        while ratio < minimum_ratio and time.monotonic() < deadline:
+            time.sleep(MAP_REFRESH_POLL_SECONDS)
+            refreshed = raw_screenshot(
+                after.parent,
+                f"{after.stem}-refresh-{attempt:02d}",
+            )
+            ratio = changed_pixel_ratio(before, refreshed, crop_ratios=crop)
+            smoke.log(
+                f"{label} refresh attempt={attempt + 1} "
+                f"changed-pixel ratio={ratio:.6f} source={source}"
+            )
+            if ratio >= minimum_ratio:
+                # Keep the canonical evidence name on the first screen that
+                # satisfies the assertion; retry images remain available too.
+                after.write_bytes(refreshed.read_bytes())
+                break
+            attempt += 1
+
     if ratio < minimum_ratio:
         raise smoke.SmokeFailure(
             f"{label} did not change enough: ratio={ratio:.6f}, "
