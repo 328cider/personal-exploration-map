@@ -7,6 +7,7 @@ on:
       - "scripts/android-emulator-smoke.py"
       - "scripts/android-emulator-smoke-runner.py"
       - "scripts/android-emulator-system-dialog-runner.py"
+      - "scripts/android-emulator-background-growth-runner.py"
       - "scripts/android-emulator-coverage-modes.py"
       - "scripts/android-emulator-interaction-smoke.py"
       - "scripts/android-emulator-interaction-runner.py"
@@ -15,7 +16,6 @@ on:
 permissions:
   contents: read
   actions: read
-  pull-requests: read
 
 concurrency:
   group: emulator-harness-only-${{ github.ref }}
@@ -27,41 +27,46 @@ env:
 
 jobs:
   classify:
-    name: Classify emulator-only change
+    name: Classify latest PR push
     runs-on: ubuntu-latest
     outputs:
       harness_only: ${{ steps.classify.outputs.harness_only }}
     steps:
-      - name: Require every changed file to be harness-only
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require the latest push to contain only emulator harness files
         id: classify
         env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.event.after }}
         run: |
           set -euo pipefail
           harness_only=true
-          while IFS= read -r path; do
-            case "$path" in
-              .github/workflows/emulator-harness-only.yml|\
-              scripts/android-emulator-smoke.py|\
-              scripts/android-emulator-smoke-runner.py|\
-              scripts/android-emulator-system-dialog-runner.py|\
-              scripts/android-emulator-coverage-modes.py|\
-              scripts/android-emulator-interaction-smoke.py|\
-              scripts/android-emulator-interaction-runner.py|\
-              scripts/run-android-emulator-e2e.sh)
-                echo "Harness-only: $path"
-                ;;
-              *)
-                harness_only=false
-                echo "Exact APK rebuild required by: $path"
-                ;;
-            esac
-          done < <(
-            gh api --paginate \
-              "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" \
-              --jq '.[].filename'
-          )
+          zero_sha="0000000000000000000000000000000000000000"
+          if [ -z "${BEFORE_SHA:-}" ] || [ -z "${AFTER_SHA:-}" ] || [ "$BEFORE_SHA" = "$zero_sha" ]; then
+            harness_only=false
+          else
+            while IFS= read -r path; do
+              case "$path" in
+                .github/workflows/emulator-harness-only.yml|\
+                scripts/android-emulator-smoke.py|\
+                scripts/android-emulator-smoke-runner.py|\
+                scripts/android-emulator-system-dialog-runner.py|\
+                scripts/android-emulator-background-growth-runner.py|\
+                scripts/android-emulator-coverage-modes.py|\
+                scripts/android-emulator-interaction-smoke.py|\
+                scripts/android-emulator-interaction-runner.py|\
+                scripts/run-android-emulator-e2e.sh)
+                  echo "Harness-only: $path"
+                  ;;
+                *)
+                  harness_only=false
+                  echo "Exact APK rebuild required by: $path"
+                  ;;
+              esac
+            done < <(git diff --name-only "$BEFORE_SHA" "$AFTER_SHA")
+          fi
           echo "harness_only=$harness_only" >> "$GITHUB_OUTPUT"
 
   emulator-e2e:
@@ -104,7 +109,6 @@ jobs:
 
           if [ -z "$selected" ]; then
             echo "No non-expired Field-test APK artifact exists for branch $HEAD_BRANCH." >&2
-            echo "Run the full devex-field-test workflow after an app/package change." >&2
             exit 1
           fi
 
