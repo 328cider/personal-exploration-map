@@ -11,17 +11,17 @@ capture specification, and do not ask for a personal walking pilot.**
 This is not a universal claim that pedestrian dead reckoning is impossible. It
 is a bounded conclusion that the currently auditable Android-compatible inputs,
 public evidence, licenses, and tested estimator families do not support a
-product candidate. More tuning on the reused RoNIN development groups would add
+product candidate. More tuning on the reused public sequences would add
 selection bias rather than answer the product question.
 
-The 2026-08-09 evidence-unblocker v2 search added seven candidate lineages and
-eight fresh official records. It found **zero** product- or component-training
-sources, so the learned-model and personal-pilot Stop is unchanged. It did find
-one narrower, non-accuracy path: CC BY 4.0 IPIN Track 3 raw Android records may
-support a separately preregistered classical capture/replay benchmark after
-row-level preflight. Sparse competition checkpoints cannot establish continuous
-heading or distance accuracy, and IPIN 2023/2024 are one byte-identical training
-lineage rather than independent replications.
+The final authorized IPIN 2022 classical replay is now complete. Its fixed B1
+pipeline passed all parser, 50/100 Hz agreement, callback-batch, optional-sensor,
+causality, and injected-gap gates on two User03 development sequences and a
+single untouched run over two User05 validation sequences. Both validation
+sequences omit magnetometer records and still pass with raw accelerometer and
+gyroscope. This establishes a bounded capture/replay plumbing contract, not
+heading or distance accuracy: IPIN supplies no continuous target truth for
+those quantities and no real Android lifecycle evidence.
 
 ## Evidence ledger
 
@@ -30,14 +30,14 @@ lineage rather than independent replications.
 | Synthetic capture/evaluation plumbing | Golden rotation, mirror, false-loop, scale, batching, jitter, and gap cases are detected with truth isolated from inference | **Pass for pipeline QA only** |
 | Public input compatibility | RoNIN exposes useful Android-shaped raw streams; dataset truth and corrected poses stay label/evaluation-only | **Benchmark-compatible, not Android lifecycle evidence** |
 | Product-oriented training source | Initial 8-source gate plus 7 new lineages; 0 combine Android semantics, suitable target truth, leakage-safe grouping, reproducibility, and product/derived-weight rights | **Stop** |
-| IPIN classical capture/replay evidence | Android raw parser semantics and CC BY 4.0 pass; continuous heading/velocity truth and, for 2023/24, user/device grouping fail | **Benchmark-only after preflight; no accuracy/product claim** |
+| IPIN classical capture/replay | Four preregistered sequences, different-user validation, 169,280 eligible rows; 4/4 raw gates and 4/4 replay gates pass; validation rate differences stay below 0.855%/0.808%/0.850% for step/amplitude/derived distance | **Pass for pipeline compatibility only; no accuracy/product claim** |
 | Step detector rate stability | Frozen detector passes untouched 50/100 Hz agreement, but differs from Android Step Counter by 0–57.6% depending on sequence | **Pass for rate invariance; Stop for count accuracy** |
 | Stride/distance | Validation distance-scale error remains about 14.3–15.0%, with unresolved step semantics and placement calibration | **Stop** |
 | Classical body heading | 90 causal PCA candidates; 0 survive; axis ambiguity produces near-180° rate tails | **Stop** |
 | Learned residual heading | 36 candidates / 144 held-out fits; 0 survive; best diagnostic mean MAE 91.388° and severe rate drift | **Stop** |
 | Direct circular recurrent heading | 24 candidates / 96 held-out fits; 0 survive; rate stability improves, but best diagnostic mean MAE 84.303° and turn MAE 65.941° | **Stop** |
 | Released RoNIN heading model | Requires 200 Hz, includes private/non-reproducible training data, and is non-commercial | **Benchmark demo only; do not run or ship** |
-| Android screen-off/OEM/battery/pocket lifecycle | Public data cannot measure it; no accuracy candidate survived to justify a narrowed capture contract | **Not evaluated; deliberately gated** |
+| Android screen-off/OEM/battery/pocket lifecycle | Public data cannot measure it; no accuracy candidate survived to justify a field-test capture contract | **Not evaluated; deliberately gated** |
 | One-person/one-device pilot | Cannot establish generalization or repair missing rights/training evidence | **Not authorized** |
 
 Across the three registered body-heading families, **150 configurations** were
@@ -46,6 +46,11 @@ none passed. The final direct circular family showed that the prior rate
 instability was fixable, while accuracy remained decisively outside the gate.
 That separates a sampling implementation defect from the unresolved semantic
 problem of inferring pedestrian heading from a freely moving phone.
+
+The IPIN run answers a different question. It shows that an Android-shaped
+accelerometer/gyroscope pipeline can preserve rate, batch, missing-magnetometer,
+and gap behavior on four preregistered sequences. It does not add a fourth
+body-heading estimator family or repair the missing truth needed for accuracy.
 
 ## What has and has not been exhausted
 
@@ -60,8 +65,10 @@ Exhausted within this research version:
 - common B0/B1 replay under identical 50/100 Hz inputs;
 - fixed-time step-rate normalization;
 - causal classical horizontal-motion PCA;
-- causal residual-rate ridge; and
-- causal direct circular echo-state prediction.
+- causal residual-rate ridge;
+- causal direct circular echo-state prediction; and
+- the separately preregistered IPIN 2022 classical capture/replay check with a
+  development freeze and one untouched different-user validation run.
 
 Not exhausted in the abstract:
 
@@ -72,8 +79,8 @@ Not exhausted in the abstract:
 - real Android lifecycle behavior after an estimator and capture profile exist.
 
 Those are external-evidence changes, not another free hyperparameter sweep.
-An IPIN classical replay is an allowed capture/evaluation-pipeline check, not an
-exception to this accuracy conclusion.
+The completed IPIN replay closes its authorized pipeline question and does not
+create an exception to the accuracy conclusion.
 
 ## Required unblocker
 
@@ -81,8 +88,8 @@ Resume accuracy work only after at least one of these is documented in a new
 protocol and Issue/ADR handoff:
 
 1. artifact-specific permission covering commercial model training and derived
-   weights for a technically suitable source—RuDaCoP is the first clarification
-   target—or another source that passes the same gate;
+   weights for a technically suitable source—xDR Challenge 2023 is the first
+   clarification target—or another source that passes the same gate;
 2. approval and design for a consented dataset with multiple people, Android
    devices, passive placements, 50/100 Hz raw streams, monotonic timestamps,
    gaps/batching, and independent continuous body-heading or 2D trajectory
@@ -91,11 +98,12 @@ protocol and Issue/ADR handoff:
    and untouched validation plan, not selected from the existing four reused
    development groups.
 
-The highest-priority new clarification is xDR Challenge 2023 because its public
-description pairs Android IMU with dense external position/quaternion truth at
-about 100 Hz. Registration, row acquisition, or training still waits for an
-artifact license, immutable schema/version, grouped identifiers, and explicit
-derived-weight terms. `DATA_RIGHTS_CLARIFICATION_PACK.md` records the questions.
+xDR Challenge 2023 remains the highest-priority clarification because its
+public description pairs Android IMU with dense external position/quaternion
+truth at about 100 Hz. Registration, row acquisition, or training still waits
+for an artifact license, immutable schema/version, grouped identifiers, and
+explicit derived-weight terms. `DATA_RIGHTS_CLARIFICATION_PACK.md` records the
+questions.
 
 A no-walking Android capability probe may later confirm sensor availability,
 FIFO, rate, wake-up mode, and permission behavior. It cannot substitute for an

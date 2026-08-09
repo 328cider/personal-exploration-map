@@ -3,8 +3,7 @@
 The validator intentionally uses only the Python standard library and does not
 import the IPIN adapter, step detector, or estimator.  It verifies the frozen
 development boundary and independently recomputes every aggregate replay gate
-from the persisted output.  Final validation checks are added only after the
-untouched validation run has been opened.
+from the persisted development and untouched-validation outputs.
 """
 
 from __future__ import annotations
@@ -23,6 +22,9 @@ PREREGISTRATION = (
 )
 DEVELOPMENT_FREEZE = (
     ROOT / "datasets" / "manifests" / "ipin-classical-development-v1.json"
+)
+RESULT_MANIFEST = (
+    ROOT / "datasets" / "manifests" / "ipin-classical-result-v1.json"
 )
 PROTOCOL = ROOT / "IPIN_CLASSICAL_PROTOCOL.md"
 EXPECTED_EXPERIMENT = "ipin-2022-classical-replay-v1"
@@ -57,6 +59,59 @@ def relative_difference(left: float, right: float) -> float:
 
 def close(left: float, right: float) -> bool:
     return math.isclose(left, right, rel_tol=0.0, abs_tol=1e-12)
+
+
+def result_sequence_summary(
+    sequence: dict[str, object], *, phase: str
+) -> dict[str, object]:
+    preflight = sequence["preflight"]
+    at_50 = sequence["replay"]["rates"]["50"]
+    at_100 = sequence["replay"]["rates"]["100"]
+    comparison = sequence["replay"]["rate_comparison"]
+    magnetometer = preflight["streams"]["TYPE_MAGNETIC_FIELD"]
+    return {
+        "phase": phase,
+        "id": sequence["id"],
+        "role": sequence["role"],
+        "user": sequence["user"],
+        "trial": sequence["trial"],
+        "source_sha256": sequence["artifact"]["sha256"],
+        "source_bytes": sequence["artifact"]["uncompressed_bytes"],
+        "eligible_rows": preflight["eligible_event_count"],
+        "common_coverage_s": preflight["common_imu_coverage_s"],
+        "accelerometer_median_rate_hz": preflight["streams"][
+            "TYPE_ACCELEROMETER"
+        ]["median_rate_hz"],
+        "gyroscope_median_rate_hz": preflight["streams"]["TYPE_GYROSCOPE"][
+            "median_rate_hz"
+        ],
+        "magnetometer_present": magnetometer["event_count"] > 0,
+        "magnetometer_median_rate_hz": magnetometer["median_rate_hz"],
+        "raw_imu_gaps_over_0_2_s": preflight["streams"]["TYPE_ACCELEROMETER"][
+            "gaps_over_0_2_s"
+        ]
+        + preflight["streams"]["TYPE_GYROSCOPE"]["gaps_over_0_2_s"],
+        "steps_50_hz": at_50["step_detection"]["event_count"],
+        "steps_100_hz": at_100["step_detection"]["event_count"],
+        "derived_distance_50_m": at_50["estimator"]["travelled_distance_m"],
+        "derived_distance_100_m": at_100["estimator"]["travelled_distance_m"],
+        "step_count_relative_difference": comparison[
+            "step_count_relative_difference"
+        ],
+        "amplitude_score_relative_difference": comparison[
+            "amplitude_score_relative_difference"
+        ],
+        "travelled_distance_relative_difference": comparison[
+            "travelled_distance_relative_difference"
+        ],
+        "endpoint_separation_m": comparison["endpoint_separation_m"],
+        "endpoint_separation_over_longer_distance": comparison[
+            "endpoint_separation_over_longer_distance"
+        ],
+        "raw_gate_passed": all(sequence["raw_gate"].values()),
+        "replay_gate_passed": all(sequence["replay"]["gate"].values()),
+        "decision": sequence["decision"],
+    }
 
 
 def validate_output(
@@ -128,9 +183,10 @@ def validate_output(
             preflight["source_size_bytes"] == artifact["uncompressed_bytes"],
             f"parser source size mismatch: {sequence_id}",
         )
+        admitted_record_types = set(preflight["admitted_record_types"])
         require(
-            set(preflight["admitted_record_types"]) == ADMITTED_RECORD_TYPES,
-            f"input allowlist changed: {sequence_id}",
+            {"ACCE", "GYRO"} <= admitted_record_types <= ADMITTED_RECORD_TYPES,
+            f"required stream missing or input allowlist changed: {sequence_id}",
         )
         require(
             preflight["eligible_event_count"]
@@ -291,10 +347,20 @@ def validate_output(
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
+        "--phase", choices=("development", "final"), default="development"
+    )
+    parser.add_argument(
         "--development",
         type=Path,
         default=Path("/outputs/ipin-classical-development-v1.json"),
     )
+    parser.add_argument(
+        "--validation",
+        type=Path,
+        default=Path("/outputs/ipin-classical-validation-v1.json"),
+    )
+    parser.add_argument("--result-manifest", type=Path, default=RESULT_MANIFEST)
+    parser.add_argument("--input-root", type=Path, default=Path("/data/ipin2022"))
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
 
@@ -365,15 +431,294 @@ def main() -> None:
         require(frozen["replay_gate_passed"] is True, f"freeze replay gate weakened: {summary['id']}")
         require(frozen["decision"] == "pipeline-compatible", f"freeze decision changed: {summary['id']}")
 
+    qa_phase = "development-freeze"
+    qa_decision = "validation-authorized-once-without-parameter-change"
+    qa_summaries = summaries
+    validation_output_hash: str | None = None
+    if args.phase == "final":
+        validation = json.loads(args.validation.read_text(encoding="utf-8"))
+        result = json.loads(args.result_manifest.read_text(encoding="utf-8"))
+        validation_summaries = validate_output(
+            payload=validation,
+            preregistration=preregistration,
+            phase="validation",
+            require=require,
+        )
+        validation_output_hash = sha256_file(args.validation)
+        require(
+            {sequence["user"] for sequence in development["sequences"]}
+            .isdisjoint({sequence["user"] for sequence in validation["sequences"]}),
+            "development and validation users overlap",
+        )
+
+        require(result["schema_version"] == 1, "unexpected result schema")
+        require(result["experiment"] == EXPECTED_EXPERIMENT, "wrong result experiment")
+        require(result["status"] == "validation-complete", "validation not complete")
+        require(result["protocol_sha256"] == sha256_file(PROTOCOL), "result protocol hash mismatch")
+        require(result["preregistration_sha256"] == sha256_file(PREREGISTRATION), "result preregistration hash mismatch")
+        require(result["development_freeze_sha256"] == sha256_file(DEVELOPMENT_FREEZE), "result freeze hash mismatch")
+        require(result["development_output_sha256"] == sha256_file(args.development), "result development hash mismatch")
+        require(result["validation_output_sha256"] == validation_output_hash, "result validation hash mismatch")
+        for relative_path, expected_hash in result["implementation_sha256"].items():
+            require(expected_hash != "PENDING", f"pending implementation hash: {relative_path}")
+            require(
+                sha256_file(ROOT / relative_path) == expected_hash,
+                f"final implementation changed: {relative_path}",
+            )
+
+        control = result["execution_control"]
+        require(control["development_committed_before_validation_fetch"] is True, "development commit boundary weakened")
+        require(control["development_commit"] == "ab709181b81a343cdf5feb7ad9fbfea1bbb546e5", "development commit changed")
+        require(control["development_user"] == "03", "wrong development user")
+        require(control["validation_user"] == "05", "wrong validation user")
+        require(control["user_split_disjoint"] is True, "user split marked overlapping")
+        require(control["validation_run_count"] == 1, "validation run count changed")
+        require(control["parameter_search_performed"] is False, "post-validation tuning recorded")
+        for key in ("ground_truth_rows_loaded", "platform_ahrs_rows_used", "model_weights_loaded"):
+            require(control[key] == 0, f"forbidden final input recorded: {key}")
+
+        acquisition = result["acquisition"]
+        require(acquisition["full_archive_size_bytes"] == 444265064, "archive size changed")
+        require(acquisition["full_archive_downloaded"] is False, "full archive was downloaded")
+        expected_acquisition = {
+            "development": {
+                "selected_members": 2,
+                "http_range_requests": 8,
+                "http_bytes_transferred": 4240230,
+                "extracted_uncompressed_bytes": development["source_uncompressed_bytes"],
+            },
+            "validation": {
+                "selected_members": 2,
+                "http_range_requests": 6,
+                "http_bytes_transferred": 2143078,
+                "extracted_uncompressed_bytes": validation["source_uncompressed_bytes"],
+            },
+        }
+        require(
+            acquisition["development"] == expected_acquisition["development"],
+            "development acquisition accounting mismatch",
+        )
+        require(
+            acquisition["validation"] == expected_acquisition["validation"],
+            "validation acquisition accounting mismatch",
+        )
+        require(
+            acquisition["development"]["http_bytes_transferred"]
+            + acquisition["validation"]["http_bytes_transferred"]
+            < acquisition["full_archive_size_bytes"],
+            "range transfer accounting is not bounded below full archive size",
+        )
+
+        expected_input_contract = {
+            "required_records": ["ACCE", "GYRO"],
+            "optional_records": ["MAGN"],
+            "forbidden_records": [
+                "AHRS",
+                "POSI",
+                "GNSS",
+                "IMUL",
+                "IMUX",
+                "BLE4",
+                "WIFI",
+                "RFID",
+            ],
+            "android_mapping": {
+                "ACCE": "Sensor.TYPE_ACCELEROMETER",
+                "GYRO": "Sensor.TYPE_GYROSCOPE",
+                "MAGN": "Sensor.TYPE_MAGNETIC_FIELD",
+            },
+            "rates_hz": [50, 100],
+            "sensor_timestamp_primary": True,
+            "app_timestamp_role": (
+                "callback timing proxy for pipeline diagnostics only; not a "
+                "retained Android callback monotonic clock"
+            ),
+            "magnetometer_used_by_estimator": False,
+            "ground_truth_available_to_estimator": False,
+        }
+        require(result["input_contract"] == expected_input_contract, "final input contract changed")
+
+        expected_result_sequences = [
+            *(
+                result_sequence_summary(sequence, phase="development")
+                for sequence in development["sequences"]
+            ),
+            *(
+                result_sequence_summary(sequence, phase="validation")
+                for sequence in validation["sequences"]
+            ),
+        ]
+        require(result["sequences"] == expected_result_sequences, "result sequence summaries mismatch")
+        all_sequences = [*development["sequences"], *validation["sequences"]]
+        all_comparisons = [
+            sequence["replay"]["rate_comparison"] for sequence in all_sequences
+        ]
+        validation_comparisons = [
+            sequence["replay"]["rate_comparison"]
+            for sequence in validation["sequences"]
+        ]
+        future_sample_violations = sum(
+            sequence["replay"]["rates"][rate][section][
+                "future_sample_violations"
+            ]
+            for sequence in all_sequences
+            for rate in ("50", "100")
+            for section in ("step_detection", "estimator", "gap_stress")
+        )
+        expected_aggregate = {
+            "source_sequence_count": len(all_sequences),
+            "development_sequence_count": len(development["sequences"]),
+            "validation_sequence_count": len(validation["sequences"]),
+            "source_uncompressed_bytes": development["source_uncompressed_bytes"]
+            + validation["source_uncompressed_bytes"],
+            "eligible_sensor_rows_loaded": development[
+                "eligible_sensor_rows_loaded"
+            ]
+            + validation["eligible_sensor_rows_loaded"],
+            "development_eligible_sensor_rows": development[
+                "eligible_sensor_rows_loaded"
+            ],
+            "validation_eligible_sensor_rows": validation[
+                "eligible_sensor_rows_loaded"
+            ],
+            "raw_gate_pass_count": sum(
+                all(sequence["raw_gate"].values()) for sequence in all_sequences
+            ),
+            "replay_gate_pass_count": sum(
+                all(sequence["replay"]["gate"].values())
+                for sequence in all_sequences
+            ),
+            "rate_replays_run": len(all_sequences) * 2,
+            "callback_batch_invariant_count": sum(
+                sequence["replay"]["rates"][rate][
+                    "callback_batch_output_exact"
+                ]
+                for sequence in all_sequences
+                for rate in ("50", "100")
+            ),
+            "magnetometer_removal_invariant_count": sum(
+                sequence["replay"]["rates"][rate][
+                    "magnetometer_removal_output_exact"
+                ]
+                for sequence in all_sequences
+                for rate in ("50", "100")
+            ),
+            "gap_stress_pass_count": sum(
+                sequence["replay"]["rates"][rate]["gap_stress"][
+                    "additional_gap_registered"
+                ]
+                and sequence["replay"]["rates"][rate]["gap_stress"][
+                    "uncertainty_not_lower"
+                ]
+                and sequence["replay"]["rates"][rate]["gap_stress"][
+                    "future_sample_violations"
+                ]
+                == 0
+                and sequence["replay"]["rates"][rate]["gap_stress"][
+                    "nonfinite_value_count"
+                ]
+                == 0
+                for sequence in all_sequences
+                for rate in ("50", "100")
+            ),
+            "future_sample_violations": future_sample_violations,
+            "validation_sequences_without_magnetometer": sum(
+                sequence["preflight"]["streams"]["TYPE_MAGNETIC_FIELD"][
+                    "event_count"
+                ]
+                == 0
+                for sequence in validation["sequences"]
+            ),
+            "maximum_all_sequence_step_count_relative_difference": max(
+                item["step_count_relative_difference"] for item in all_comparisons
+            ),
+            "maximum_all_sequence_amplitude_relative_difference": max(
+                item["amplitude_score_relative_difference"]
+                for item in all_comparisons
+            ),
+            "maximum_all_sequence_distance_relative_difference": max(
+                item["travelled_distance_relative_difference"]
+                for item in all_comparisons
+            ),
+            "maximum_all_sequence_endpoint_separation_over_longer_distance": max(
+                item["endpoint_separation_over_longer_distance"]
+                for item in all_comparisons
+            ),
+            "maximum_validation_step_count_relative_difference": max(
+                item["step_count_relative_difference"]
+                for item in validation_comparisons
+            ),
+            "maximum_validation_amplitude_relative_difference": max(
+                item["amplitude_score_relative_difference"]
+                for item in validation_comparisons
+            ),
+            "maximum_validation_distance_relative_difference": max(
+                item["travelled_distance_relative_difference"]
+                for item in validation_comparisons
+            ),
+            "maximum_validation_endpoint_separation_over_longer_distance": max(
+                item["endpoint_separation_over_longer_distance"]
+                for item in validation_comparisons
+            ),
+        }
+        require(result["aggregate"] == expected_aggregate, "aggregate summary mismatch")
+
+        result_by_id = {sequence["id"]: sequence for sequence in result["sequences"]}
+        for sequence in validation["sequences"]:
+            sequence_id = sequence["id"]
+            directory = args.input_root / sequence_id
+            artifact_manifest = json.loads(
+                (directory / "artifact_manifest.json").read_text(encoding="utf-8")
+            )
+            require(artifact_manifest["phase"] == "validation", f"wrong fetch phase: {sequence_id}")
+            require(artifact_manifest["license"] == "CC-BY-4.0", f"wrong artifact license: {sequence_id}")
+            require(artifact_manifest["protocol_sha256"] == result["protocol_sha256"], f"artifact protocol mismatch: {sequence_id}")
+            require(artifact_manifest["development_freeze_sha256"] == result["development_freeze_sha256"], f"artifact freeze mismatch: {sequence_id}")
+            require(artifact_manifest["archive"]["full_archive_downloaded"] is False, f"full archive recorded: {sequence_id}")
+            require(artifact_manifest["archive"]["size_bytes"] == acquisition["full_archive_size_bytes"], f"archive size mismatch: {sequence_id}")
+            member = artifact_manifest["member"]
+            require(member["sha256"] == result_by_id[sequence_id]["source_sha256"], f"artifact source hash mismatch: {sequence_id}")
+            raw_path = directory / member["output_name"]
+            require(raw_path.stat().st_size == member["uncompressed_bytes"], f"raw source size mismatch: {sequence_id}")
+            require(sha256_file(raw_path) == member["sha256"], f"raw source changed: {sequence_id}")
+
+        expected_decision = {
+            "pipeline_compatibility": "pass-for-four-preregistered-IPIN-sequences",
+            "capture_contract_implication": (
+                "raw accelerometer and gyroscope at 50 or 100 Hz with sensor "
+                "timestamps; magnetometer remains optional"
+            ),
+            "heading_distance_accuracy": "not-evaluated-no-continuous-target-truth",
+            "android_lifecycle": "not-evaluated-app-timestamp-is-proxy-only",
+            "product_adoption": "stop",
+            "personal_pilot": "stop",
+            "next_action": (
+                "wait-for-rights-compatible-continuous-truth-or-approved-"
+                "multi-user-capture"
+            ),
+        }
+        require(result["decision"] == expected_decision, "final decision boundary changed")
+        require(result["accuracy_claim_allowed"] is False, "final accuracy claim enabled")
+        require(result["product_adoption_allowed"] is False, "final product adoption enabled")
+        require(result["personal_pilot_allowed"] is False, "final personal pilot enabled")
+        notebook = ROOT / result["notebook"]["path"]
+        require(result["notebook"]["sha256"] != "PENDING", "notebook hash pending")
+        require(sha256_file(notebook) == result["notebook"]["sha256"], "notebook hash mismatch")
+
+        qa_phase = "final-validation"
+        qa_decision = "pipeline-compatible-only; accuracy-product-and-pilot-stay-stop"
+        qa_summaries = [*summaries, *validation_summaries]
+
     qa = {
         "schema_version": 1,
         "experiment": EXPECTED_EXPERIMENT,
-        "phase": "development-freeze",
+        "phase": qa_phase,
         "qa_pass": True,
         "assertion_count": assertion_count,
         "development_output_sha256": sha256_file(args.development),
-        "sequence_summaries": summaries,
-        "decision": "validation-authorized-once-without-parameter-change",
+        "validation_output_sha256": validation_output_hash,
+        "sequence_summaries": qa_summaries,
+        "decision": qa_decision,
         "accuracy_claim_allowed": False,
         "product_adoption_allowed": False,
         "personal_pilot_allowed": False,
