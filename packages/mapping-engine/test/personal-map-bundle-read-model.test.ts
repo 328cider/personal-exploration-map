@@ -12,6 +12,7 @@ import {
   type PersonalMapBundleMarkerGroup,
   type PersonalMapBundleRawSampleGroup,
   type PersonalMapBundleReadRepositoryPort,
+  type PersonalMapBundleReadSnapshotPort,
   type StoredExploration,
   type StoredPersonalMap,
 } from "../src/index.ts";
@@ -63,20 +64,28 @@ function marker(id: string, recordedAtMs: number): MapMarker {
   };
 }
 
-class Repository implements PersonalMapBundleReadRepositoryPort {
+class Repository
+  implements
+    PersonalMapBundleReadRepositoryPort,
+    PersonalMapBundleReadSnapshotPort
+{
   readonly calls: {
+    consistentReads: number;
     mapIds: string[];
     frameIds: string[];
     explorationMapIds: string[];
     rawBatches: string[][];
     markerBatches: string[][];
   } = {
+    consistentReads: 0,
     mapIds: [],
     frameIds: [],
     explorationMapIds: [],
     rawBatches: [],
     markerBatches: [],
   };
+
+  private snapshotActive = false;
 
   constructor(
     readonly values: {
@@ -88,17 +97,47 @@ class Repository implements PersonalMapBundleReadRepositoryPort {
     } = {},
   ) {}
 
+  get isSnapshotActive(): boolean {
+    return this.snapshotActive;
+  }
+
+  async withConsistentRead<Result>(
+    operation: (
+      reader: PersonalMapBundleReadSnapshotPort,
+    ) => Promise<Result>,
+  ): Promise<Result> {
+    assert.equal(this.snapshotActive, false, "nested read snapshot");
+    this.calls.consistentReads += 1;
+    this.snapshotActive = true;
+    try {
+      return await operation(this);
+    } finally {
+      this.snapshotActive = false;
+    }
+  }
+
+  private assertSnapshot(): void {
+    assert.equal(
+      this.snapshotActive,
+      true,
+      "bundle evidence query escaped the consistent read callback",
+    );
+  }
+
   async loadPersonalMapRecord(personalMapId: string) {
+    this.assertSnapshot();
     this.calls.mapIds.push(personalMapId);
     return this.values.map === undefined ? MAP : this.values.map;
   }
 
   async loadFrameAtExport(personalMapId: string) {
+    this.assertSnapshot();
     this.calls.frameIds.push(personalMapId);
     return this.values.frame ?? FRAME;
   }
 
   async listExplorationRecords(personalMapId: string) {
+    this.assertSnapshot();
     this.calls.explorationMapIds.push(personalMapId);
     return this.values.explorations ?? [
       exploration("session-b", 2_000),
@@ -107,6 +146,7 @@ class Repository implements PersonalMapBundleReadRepositoryPort {
   }
 
   async loadRawSampleGroups(explorationIds: readonly string[]) {
+    this.assertSnapshot();
     this.calls.rawBatches.push([...explorationIds]);
     return this.values.rawGroups ?? [
       { explorationId: "session-b", samples: [sample("sample-b", 2_100)] },
@@ -115,6 +155,7 @@ class Repository implements PersonalMapBundleReadRepositoryPort {
   }
 
   async loadMarkerGroups(explorationIds: readonly string[]) {
+    this.assertSnapshot();
     this.calls.markerBatches.push([...explorationIds]);
     return this.values.markerGroups ?? [
       { explorationId: "session-b", markers: [] },
@@ -134,7 +175,7 @@ function expectCode(
   });
 }
 
-test("canonical evidence is loaded in batched read-only queries and ordered deterministically", async () => {
+test("canonical evidence is loaded in one consistent snapshot and batched queries", async () => {
   const repository = new Repository();
   const result = await loadPersonalMapBundleExportInput(repository, {
     personalMapId: MAP.id,
@@ -156,7 +197,9 @@ test("canonical evidence is loaded in batched read-only queries and ordered dete
     [["marker-a"], []],
   );
   assert.deepEqual(result.producer, { appVersion: "0.1.0" });
+  assert.equal(repository.isSnapshotActive, false);
   assert.deepEqual(repository.calls, {
+    consistentReads: 1,
     mapIds: [MAP.id],
     frameIds: [MAP.id],
     explorationMapIds: [MAP.id],
@@ -165,13 +208,15 @@ test("canonical evidence is loaded in batched read-only queries and ordered dete
   });
 });
 
-test("missing PersonalMap stops before frame or evidence queries", async () => {
+test("missing PersonalMap stops remaining queries and releases the snapshot", async () => {
   const repository = new Repository({ map: null });
   await expectCode(
     loadPersonalMapBundleExportInput(repository, { personalMapId: MAP.id }),
     "personal-map-not-found",
   );
+  assert.equal(repository.isSnapshotActive, false);
   assert.deepEqual(repository.calls, {
+    consistentReads: 1,
     mapIds: [MAP.id],
     frameIds: [],
     explorationMapIds: [],
@@ -241,7 +286,7 @@ test("evidence groups must be exactly one per requested ExplorationSession", asy
   );
 });
 
-test("a map with no explorations still receives empty batch queries", async () => {
+test("a map with no explorations still receives explicit empty batch queries", async () => {
   const repository = new Repository({
     explorations: [],
     rawGroups: [],
