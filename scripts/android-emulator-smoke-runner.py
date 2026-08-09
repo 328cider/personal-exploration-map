@@ -29,6 +29,7 @@ SPEC.loader.exec_module(smoke)
 _base_wait_for_node = smoke.wait_for_node
 _base_tap_text = smoke.tap_text
 _base_screenshot = smoke.screenshot
+_base_changed_pixel_ratio = smoke.changed_pixel_ratio
 
 STATIC_LABEL_ALIASES = {
     "POCKET-FIRST RECORDING": "探索を邪魔しないために",
@@ -145,6 +146,47 @@ def screenshot(artifacts: Path, name: str) -> Path:
     return _base_screenshot(artifacts, name)
 
 
+def changed_pixel_ratio(first: Path, second: Path) -> float:
+    """Parse ImageMagick AE output as an absolute changed-pixel count.
+
+    ImageMagick 7 commonly prints both the absolute count and a normalized
+    value, for example ``73788 (0.0355845)``. The legacy harness selected the
+    final parenthesized token, failed to convert it, and silently fell back to
+    average screen colour. That understated a visibly grown map by almost an
+    order of magnitude.
+    """
+
+    available = smoke.run(
+        ["bash", "-lc", "command -v compare >/dev/null"],
+        check=False,
+    ).returncode == 0
+    if available:
+        metric = smoke.run(
+            [
+                "compare",
+                "-metric",
+                "AE",
+                str(first),
+                str(second),
+                "null:",
+            ],
+            check=False,
+        )
+        output = f"{metric.stdout}\n{metric.stderr}".strip()
+        count_match = re.match(r"\s*([0-9]+(?:\.[0-9]+)?)", output)
+        if count_match is not None:
+            changed = float(count_match.group(1))
+            total_text = smoke.run(
+                ["identify", "-format", "%[fx:w*h]", str(first)],
+                check=True,
+            ).stdout.strip()
+            total = float(total_text)
+            if total > 0:
+                return changed / total
+
+    return _base_changed_pixel_ratio(first, second)
+
+
 def tap_at_ratio(x_ratio: float, y_ratio: float) -> None:
     width, height = smoke.parse_screen_size()
     smoke.adb_shell(
@@ -171,6 +213,7 @@ def tap_text(
 
 smoke.wait_for_node = wait_for_node
 smoke.screenshot = screenshot
+smoke.changed_pixel_ratio = changed_pixel_ratio
 smoke.tap_text = tap_text
 
 if __name__ == "__main__":
