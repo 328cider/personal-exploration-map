@@ -544,6 +544,7 @@ class CaptureQualityTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn('"c0-screen-on-live50"', activity)
         self.assertIn('"stationary-device-probe"', activity)
+        self.assertIn('placement.setSelection(PLACEMENTS.indexOf("hand"))', activity)
         self.assertNotIn('textField(content, "Frozen protocol cell ID", "c1-', activity)
         self.assertIn("Start blocked: required IMU6 capability is unavailable", activity)
         self.assertIn("requiredStorageHeadroomBytes", activity)

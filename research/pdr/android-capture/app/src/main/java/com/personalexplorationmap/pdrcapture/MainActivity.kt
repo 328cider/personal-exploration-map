@@ -127,12 +127,17 @@ class MainActivity : Activity() {
         })
         capability = TextView(this).also { content.addView(it) }
         status = TextView(this).apply { setPadding(0, 12, 0, 12) }.also { content.addView(it) }
+        content.addView(TextView(this).apply {
+            text = "Prepared default: c0-screen-on-live50 — stationary, hand, 120 seconds. Collection still requires an authorized device plan."
+            setPadding(0, 4, 0, 8)
+        })
 
         participant = textField(content, "Pseudonymous participant code", "P-PILOT-01")
         route = textField(content, "Route / protocol ID", "stationary-device-probe")
         cell = textField(content, "Frozen protocol cell ID", "c0-screen-on-live50")
         duration = textField(content, "Planned duration (seconds)", "120")
         placement = spinner(content, "Placement", PLACEMENTS)
+        placement.setSelection(PLACEMENTS.indexOf("hand"))
         content.addView(TextView(this).apply {
             text = "Split: development (v1 cannot create tuning or sealed-validation runs without a future frozen-plan import)"
             setPadding(0, 12, 0, 2)

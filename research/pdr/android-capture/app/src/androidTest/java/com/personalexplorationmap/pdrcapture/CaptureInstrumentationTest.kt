@@ -37,6 +37,7 @@ class CaptureInstrumentationTest {
         assertTrue(visibleText.contains("IMU6 capability: available"))
         assertTrue(visibleText.contains("c0-screen-on-live50"))
         assertTrue(visibleText.contains("stationary-device-probe"))
+        assertTrue(visibleText.contains("Prepared default: c0-screen-on-live50 — stationary, hand, 120 seconds"))
         assertFalse(visibleText.contains("c1-front-right-screen-off-live100"))
         activity.finish()
     }
