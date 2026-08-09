@@ -566,6 +566,15 @@ class CaptureQualityTests(unittest.TestCase):
         self.assertTrue(marginal_gate["accepted"])
         self.assertFalse(marginal_gate["product_usable"])
 
+        quality["usable"] = True
+        quality["outcome"] = "usable"
+        quality["findings"] = []
+        ordinary_pass_gate = evaluate_emulator_plumbing(quality)
+        self.assertTrue(ordinary_pass_gate["accepted"])
+        self.assertFalse(ordinary_pass_gate["product_usable"])
+        self.assertTrue(ordinary_pass_gate["ordinary_validator_usable"])
+        self.assertEqual(ordinary_pass_gate["ordinary_validator_outcome"], "usable")
+
     def test_emulator_plumbing_gate_rejects_non_timing_failure_and_long_gap(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             quality = validate_capture_bundle(

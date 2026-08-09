@@ -85,11 +85,13 @@ def evaluate_emulator_plumbing(report: Mapping[str, Any]) -> dict[str, Any]:
         if int(sensor.get("gaps_ge_1000ms", 1)) != 0:
             failures.append(f"{sensor_type} must have no gap of one second or more")
 
-    product_usable = report.get("usable") is True
+    ordinary_validator_usable = report.get("usable") is True
     return {
         "schema_version": "pdr-emulator-plumbing-gate/v1",
         "accepted": not failures,
-        "product_usable": product_usable,
+        "product_usable": False,
+        "ordinary_validator_usable": ordinary_validator_usable,
+        "ordinary_validator_outcome": str(report.get("outcome", "unknown")),
         "counts_toward_capture_kpis": False,
         "physical_sensor_evidence": False,
         "allowed_virtual_sensor_findings": sorted(ALLOWED_VIRTUAL_SENSOR_FINDINGS),
