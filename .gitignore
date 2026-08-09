@@ -24,6 +24,10 @@ apps/mobile/ios/build/
 !.env.example
 *.keystore
 
+# Repo-local tools and sensitive device bundles
+.local/
+artifacts/device-bundles/
+
 # Editors and OS
 .DS_Store
 Thumbs.db

@@ -23,7 +23,10 @@ export type TrackingDiagnosticEventKind =
   | "app.state.changed"
   | "app.session.recovered"
   | "marker.input.completed"
-  | "marker.input.cancelled";
+  | "marker.input.cancelled"
+  | "environment.session.started"
+  | "environment.session.ended"
+  | "environment.snapshot.failed";
 
 /**
  * Non-canonical operational evidence used to evaluate passive tracking.
@@ -89,8 +92,50 @@ export interface MarkerInputSummary extends NumericDistributionSummary {
   readonly cancelledCount: number;
 }
 
+export interface TrackingEnvironmentSnapshot {
+  readonly capturedAtMs: number | null;
+  readonly elapsedRealtimeMs: number | null;
+  readonly manufacturer: string | null;
+  readonly brand: string | null;
+  readonly model: string | null;
+  readonly device: string | null;
+  readonly product: string | null;
+  readonly androidVersion: string | null;
+  readonly sdkInt: number | null;
+  readonly buildId: string | null;
+  readonly buildFingerprintHash: string | null;
+  readonly packageName: string | null;
+  readonly appVersionName: string | null;
+  readonly appVersionCode: number | null;
+  readonly isDebuggable: boolean | null;
+  readonly timezoneId: string | null;
+  readonly timezoneOffsetMinutes: number | null;
+  readonly localeTag: string | null;
+  readonly batteryLevelPercent: number | null;
+  readonly batteryStatus: string | null;
+  readonly batteryPlugged: string | null;
+  readonly batteryTemperatureCelsius: number | null;
+  readonly batteryVoltageMillivolts: number | null;
+  readonly batteryCurrentMicroamps: number | null;
+  readonly batteryChargeCounterMicroampHours: number | null;
+  readonly powerSaveMode: boolean | null;
+  readonly batteryOptimizationEnabled: boolean | null;
+  readonly thermalStatus: number | null;
+  readonly fineLocationGranted: boolean | null;
+  readonly coarseLocationGranted: boolean | null;
+  readonly backgroundLocationGranted: boolean | null;
+  readonly notificationGranted: boolean | null;
+}
+
+export interface TrackingEnvironmentSummary {
+  readonly start: TrackingEnvironmentSnapshot | null;
+  readonly end: TrackingEnvironmentSnapshot | null;
+  readonly batteryConsumedPercentagePoints: number | null;
+  readonly snapshotElapsedDurationMs: number | null;
+}
+
 export interface ExplorationTrackingDiagnostics {
-  readonly version: 1;
+  readonly version: 2;
   readonly explorationId: string;
   readonly providerId: string;
   readonly startedAtMs: number;
@@ -105,6 +150,7 @@ export interface ExplorationTrackingDiagnostics {
   readonly horizontalAccuracyMeters: NumericDistributionSummary;
   readonly callbacks: CallbackDiagnosticSummary;
   readonly markerInputMs: MarkerInputSummary;
+  readonly environment: TrackingEnvironmentSummary;
   readonly lastError: TrackingDiagnosticError | null;
   readonly lifecycle: readonly TrackingLifecycleTransition[];
 }
@@ -125,11 +171,22 @@ function finiteNonNegative(value: unknown): number | null {
     : null;
 }
 
+function finiteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 function payloadNumber(
   event: TrackingDiagnosticEvent,
   key: string,
 ): number {
   return finiteNonNegative(event.payload?.[key]) ?? 0;
+}
+
+function payloadNullableNumber(
+  event: TrackingDiagnosticEvent,
+  key: string,
+): number | null {
+  return finiteNumber(event.payload?.[key]);
 }
 
 function payloadString(
@@ -138,6 +195,14 @@ function payloadString(
 ): string | null {
   const value = event.payload?.[key];
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function payloadBoolean(
+  event: TrackingDiagnosticEvent,
+  key: string,
+): boolean | null {
+  const value = event.payload?.[key];
+  return typeof value === "boolean" ? value : null;
 }
 
 function nearestRank(
@@ -258,6 +323,101 @@ function createMarkerInputSummary(
   };
 }
 
+function createEnvironmentSnapshot(
+  event: TrackingDiagnosticEvent,
+): TrackingEnvironmentSnapshot {
+  return {
+    capturedAtMs: payloadNullableNumber(event, "capturedAtMs"),
+    elapsedRealtimeMs: payloadNullableNumber(event, "elapsedRealtimeMs"),
+    manufacturer: payloadString(event, "manufacturer"),
+    brand: payloadString(event, "brand"),
+    model: payloadString(event, "model"),
+    device: payloadString(event, "device"),
+    product: payloadString(event, "product"),
+    androidVersion: payloadString(event, "androidVersion"),
+    sdkInt: payloadNullableNumber(event, "sdkInt"),
+    buildId: payloadString(event, "buildId"),
+    buildFingerprintHash: payloadString(event, "buildFingerprintHash"),
+    packageName: payloadString(event, "packageName"),
+    appVersionName: payloadString(event, "appVersionName"),
+    appVersionCode: payloadNullableNumber(event, "appVersionCode"),
+    isDebuggable: payloadBoolean(event, "isDebuggable"),
+    timezoneId: payloadString(event, "timezoneId"),
+    timezoneOffsetMinutes: payloadNullableNumber(
+      event,
+      "timezoneOffsetMinutes",
+    ),
+    localeTag: payloadString(event, "localeTag"),
+    batteryLevelPercent: payloadNullableNumber(event, "batteryLevelPercent"),
+    batteryStatus: payloadString(event, "batteryStatus"),
+    batteryPlugged: payloadString(event, "batteryPlugged"),
+    batteryTemperatureCelsius: payloadNullableNumber(
+      event,
+      "batteryTemperatureCelsius",
+    ),
+    batteryVoltageMillivolts: payloadNullableNumber(
+      event,
+      "batteryVoltageMillivolts",
+    ),
+    batteryCurrentMicroamps: payloadNullableNumber(
+      event,
+      "batteryCurrentMicroamps",
+    ),
+    batteryChargeCounterMicroampHours: payloadNullableNumber(
+      event,
+      "batteryChargeCounterMicroampHours",
+    ),
+    powerSaveMode: payloadBoolean(event, "powerSaveMode"),
+    batteryOptimizationEnabled: payloadBoolean(
+      event,
+      "batteryOptimizationEnabled",
+    ),
+    thermalStatus: payloadNullableNumber(event, "thermalStatus"),
+    fineLocationGranted: payloadBoolean(event, "fineLocationGranted"),
+    coarseLocationGranted: payloadBoolean(event, "coarseLocationGranted"),
+    backgroundLocationGranted: payloadBoolean(
+      event,
+      "backgroundLocationGranted",
+    ),
+    notificationGranted: payloadBoolean(event, "notificationGranted"),
+  };
+}
+
+function createEnvironmentSummary(
+  events: readonly TrackingDiagnosticEvent[],
+): TrackingEnvironmentSummary {
+  const startEvent = events.find(
+    (event) => event.kind === "environment.session.started",
+  );
+  const endEvent = events
+    .filter((event) => event.kind === "environment.session.ended")
+    .at(-1);
+  const start = startEvent === undefined ? null : createEnvironmentSnapshot(startEvent);
+  const end = endEvent === undefined ? null : createEnvironmentSnapshot(endEvent);
+
+  const batteryConsumedPercentagePoints =
+    start?.batteryLevelPercent !== null &&
+    start?.batteryLevelPercent !== undefined &&
+    end?.batteryLevelPercent !== null &&
+    end?.batteryLevelPercent !== undefined
+      ? start.batteryLevelPercent - end.batteryLevelPercent
+      : null;
+  const snapshotElapsedDurationMs =
+    start?.elapsedRealtimeMs !== null &&
+    start?.elapsedRealtimeMs !== undefined &&
+    end?.elapsedRealtimeMs !== null &&
+    end?.elapsedRealtimeMs !== undefined
+      ? Math.max(0, end.elapsedRealtimeMs - start.elapsedRealtimeMs)
+      : null;
+
+  return {
+    start,
+    end,
+    batteryConsumedPercentagePoints,
+    snapshotElapsedDurationMs,
+  };
+}
+
 function createLifecycle(
   events: readonly TrackingDiagnosticEvent[],
 ): readonly TrackingLifecycleTransition[] {
@@ -270,6 +430,9 @@ function createLifecycle(
     "provider.stop.failed",
     "app.state.changed",
     "app.session.recovered",
+    "environment.session.started",
+    "environment.session.ended",
+    "environment.snapshot.failed",
   ]);
 
   return events.flatMap((event) => {
@@ -282,6 +445,7 @@ function createLifecycle(
         occurredAtMs: event.occurredAtMs,
         detail:
           payloadString(event, "state") ??
+          payloadString(event, "phase") ??
           payloadString(event, "message") ??
           payloadString(event, "reason"),
       },
@@ -296,7 +460,8 @@ function findLastError(
     (event) =>
       event.kind === "provider.start.failed" ||
       event.kind === "provider.stop.failed" ||
-      event.kind === "callback.failed",
+      event.kind === "callback.failed" ||
+      event.kind === "environment.snapshot.failed",
   );
   const last = failures.at(-1);
   if (last === undefined) {
@@ -341,7 +506,7 @@ export function createExplorationTrackingDiagnostics(input: {
     endedAtMs ?? samples.at(-1)?.recordedAtMs ?? input.exploration.startedAtMs;
 
   return {
-    version: 1,
+    version: 2,
     explorationId: input.exploration.id,
     providerId: input.providerId,
     startedAtMs: input.exploration.startedAtMs,
@@ -360,6 +525,7 @@ export function createExplorationTrackingDiagnostics(input: {
       summarizeNumericDistribution(horizontalAccuracyMeters),
     callbacks: createCallbackSummary(events),
     markerInputMs: createMarkerInputSummary(events),
+    environment: createEnvironmentSummary(events),
     lastError: findLastError(events),
     lifecycle: createLifecycle(events),
   };

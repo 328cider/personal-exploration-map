@@ -74,6 +74,9 @@ const requiredAnchors = new Map([
       "createSqliteTrackingDiagnosticsStore",
       "recordTrackingDiagnosticBestEffort",
       "createExplorationTrackingDiagnostics",
+      "captureFieldTestEnvironmentSnapshot",
+      "writeFieldTestTextFile",
+      "no_coordinates_no_map_names",
     ],
   ],
   [
@@ -85,7 +88,7 @@ const requiredAnchors = new Map([
       "座標なし集計を共有",
       "Share.share",
       "formatTrackingDiagnosticsSummary",
-      "aggregate_only_no_coordinates",
+      "no_coordinates_no_map_names",
     ],
   ],
   [
