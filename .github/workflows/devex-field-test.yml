@@ -12,6 +12,7 @@ on:
       - "scripts/prepare-field-test-sources.mjs"
       - "scripts/enable-field-test-debuggable.mjs"
       - "scripts/pull-field-test-bundle.ps1"
+      - "scripts/verify-field-test-usb-export.sh"
       - "scripts/check-tracking-stop-policy.mjs"
       - "scripts/android-emulator-smoke.py"
       - "scripts/android-emulator-smoke-runner.py"
