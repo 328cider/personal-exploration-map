@@ -2,7 +2,7 @@
 
 - Audit date: 2026-08-09
 - Scope: official papers, official project pages, and revision-pinned official code
-- Raw rows downloaded: none
+- Raw rows downloaded: one RoNIN sequence, kept only under the ignored local data path
 - Current result: no public dataset/model is product-compatible yet
 
 ## Answer first
@@ -15,6 +15,14 @@ ground-truth-derived error and may be a dataset EKF output. Test mode forces the
 Android Game Rotation Vector. The released model therefore remains
 **benchmark-only**, while a newly trained, explicitly Android-compatible subset
 remains a future candidate.
+
+The first artifact gate is now executed on unseen-subject sequence `a054_1`.
+Only the raw IMU-device accelerometer, gyroscope, Game Rotation Vector, and raw
+system timestamps enter the estimator; Tango, synchronized time, calibration
+boundaries, and cross-device offsets remain evaluation-only. All current B1
+configurations fail catastrophically on distance and heading quality, while turn
+error is also high. They remain diagnostic baselines. See
+`PUBLIC_SEQUENCE_REPLAY.md`.
 
 RIDI has Android sensor origins and an MIT code repository, but the published
 pipeline synchronizes to 200 Hz and uses linear acceleration, gravity,
@@ -41,6 +49,7 @@ Primary references:
 
 - [RoNIN paper](https://arxiv.org/abs/1905.12853)
 - [RoNIN official code at the audited revision](https://github.com/Sachini/ronin/tree/805b7f0f28bb164ce89ada9ac05a9470dbe3d715)
+- [RoNIN official FRDR artifact](https://www.frdr-dfdr.ca/repo/dataset/816d1e8c-1fc3-47ff-b8ea-a36ff51d682a)
 - [OxIOD paper](https://arxiv.org/abs/1809.07491)
 - [OxIOD extended paper](https://arxiv.org/abs/2001.04061)
 - [OxIOD official site](https://deepio.cs.ox.ac.uk/)
@@ -56,6 +65,7 @@ Primary references:
 | High | RoNIN globalizes six raw channels with optional platform orientation | `source/data_glob_speed.py` rotates gyro/acceleration with the selected quaternion | No fallback on devices lacking Game Rotation Vector; platform variation becomes model input | Evaluate `platform-fused` separately from `imu6`, with sensor-absence rejection/fallback |
 | High | OxIOD synchronized features are not cross-platform raw IMU | Official paper reports iPhone 7P/6/5 and Nexus 5; released header is platform attitude, rotation rate, gravity, user acceleration, magnetic field | Apple Core Motion semantics cannot be treated as Android `SensorEvent` semantics | Restrict to audited Nexus/raw files if the artifact exposes them; otherwise use only as benchmark evidence |
 | High | Data/model artifact licenses are unresolved | RoNIN code is GPL-3.0, RIDI code is MIT, but neither code license establishes dataset/weight product rights; OxIOD site terms were unavailable | Research comparison may be possible, but redistribution/product inclusion is blocked | Capture the exact terms accompanying every downloaded archive and checkpoint before download/use |
+| High | RoNIN artifact license is research-only | Official `LICENSE.txt` permits non-commercial scientific research, prohibits commercial use, and restricts redistribution | The sequence and any derived weights cannot become product assets | Keep RoNIN benchmark-only and retain the exact license hash/URL in the artifact manifest |
 | Medium | RoNIN and RIDI reference pipelines assume 200 Hz | Official code uses 200 Hz windows/interpolation and per-minute constants | Conflicts with initial 50/100 Hz capture profile | Downsample before any baseline comparison; a model that fails at 100 Hz stays benchmark-only |
 | Medium | RIDI processed files mix input, optional platform features, and truth | Official generator writes gyro/acceleration/linear-acceleration/gravity/magnet plus Tango position/orientation and rotation vector into one CSV | A naive column slice can leak truth | Adapter roles and automatic inference-column checks are mandatory |
 | Medium | Published results do not establish Android lifecycle feasibility | Public data are continuous offline sequences | Screen-off gaps, OEM power control, foreground service, battery, and thermal behavior remain untested | Keep real-device feasibility as a separate gate after method narrowing |
@@ -66,9 +76,11 @@ Primary references:
 
 The revision-pinned compiler documents raw Android streams and the synchronized
 groups `gyro_uncalib`, `acce`, `game_rv`, plus Tango pose and optional EKF
-orientation. Raw acceleration, angular velocity, time, and optional Game Rotation
-Vector map to Android APIs. Corrected Tango pose, Tango-to-body alignment, and EKF
-orientation are labels/evaluation/forbidden fields.
+orientation. The strict executed adapter uses `raw/imu/acce`, `raw/imu/gyro`,
+`raw/imu/game_rv`, and their original IMU system timestamps. Corrected Tango
+pose, cross-device synchronized time, Tango-to-body alignment, calibration
+boundaries, time offsets, and EKF orientation are labels/evaluation/forbidden
+fields.
 
 The official velocity loader subtracts a sequence initial gyro bias, applies
 dataset acceleration bias/scale, chooses an orientation source, rotates the six
@@ -124,8 +136,9 @@ The inventory contains paths, shapes, dtypes, and timestamp quality only.
 
 ## Decision and next gate
 
-Do not download full datasets or checkpoints until the exact artifact terms can
-be saved next to a content hash. The next safe implementation work is to validate
-the adapters against one legally retrievable sequence per dataset, then replay
-only approved columns at 50/100 Hz. No public benchmark result can pass the
+Do not download full datasets or checkpoints. RoNIN now has exact artifact terms,
+published archive checksum, member hashes, and one range-extracted sequence.
+RIDI and OxIOD still require the same artifact gate before any sequence use. The
+current B0/B1 versions stop at the RoNIN public-performance gate and must be
+reworked before a personal pilot. No public benchmark result can pass the
 screen-off, OEM power, battery, thermal, or pocket-UX gates.

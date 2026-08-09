@@ -26,8 +26,10 @@ def main() -> None:
                 "shape": list(item.shape),
                 "dtype": str(item.dtype),
             }
-            if name == "synced/time" and item.shape and item.shape[0] > 1:
-                timestamps = item[:]
+            is_synced_time = name == "synced/time" and len(item.shape) == 1
+            is_raw_sensor = name.startswith("raw/imu/") and len(item.shape) == 2
+            if (is_synced_time or is_raw_sensor) and item.shape[0] > 1:
+                timestamps = item[:] if is_synced_time else item[:, 0] / 1_000_000_000
                 positive_deltas = [
                     float(right - left)
                     for left, right in zip(timestamps, timestamps[1:])

@@ -104,10 +104,15 @@ def _orientation_heading_timeline(
     for sensor_type in priority:
         sensor_samples = _samples(session, sensor_type)
         if sensor_samples:
+            raw_timeline = tuple(
+                (sample.sensor_timestamp_ns, _yaw_from_rotation_vector(sample.values))
+                for sample in sensor_samples
+            )
+            initial_heading = raw_timeline[0][1]
             return (
                 tuple(
-                    (sample.sensor_timestamp_ns, _yaw_from_rotation_vector(sample.values))
-                    for sample in sensor_samples
+                    (timestamp_ns, _wrap_angle(heading - initial_heading))
+                    for timestamp_ns, heading in raw_timeline
                 ),
                 sensor_type,
             )
@@ -192,6 +197,39 @@ def _adaptive_stride(amplitude: float | None, *, fallback_stride_m: float) -> fl
     return min(0.90, max(0.45, 0.64 * amplitude ** 0.25))
 
 
+def _observation_gap_timeline(
+    session: NormalizedSensorSession,
+    sensor_types: frozenset[str],
+) -> tuple[tuple[int, float], ...]:
+    streams = [
+        _samples(session, sensor_type)
+        for sensor_type in sensor_types
+        if sensor_type != STEP_DETECTOR
+    ]
+    streams = [stream for stream in streams if len(stream) >= 2]
+    if not streams:
+        return ()
+    reference = max(streams, key=len)
+    cumulative_penalty = 0.0
+    timeline: list[tuple[int, float]] = []
+    previous_timestamp = reference[0].sensor_timestamp_ns
+    for sample in reference[1:]:
+        delta_s = (sample.sensor_timestamp_ns - previous_timestamp) / 1_000_000_000
+        if delta_s > 0.1:
+            cumulative_penalty += (delta_s - 0.1) * 0.25
+            timeline.append((sample.sensor_timestamp_ns, cumulative_penalty))
+        previous_timestamp = sample.sensor_timestamp_ns
+    return tuple(timeline)
+
+
+def _gap_penalty_at(timeline: tuple[tuple[int, float], ...], timestamp_ns: int) -> float:
+    if not timeline:
+        return 0.0
+    timestamps = [item[0] for item in timeline]
+    index = bisect_right(timestamps, timestamp_ns) - 1
+    return timeline[index][1] if index >= 0 else 0.0
+
+
 def magnetic_field_is_usable(session: NormalizedSensorSession) -> bool | None:
     sensor_samples = _samples(session, MAGNETOMETER)
     if not sensor_samples:
@@ -220,6 +258,7 @@ def _build_output(
     )
     start_timestamp = min(sample.sensor_timestamp_ns for sample in source_samples)
     terminal_timestamp = max(sample.sensor_timestamp_ns for sample in source_samples)
+    observation_gaps = _observation_gap_timeline(session, terminal_sensor_types)
     x_m = 0.0
     y_m = 0.0
     uncertainty_m = 0.25
@@ -230,7 +269,7 @@ def _build_output(
             x_m=0.0,
             y_m=0.0,
             heading_rad=_latest_heading(heading_timeline, start_timestamp),
-            uncertainty_m=uncertainty_m,
+            uncertainty_m=uncertainty_m + _gap_penalty_at(observation_gaps, start_timestamp),
             source_start_ns=start_timestamp,
             source_end_ns=start_timestamp,
         )
@@ -254,7 +293,8 @@ def _build_output(
                 x_m=x_m,
                 y_m=y_m,
                 heading_rad=heading,
-                uncertainty_m=uncertainty_m,
+                uncertainty_m=uncertainty_m
+                + _gap_penalty_at(observation_gaps, timestamp_ns),
                 source_start_ns=previous_step_timestamp,
                 source_end_ns=timestamp_ns,
             )
@@ -269,7 +309,8 @@ def _build_output(
                 x_m=x_m,
                 y_m=y_m,
                 heading_rad=_latest_heading(heading_timeline, terminal_timestamp),
-                uncertainty_m=uncertainty_m,
+                uncertainty_m=uncertainty_m
+                + _gap_penalty_at(observation_gaps, terminal_timestamp),
                 source_start_ns=points[-1].timestamp_ns,
                 source_end_ns=terminal_timestamp,
             )

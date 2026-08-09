@@ -205,20 +205,23 @@ def _interpolate_truth(truth: Sequence[TruthPoint], timestamp_ns: int) -> TruthP
 def _turn_errors_deg(
     truth: Sequence[TruthPoint], output: EstimatorOutput
 ) -> tuple[float, ...]:
-    truth_turns: list[tuple[int, float]] = []
-    previous_heading = truth[0].body_heading_rad
+    truth_turns: list[tuple[int, int, float]] = []
+    anchor_timestamp = truth[0].timestamp_ns
+    anchor_heading = truth[0].body_heading_rad
     for point in truth[1:]:
-        delta = _wrap_radians(point.body_heading_rad - previous_heading)
+        delta = _wrap_radians(point.body_heading_rad - anchor_heading)
         if abs(math.degrees(delta)) >= 30.0:
-            truth_turns.append((point.timestamp_ns, delta))
-        previous_heading = point.body_heading_rad
+            truth_turns.append((anchor_timestamp, point.timestamp_ns, delta))
+            anchor_timestamp = point.timestamp_ns
+            anchor_heading = point.body_heading_rad
     output_timestamps = [point.timestamp_ns for point in output.points]
     errors: list[float] = []
-    for timestamp_ns, truth_delta in truth_turns:
-        right = bisect_right(output_timestamps, timestamp_ns)
-        if right <= 0 or right >= len(output.points):
+    for start_timestamp_ns, end_timestamp_ns, truth_delta in truth_turns:
+        left = bisect_right(output_timestamps, start_timestamp_ns) - 1
+        right = bisect_right(output_timestamps, end_timestamp_ns - 1)
+        if left < 0 or right >= len(output.points) or right <= left:
             continue
-        before = output.points[right - 1].heading_rad
+        before = output.points[left].heading_rad
         after = output.points[right].heading_rad
         estimated_delta = _wrap_radians(after - before)
         errors.append(abs(math.degrees(_wrap_radians(estimated_delta - truth_delta))))

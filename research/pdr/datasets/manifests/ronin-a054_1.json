@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "dataset": "RoNIN",
+  "sequence": "a054_1",
+  "evidence_kind": "public-sequence-benchmark-only",
+  "retrieved_at": "2026-08-09T04:15:55.454381+00:00",
+  "split_keys": {
+    "dataset": "RoNIN",
+    "user": "a054",
+    "device": "asus4",
+    "placement": "not retained in info.json",
+    "sequence": "a054_1"
+  },
+  "artifact": {
+    "doi": "10.20383/102.0543",
+    "archive": "unseen_subjects_test_set.zip",
+    "archive_size_bytes": 3211376453,
+    "official_archive_sha256": "d518eb150f5d44f74c56ce4b05e671cb73e507fcf6fc1ebcf7f1116bcd93bbb9",
+    "archive_hash_status": "published by FRDR; full archive not downloaded or independently re-hashed",
+    "http_range_bytes_transferred": 67114615,
+    "data_hdf5_sha256": "ac322c857d942d9ee2e30037251d7d7b4d37534441f6bc75671e86f12176e8d6",
+    "data_hdf5_crc32": "e6b1d73d",
+    "info_json_sha256": "4e234a2610ac427b42c1f91231cca5be7ec081a7396940d382baa336e38d3037"
+  },
+  "license": {
+    "license_sha256": "683253758bc392e4d2b36bcac06d21ec3cfc3ce0a19b2e50839f1ac00f38ca5f",
+    "allowed_scope": "non-commercial scientific research benchmark only",
+    "commercial_product_use": "prohibited",
+    "redistribution": "prohibited without prior written permission from SFU",
+    "decision": "benchmark-only"
+  },
+  "hdf_inventory": {
+    "raw/imu/acce": {"shape": [135819, 4], "dtype": "float64", "estimated_rate_hz": 334.3673085153569, "duplicate_timestamps": 0, "non_monotonic_timestamps": 0},
+    "raw/imu/gyro": {"shape": [135820, 4], "dtype": "float64", "estimated_rate_hz": 334.3673085153569, "duplicate_timestamps": 0, "non_monotonic_timestamps": 0},
+    "raw/imu/game_rv": {"shape": [81659, 5], "dtype": "float64", "estimated_rate_hz": 201.03068431811363, "duplicate_timestamps": 0, "non_monotonic_timestamps": 0},
+    "synced/time": {"shape": [75311], "dtype": "float64", "estimated_rate_hz": 200.0000000001819},
+    "pose/tango_pos": {"shape": [75311, 3], "dtype": "float64"},
+    "pose/tango_ori": {"shape": [75311, 4], "dtype": "float64"},
+    "pose/ekf_ori": {"shape": [75311, 4], "dtype": "float64"}
+  },
+  "inference_contract": {
+    "adapter": "ronin-raw-hdf5-v1",
+    "input_fields": ["raw/imu/acce", "raw/imu/gyro", "raw/imu/game_rv"],
+    "android_sensor_types": ["TYPE_ACCELEROMETER", "TYPE_GYROSCOPE", "TYPE_GAME_ROTATION_VECTOR"],
+    "target_rates_hz": [50, 100],
+    "forbidden_or_evaluation_only": ["raw/imu/step", "synced/time", "pose/tango_pos", "pose/tango_ori", "pose/ekf_ori", "info/start_frame", "info/imu_time_offset", "info/align_tango_to_body"],
+    "callback_timestamp_limitation": "not retained; replay sets callback time equal to sensor time",
+    "sensor_capability_metadata_limitation": "vendor properties, resolution, range, power, FIFO, wake-up, accuracy, and lifecycle diagnostics are not retained"
+  },
+  "replay": {
+    "record_count": 32,
+    "supported_record_count": 24,
+    "future_sample_violations": 0,
+    "scenarios": ["ideal-raw", "batch-250ms", "gap-600ms", "imu6-only"],
+    "batch_metrics_equal_ideal": true,
+    "gap_increased_uncertainty_all_supported_estimators": true,
+    "b0_supported_records": 0,
+    "ideal_results": [
+      {"target_rate_hz": 50, "profile": "imu6", "estimated_distance_m": 570.454376827303, "truth_distance_m": 381.17030343346994, "distance_scale_error": 0.4965866220133568, "endpoint_drift_ratio": 0.11104429053444699, "heading_mae_deg": 78.39257866416719, "turn_mae_deg": 44.30570314310145, "evaluated_turn_count": 76, "mirrored": false},
+      {"target_rate_hz": 50, "profile": "platform-fused", "estimated_distance_m": 570.4543768273027, "truth_distance_m": 381.170301436966, "distance_scale_error": 0.49658662985221724, "endpoint_drift_ratio": 0.9911395262743303, "heading_mae_deg": 75.88434316950575, "turn_mae_deg": 37.99709525802657, "evaluated_turn_count": 76, "mirrored": true},
+      {"target_rate_hz": 50, "profile": "step-enabled", "estimated_distance_m": 570.4543768273027, "truth_distance_m": 381.170301436966, "distance_scale_error": 0.49658662985221724, "endpoint_drift_ratio": 0.9911395262743303, "heading_mae_deg": 75.88434316950575, "turn_mae_deg": 37.99709525802657, "evaluated_turn_count": 76, "mirrored": true},
+      {"target_rate_hz": 100, "profile": "imu6", "estimated_distance_m": 613.4023585565745, "truth_distance_m": 381.2249435487922, "distance_scale_error": 0.6090299675736364, "endpoint_drift_ratio": 0.1221294960083101, "heading_mae_deg": 77.02714983867703, "turn_mae_deg": 43.467683789482926, "evaluated_turn_count": 76, "mirrored": false},
+      {"target_rate_hz": 100, "profile": "platform-fused", "estimated_distance_m": 613.4023585565743, "truth_distance_m": 381.2249417939134, "distance_scale_error": 0.6090299749804247, "endpoint_drift_ratio": 1.0974192678471357, "heading_mae_deg": 76.0761290153332, "turn_mae_deg": 38.22077221496148, "evaluated_turn_count": 76, "mirrored": true},
+      {"target_rate_hz": 100, "profile": "step-enabled", "estimated_distance_m": 613.4023585565743, "truth_distance_m": 381.2249417939134, "distance_scale_error": 0.6090299749804247, "endpoint_drift_ratio": 1.0974192678471357, "heading_mae_deg": 76.0761290153332, "turn_mae_deg": 38.22077221496148, "evaluated_turn_count": 76, "mirrored": true}
+    ]
+  },
+  "decision": {
+    "public_performance": "stop-current-b0-b1-configurations",
+    "android_capture_feasibility": "not-evaluated-by-public-data",
+    "personal_pilot": "not-authorized-by-this-evidence",
+    "reason": "B0 lacks a compatible step-event path and every supported B1 ideal run has catastrophic distance, heading, or mirror flags; turn error is also high. One public sequence cannot establish generalization."
+  }
+}

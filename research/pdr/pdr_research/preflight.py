@@ -71,8 +71,9 @@ def validate_adapter_specs(specs: dict[str, dict[str, Any]]) -> tuple[str, ...]:
                 errors.append(f"{adapter_id}: inference field {field} has role {role.value}")
             if not fields[field].get("android_api"):
                 errors.append(f"{adapter_id}: inference field {field} lacks Android API")
-        if spec.get("source_rate_hz", 0) > 200:
-            errors.append(f"{adapter_id}: source rate exceeds 200 Hz")
+        required_rate = spec.get("product_required_rate_hz", spec.get("source_rate_hz", 0))
+        if required_rate is not None and required_rate > 200:
+            errors.append(f"{adapter_id}: product-required rate exceeds 200 Hz")
     return tuple(errors)
 
 

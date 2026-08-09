@@ -9,3 +9,13 @@ services:
       - ./data:/data:ro
       - ./outputs:/outputs
     network_mode: none
+
+  pdr-fetch:
+    build:
+      context: ../..
+      dockerfile: research/pdr/docker/Dockerfile
+    working_dir: /workspace
+    volumes:
+      - ../..:/workspace:ro
+      - ./data:/data
+      - ./outputs:/outputs
