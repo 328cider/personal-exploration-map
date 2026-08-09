@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "experiment": "ronin-rate-stable-step-detector-v1",
+  "registered_on": "2026-08-09",
+  "artifact": "unseen_subjects_test_set.zip",
+  "artifact_sha256": "d518eb150f5d44f74c56ce4b05e671cb73e507fcf6fc1ebcf7f1116bcd93bbb9",
+  "source_inventory": {
+    "sequence_count": 32,
+    "listing_http_bytes_transferred": 5751,
+    "listing_fields_used": [
+      "sequence",
+      "data_hdf5_compressed_bytes",
+      "data_hdf5_uncompressed_bytes",
+      "info_json_uncompressed_bytes"
+    ]
+  },
+  "selection_rule": "After excluding previously inspected a054_1, choose the three smallest compressed data members whose subject keys are disjoint. Assign ascending compressed size to development, validation-primary, validation-confirmatory.",
+  "subject_key_rule": "Use the sequence-name prefix before the underscore as a conservative grouping key. The public inventory does not expose participant identity, so this prevents same-prefix leakage but does not prove demographic or device independence.",
+  "assignments": [
+    {
+      "sequence": "a051_3",
+      "subject_key": "a051",
+      "role": "development",
+      "data_hdf5_compressed_bytes": 63827344,
+      "data_hdf5_uncompressed_bytes": 86131360
+    },
+    {
+      "sequence": "a052_2",
+      "subject_key": "a052",
+      "role": "validation-primary",
+      "data_hdf5_compressed_bytes": 66627855,
+      "data_hdf5_uncompressed_bytes": 88664904
+    },
+    {
+      "sequence": "a049_1",
+      "subject_key": "a049",
+      "role": "validation-confirmatory",
+      "data_hdf5_compressed_bytes": 69926280,
+      "data_hdf5_uncompressed_bytes": 94020560
+    }
+  ],
+  "excluded": [
+    {
+      "sequence": "a054_1",
+      "reason": "Previously inspected diagnostic sequence; ineligible for development or validation selection."
+    }
+  ],
+  "lock_rules": [
+    "Development raw inputs and truth may be inspected while designing and freezing the detector.",
+    "Validation archive members must not be fetched or opened until detector code, parameters, and ranking rules are committed.",
+    "Validation truth must not select or modify the detector, thresholds, resampling rate, stride gain, or evaluation gates.",
+    "Every validation result is reported; no sequence or rate may be silently dropped.",
+    "A validation failure may produce Stop or Narrow evidence but must not trigger tuning in this experiment version."
+  ]
+}
