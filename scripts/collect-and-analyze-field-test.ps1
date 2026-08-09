@@ -1,3 +1,21 @@
+<#
+.SYNOPSIS
+Collects a USB Field-test bundle and generates the coordinate-free objective report.
+
+.DESCRIPTION
+Runs the existing USB collector, restarts the Field-test app by default, then
+uses Docker Desktop to analyze the newest local bundle. No host Node.js, npm,
+JDK, Android SDK, or Android Studio is required. Raw location remains local.
+
+.EXAMPLE
+.\scripts\collect-and-analyze-field-test.ps1
+
+.EXAMPLE
+.\scripts\collect-and-analyze-field-test.ps1 -Serial <adb-device-serial>
+
+.EXAMPLE
+.\scripts\collect-and-analyze-field-test.ps1 -NoFailExit
+#>
 param(
     [string]$OutputRoot = "artifacts\device-bundles",
     [string]$PackageName = "com.cider328.personalexplorationmap.fieldtest",
