@@ -8,7 +8,7 @@
 
 **M0: Passive Mapping Vertical Slice — Android実機S0と製品差分の判定**
 
-現在は、エミュレータで確認可能な基本動作を通過し、Android実機でしか分からない項目へ移る段階である。
+現在は、エミュレータで確認可能な基本動作とUSB回収経路を通過し、Android実機でしか分からない項目へ移る段階である。
 
 目標体験:
 
@@ -21,19 +21,29 @@
 - 同じPersonalMapへ独立したExplorationSessionとして続きを追加
 - session間を未観測の直線で接続しない
 - raw evidenceと不確実性を保持し、推定を確定地物として描かない
+- 実地試験後の端末・時刻・電池・権限・診断を手入力せずUSBで回収できる
 
 Passive-firstはmap-invisibleを意味しない。探索中の主役は現実空間だが、ユーザーが意図して開いた時には進捗を確認できる。
 
 ## 今回のField-test候補
 
-PR #56をmainへmerge済み。
+USB自動診断・回収をPR #59でmainへmerge済み。
 
-- merged commit: `74b70715da59c74bab585b2b3c0d2a3fd919c5f7`
-- source head: `0ad4e847d6c3bca290c5781547d924cfde618c92`
-- workflow run: `31264093837`
-- APK SHA-256: `b61f3b3f68e16f21099cc4f4f474743399b89d5af56b1bb1c53ccee1dc09358d`
+- runtime merge: `166172eca5ad5e6d6b673111483186c6171fe368`
+- validated source head: `9437abb374d07d6cb549543a9185c7a11a4d90f6`
+- full workflow run: `31311862191`
+- APK artifact: `9037728411`
+- emulator + USB evidence artifact: `9037812440`
+- APK SHA-256: `c0e142f278852d8fc9504aa4a1a7a699487278472e74fa4f2c339769b6b074cf`
 - Metro不要、スマホ単体で動作
+- Field-test packageだけがUSB抽出用にdebuggable
 - 手順: [`docs/REAL_DEVICE_S0_HANDOFF.md`](docs/REAL_DEVICE_S0_HANDOFF.md)
+- USB回収: [`docs/USB_FIELD_TEST_EXPORT.md`](docs/USB_FIELD_TEST_EXPORT.md)
+
+主観評価テンプレートもPR #75でmainへmerge済み。
+
+- template merge: `3eb5fa4181c564f9ceafacdb0016e86a610c5d48`
+- template: [`docs/FIELD_EXPLORATION_REVIEW_TEMPLATE.md`](docs/FIELD_EXPLORATION_REVIEW_TEMPLATE.md)
 
 既存Field-test版をアンインストールせず、同じ署名のAPKを上書きする。
 
@@ -45,6 +55,8 @@ PR #56をmainへmerge済み。
 - Issue / PR template、AGENTS、CIでPassive-first UX、map truth、canonical write、OSS再利用、game境界を確認
 - UI、renderer、game、experienceはcanonical mapを直接変更できない
 - 実地試験はユーザーコストが高いため、エミュレータで検出できる問題を実地へ持ち込まない
+- 実地試験の客観情報をUSBで自動回収し、人が記録するのは端末から分からない主観だけにする
+- 同じraw runから複数表示を比較し、表示ごとに歩き直さない
 
 ### Mapping architecture
 
@@ -109,8 +121,9 @@ fixture matrixでは、poor accuracyの5点が旧279 cellを生成していた�
 - GitHub ActionsでJS bundle内蔵・署名済みField-test APKを生成
 - app / renderer変更時は必ず同一runで新しいAPKをbuildしてE2Eへ渡す
 - harness-only変更だけが既存署名APKを再利用できる
+- ADBが無いWindowsでは公式Platform Toolsをリポジトリ内`.local`へだけ取得する
 
-### Mandatory Android emulator gate
+### Mandatory Android emulator / USB gate
 
 同じField-test APKをAndroid 15 / API 35へclean installし、次をgreenにした。
 
@@ -125,12 +138,20 @@ fixture matrixでは、poor accuracyの5点が旧279 cellを生成していた�
 - notification tapから記録中画面へ復帰
 - 発見modal、default marker保存、live count更新、Review永続化
 - Fatal、React Native JS、既知Expo SQLite native statement raceなし
+- PowerShell USB collectorの実行
+- Field-test packageだけで`run-as`が成功
+- app-private dataをbinary-safe tarとして回収
+- coordinate-free summary、manifest、SHA256SUMS、raw local ZIPを生成
+- 抽出SQLiteに`environment.session.started / ended`が存在
+- device、battery、permission、elapsed-time、debuggable fieldsを確認
+- 座標なし集計にcoordinate field、map名・ID、marker本文、地図画像がないことを確認
+- manifestで`containsRawLocation=true`、`autoUpload=false`を確認
 
-このgateは基本UI、lifecycle、保存、擬似位置を検証する。実GNSS、OEM省電力、電池、発熱、身体的UXを代替しない。
+このgateは基本UI、lifecycle、保存、擬似位置、USB回収を検証する。実GNSS、OEM省電力、電池、発熱、身体的UXを代替しない。
 
-### Tracking diagnostics
+### Tracking / environment diagnostics
 
-Issue #3向け計測基盤はmainへ反映済み。
+Issue #3向け計測基盤とIssue #58のUSB回収はmainへ反映済み。
 
 - raw / accepted / rejectedと理由
 - accuracyとsample gap分布
@@ -138,9 +159,15 @@ Issue #3向け計測基盤はmainへ反映済み。
 - provider start / stop
 - foreground / background / recovery
 - marker入力時間
-- 座標、地図名、marker本文、絶対時刻を含めない集計共有
+- device / Android / app build
+- session start / end wall-clockとmonotonic elapsed time
+- battery start / end / delta、charge、temperature、voltage、current（端末が提供する場合）
+- power saver、battery optimization、thermal
+- foreground / background location、notification permission
 
-Diagnostic eventはmap truthではない。best-effortで保存し、raw記録を待たせない。採否はraw evidenceからreplayする。
+Coordinate-free summaryは正確なsession時刻と端末・電池情報を含むが、緯度経度、local coordinate、map / exploration ID、地図名、marker本文、地図画像を含めない。
+
+Diagnostic eventはmap truthではない。best-effortで保存し、raw記録を待たせない。採否はraw evidenceからreplayする。raw ZIPはPCローカルへだけ保存し、自動uploadしない。
 
 ## 実機S0でのみ確認する項目
 
@@ -160,15 +187,17 @@ Diagnostic eventはmap truthではない。best-effortで保存し、raw記録�
 
 1. **Issue #3 / S0**: 5〜10分の安全な既知routeを一回だけ記録
 2. 同じraw evidenceで`不確実性 / 通過セル / 軌跡`を切替比較
-3. S0 Pass後、30分以上のforeground・画面ON baseline
-4. 同等条件でbackground・画面OFF・ポケットrun
-5. 途中marker、notification復帰、process recreation、recents dismissal、battery saver、OEM差
-6. Issue #3をGo / Narrow / Stop判定
-7. Issue #4で複数runのPassive-first UXとPersonalMap価値を判定
-8. export、renderer性能などM0後続を必要性順に実装
-9. Issue #3と#4の後だけIssue #5 PDR gateへ進む
+3. 帰宅後に`pull-field-test-bundle.ps1 -RestartApp`で客観情報をUSB回収
+4. `FIELD_EXPLORATION_REVIEW_TEMPLATE.md`で主観だけを記録
+5. S0 Pass後、30分以上のforeground・画面ON baseline
+6. 同等条件でbackground・画面OFF・ポケットrun
+7. 途中marker、notification復帰、process recreation、recents dismissal、battery saver、OEM差
+8. Issue #3をGo / Narrow / Stop判定
+9. Issue #4で複数runのPassive-first UXとPersonalMap価値を判定
+10. export、renderer性能などM0後続を必要性順に実装
+11. Issue #3と#4の後だけIssue #5 PDR gateへ進む
 
-表示ごとに歩き直さない。一回のraw runから全表示を再生成する。
+表示ごとに歩き直さない。一回のraw runから全表示を再生成する。blocking error時も同じ条件を再度歩かず、USB bundleを回収してコード・エミュレータへ戻す。
 
 ## PDR / GPS-denied
 
