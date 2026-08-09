@@ -1,0 +1,115 @@
+name: field-test-analysis
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/field-test-analysis.yml"
+      - "scripts/analyze-field-test-summary.mjs"
+      - "scripts/analyze-field-test-summary.test.mjs"
+      - "scripts/analyze-field-test-summary-safety.test.mjs"
+      - "scripts/analyze-latest-field-test.ps1"
+      - "scripts/collect-and-analyze-field-test.ps1"
+      - "docs/FIELD_TEST_OBJECTIVE_ANALYSIS.md"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: field-test-analysis-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  objective-analyzer:
+    name: Coordinate-free objective S0 analyzer
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Run analyzer unit and privacy tests
+        run: >-
+          node --test
+          scripts/analyze-field-test-summary.test.mjs
+          scripts/analyze-field-test-summary-safety.test.mjs
+      - name: Parse Windows wrappers with PowerShell
+        shell: pwsh
+        run: |
+          foreach ($path in @(
+            "scripts/analyze-latest-field-test.ps1",
+            "scripts/collect-and-analyze-field-test.ps1"
+          )) {
+            $source = [System.IO.File]::ReadAllText($path)
+            [void][ScriptBlock]::Create($source)
+          }
+      - name: Exercise analyzer wrapper path mapping without host Node
+        shell: pwsh
+        run: |
+          $bundleRoot = Join-Path $env:GITHUB_WORKSPACE "artifacts/device-bundles"
+          New-Item -ItemType Directory -Force -Path (Join-Path $bundleRoot "pem-field-test-20260809T000000Z") | Out-Null
+
+          $fakeBin = Join-Path $env:GITHUB_WORKSPACE ".test-bin"
+          New-Item -ItemType Directory -Force -Path $fakeBin | Out-Null
+          $fakeDocker = Join-Path $fakeBin "docker"
+          $argumentLog = Join-Path $env:GITHUB_WORKSPACE "artifacts/docker-arguments.txt"
+          $script = @"
+          #!/usr/bin/env bash
+          printf '%s\n' "`$@" > "$argumentLog"
+          exit 0
+          "@
+          [System.IO.File]::WriteAllText($fakeDocker, $script, (New-Object System.Text.UTF8Encoding($false)))
+          & chmod +x $fakeDocker
+          $env:PATH = $fakeBin + [System.IO.Path]::PathSeparator + $env:PATH
+
+          & ./scripts/analyze-latest-field-test.ps1 `
+            -BundlePath "artifacts/device-bundles" `
+            -NoFailExit
+
+          $actual = @(Get-Content $argumentLog)
+          $expected = @(
+            "compose",
+            "run",
+            "--rm",
+            "-T",
+            "shell",
+            "node",
+            "scripts/analyze-field-test-summary.mjs",
+            "/workspace/artifacts/device-bundles",
+            "--mode",
+            "s0",
+            "--no-fail-exit"
+          )
+          $difference = Compare-Object -ReferenceObject $expected -DifferenceObject $actual -SyncWindow 0
+          if ($null -ne $difference) {
+            $difference | Format-Table | Out-String | Write-Error
+            throw "Docker wrapper arguments did not match the expected container-only command."
+          }
+      - name: Keep combined collection output inside the repository
+        shell: pwsh
+        run: |
+          $outside = Join-Path $env:RUNNER_TEMP "pem-device-bundles"
+          try {
+            & ./scripts/collect-and-analyze-field-test.ps1 -OutputRoot $outside
+            throw "The collection wrapper unexpectedly accepted an external output path."
+          }
+          catch {
+            if ($_.Exception.Message -notmatch "must stay inside the repository") {
+              throw
+            }
+          }
+      - name: Assert the analyzer has no runtime dependencies
+        run: |
+          set -euo pipefail
+          node --check scripts/analyze-field-test-summary.mjs
+          unexpected="$(
+            grep -E '^import .* from ' scripts/analyze-field-test-summary.mjs \
+              | grep -Ev ' from "node:' \
+              || true
+          )"
+          if [ -n "$unexpected" ]; then
+            echo "Objective analyzer must use Node standard-library imports only:" >&2
+            echo "$unexpected" >&2
+            exit 1
+          fi
