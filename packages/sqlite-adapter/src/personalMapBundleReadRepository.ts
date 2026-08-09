@@ -1,6 +1,8 @@
 import {
   createPersonalMapSnapshot,
   type MapFrame,
+  type MapMarker,
+  type RawPositionSample,
   type ReplayExplorationInput,
 } from "@exploration-map/mapping-core";
 import type {
@@ -102,8 +104,8 @@ class SqlitePersonalMapBundleSnapshotReader
       return empty;
     }
 
-    const byExploration = new Map(
-      explorationIds.map((explorationId) => [explorationId, []] as const),
+    const byExploration = new Map<string, RawPositionSample[]>(
+      explorationIds.map((explorationId) => [explorationId, []]),
     );
     const rows = await this.database.getAllAsync<PositionRow>(
       `SELECT * FROM position_samples
@@ -143,8 +145,8 @@ class SqlitePersonalMapBundleSnapshotReader
       return empty;
     }
 
-    const byExploration = new Map(
-      explorationIds.map((explorationId) => [explorationId, []] as const),
+    const byExploration = new Map<string, MapMarker[]>(
+      explorationIds.map((explorationId) => [explorationId, []]),
     );
     const rows = await this.database.getAllAsync<MarkerRow>(
       `SELECT * FROM markers
