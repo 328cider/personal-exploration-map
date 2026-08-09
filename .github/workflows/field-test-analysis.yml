@@ -38,6 +38,48 @@ jobs:
         run: |
           $source = [System.IO.File]::ReadAllText("scripts/analyze-latest-field-test.ps1")
           [void][ScriptBlock]::Create($source)
+      - name: Exercise wrapper path mapping without host Node
+        shell: pwsh
+        run: |
+          $bundleRoot = Join-Path $env:GITHUB_WORKSPACE "artifacts/device-bundles"
+          New-Item -ItemType Directory -Force -Path (Join-Path $bundleRoot "pem-field-test-20260809T000000Z") | Out-Null
+
+          $fakeBin = Join-Path $env:GITHUB_WORKSPACE ".test-bin"
+          New-Item -ItemType Directory -Force -Path $fakeBin | Out-Null
+          $fakeDocker = Join-Path $fakeBin "docker"
+          $argumentLog = Join-Path $env:GITHUB_WORKSPACE "artifacts/docker-arguments.txt"
+          $script = @"
+          #!/usr/bin/env bash
+          printf '%s\n' "`$@" > "$argumentLog"
+          exit 0
+          "@
+          [System.IO.File]::WriteAllText($fakeDocker, $script, (New-Object System.Text.UTF8Encoding($false)))
+          & chmod +x $fakeDocker
+          $env:PATH = $fakeBin + [System.IO.Path]::PathSeparator + $env:PATH
+
+          & ./scripts/analyze-latest-field-test.ps1 `
+            -BundlePath "artifacts/device-bundles" `
+            -NoFailExit
+
+          $actual = @(Get-Content $argumentLog)
+          $expected = @(
+            "compose",
+            "run",
+            "--rm",
+            "-T",
+            "shell",
+            "node",
+            "scripts/analyze-field-test-summary.mjs",
+            "/workspace/artifacts/device-bundles",
+            "--mode",
+            "s0",
+            "--no-fail-exit"
+          )
+          $difference = Compare-Object -ReferenceObject $expected -DifferenceObject $actual -SyncWindow 0
+          if ($null -ne $difference) {
+            $difference | Format-Table | Out-String | Write-Error
+            throw "Docker wrapper arguments did not match the expected container-only command."
+          }
       - name: Assert the analyzer has no runtime dependencies
         run: |
           set -euo pipefail
