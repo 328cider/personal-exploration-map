@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "adapters": [
+    {
+      "id": "ronin-hdf5-v1",
+      "dataset": "RoNIN",
+      "format": "hdf5-inventory",
+      "source_rate_hz": 200,
+      "timestamp_field": "synced/time",
+      "required_fields": [
+        "synced/time",
+        "synced/gyro_uncalib",
+        "synced/acce",
+        "synced/game_rv",
+        "pose/tango_pos",
+        "pose/tango_ori"
+      ],
+      "inference_fields": ["synced/gyro_uncalib", "synced/acce", "synced/game_rv"],
+      "fields": {
+        "synced/time": {"role": "live-input", "android_api": "SensorEvent.timestamp", "unit": "s from sequence reference", "axes_or_frame": "monotonic sequence time"},
+        "synced/gyro_uncalib": {"role": "live-input", "android_api": "Sensor.TYPE_GYROSCOPE_UNCALIBRATED", "unit": "rad/s", "axes_or_frame": "Android device axes before official global rotation"},
+        "synced/acce": {"role": "live-input", "android_api": "Sensor.TYPE_ACCELEROMETER", "unit": "m/s^2", "axes_or_frame": "Android device axes before official global rotation"},
+        "synced/game_rv": {"role": "live-input", "android_api": "Sensor.TYPE_GAME_ROTATION_VECTOR", "unit": "unit quaternion", "axes_or_frame": "Android game rotation vector; optional platform-fused input"},
+        "pose/tango_pos": {"role": "evaluation-only", "android_api": null, "unit": "m", "axes_or_frame": "corrected Tango world frame"},
+        "pose/tango_ori": {"role": "evaluation-only", "android_api": null, "unit": "unit quaternion", "axes_or_frame": "corrected Tango world frame"},
+        "pose/ekf_ori": {"role": "forbidden", "android_api": null, "unit": "unit quaternion", "axes_or_frame": "dataset EKF output"},
+        "info/align_tango_to_body": {"role": "training-label", "android_api": null, "unit": "unit quaternion", "axes_or_frame": "Tango-to-body alignment"}
+      }
+    },
+    {
+      "id": "ridi-processed-csv-v1",
+      "dataset": "RIDI",
+      "format": "csv",
+      "source_rate_hz": 200,
+      "timestamp_field": "time",
+      "timestamp_scale_to_seconds": 0.000000001,
+      "required_fields": ["time", "gyro_x", "gyro_y", "gyro_z", "acce_x", "acce_y", "acce_z", "linacce_x", "linacce_y", "linacce_z", "grav_x", "grav_y", "grav_z", "magnet_x", "magnet_y", "magnet_z", "pos_x", "pos_y", "pos_z", "ori_w", "ori_x", "ori_y", "ori_z", "rv_w", "rv_x", "rv_y", "rv_z"],
+      "inference_fields": ["time", "gyro_x", "gyro_y", "gyro_z", "acce_x", "acce_y", "acce_z", "linacce_x", "linacce_y", "linacce_z", "grav_x", "grav_y", "grav_z", "magnet_x", "magnet_y", "magnet_z", "rv_w", "rv_x", "rv_y", "rv_z"],
+      "fields": {
+        "time": {"role": "live-input", "android_api": "SensorEvent.timestamp", "unit": "ns", "axes_or_frame": "monotonic sensor time"},
+        "gyro_x": {"role": "live-input", "android_api": "Sensor.TYPE_GYROSCOPE", "unit": "rad/s", "axes_or_frame": "Android device X"},
+        "gyro_y": {"role": "live-input", "android_api": "Sensor.TYPE_GYROSCOPE", "unit": "rad/s", "axes_or_frame": "Android device Y"},
+        "gyro_z": {"role": "live-input", "android_api": "Sensor.TYPE_GYROSCOPE", "unit": "rad/s", "axes_or_frame": "Android device Z"},
+        "acce_x": {"role": "live-input", "android_api": "Sensor.TYPE_ACCELEROMETER", "unit": "m/s^2", "axes_or_frame": "Android device X"},
+        "acce_y": {"role": "live-input", "android_api": "Sensor.TYPE_ACCELEROMETER", "unit": "m/s^2", "axes_or_frame": "Android device Y"},
+        "acce_z": {"role": "live-input", "android_api": "Sensor.TYPE_ACCELEROMETER", "unit": "m/s^2", "axes_or_frame": "Android device Z"},
+        "linacce_x": {"role": "live-input", "android_api": "Sensor.TYPE_LINEAR_ACCELERATION", "unit": "m/s^2", "axes_or_frame": "Android device X; optional platform-derived"},
+        "linacce_y": {"role": "live-input", "android_api": "Sensor.TYPE_LINEAR_ACCELERATION", "unit": "m/s^2", "axes_or_frame": "Android device Y; optional platform-derived"},
+        "linacce_z": {"role": "live-input", "android_api": "Sensor.TYPE_LINEAR_ACCELERATION", "unit": "m/s^2", "axes_or_frame": "Android device Z; optional platform-derived"},
+        "grav_x": {"role": "live-input", "android_api": "Sensor.TYPE_GRAVITY", "unit": "m/s^2", "axes_or_frame": "Android device X; optional platform-derived"},
+        "grav_y": {"role": "live-input", "android_api": "Sensor.TYPE_GRAVITY", "unit": "m/s^2", "axes_or_frame": "Android device Y; optional platform-derived"},
+        "grav_z": {"role": "live-input", "android_api": "Sensor.TYPE_GRAVITY", "unit": "m/s^2", "axes_or_frame": "Android device Z; optional platform-derived"},
+        "magnet_x": {"role": "live-input", "android_api": "Sensor.TYPE_MAGNETIC_FIELD", "unit": "uT", "axes_or_frame": "Android device X; quality-gated"},
+        "magnet_y": {"role": "live-input", "android_api": "Sensor.TYPE_MAGNETIC_FIELD", "unit": "uT", "axes_or_frame": "Android device Y; quality-gated"},
+        "magnet_z": {"role": "live-input", "android_api": "Sensor.TYPE_MAGNETIC_FIELD", "unit": "uT", "axes_or_frame": "Android device Z; quality-gated"},
+        "rv_w": {"role": "live-input", "android_api": "Sensor.TYPE_ROTATION_VECTOR", "unit": "unit quaternion", "axes_or_frame": "Android rotation vector W"},
+        "rv_x": {"role": "live-input", "android_api": "Sensor.TYPE_ROTATION_VECTOR", "unit": "unit quaternion", "axes_or_frame": "Android rotation vector X"},
+        "rv_y": {"role": "live-input", "android_api": "Sensor.TYPE_ROTATION_VECTOR", "unit": "unit quaternion", "axes_or_frame": "Android rotation vector Y"},
+        "rv_z": {"role": "live-input", "android_api": "Sensor.TYPE_ROTATION_VECTOR", "unit": "unit quaternion", "axes_or_frame": "Android rotation vector Z"},
+        "pos_x": {"role": "evaluation-only", "android_api": null, "unit": "m", "axes_or_frame": "Tango world X"},
+        "pos_y": {"role": "evaluation-only", "android_api": null, "unit": "m", "axes_or_frame": "Tango world Y"},
+        "pos_z": {"role": "evaluation-only", "android_api": null, "unit": "m", "axes_or_frame": "Tango world Z"},
+        "ori_w": {"role": "evaluation-only", "android_api": null, "unit": "unit quaternion", "axes_or_frame": "Tango ground-truth W"},
+        "ori_x": {"role": "evaluation-only", "android_api": null, "unit": "unit quaternion", "axes_or_frame": "Tango ground-truth X"},
+        "ori_y": {"role": "evaluation-only", "android_api": null, "unit": "unit quaternion", "axes_or_frame": "Tango ground-truth Y"},
+        "ori_z": {"role": "evaluation-only", "android_api": null, "unit": "unit quaternion", "axes_or_frame": "Tango ground-truth Z"}
+      }
+    },
+    {
+      "id": "oxiod-synced-csv-v1",
+      "dataset": "OxIOD",
+      "format": "csv",
+      "source_rate_hz": 100,
+      "timestamp_field": "Time",
+      "timestamp_scale_to_seconds": 1.0,
+      "required_fields": ["Time", "attitude_roll(radians)", "attitude_pitch(radians)", "attitude_yaw(radians)", "rotation_rate_x(radians/s)", "rotation_rate_y(radians/s)", "rotation_rate_z(radians/s)", "gravity_x(G)", "gravity_y(G)", "gravity_z(G)", "user_acc_x(G)", "user_acc_y(G)", "user_acc_z(G)", "magnetic_field_x(microteslas)", "magnetic_field_y(microteslas)", "magnetic_field_z(microteslas)"],
+      "inference_fields": ["Time", "rotation_rate_x(radians/s)", "rotation_rate_y(radians/s)", "rotation_rate_z(radians/s)"],
+      "fields": {
+        "Time": {"role": "live-input", "android_api": "SensorEvent.timestamp after an explicit sequence-relative conversion", "unit": "s", "axes_or_frame": "dataset sequence time; monotonic semantics must be verified"},
+        "rotation_rate_x(radians/s)": {"role": "live-input", "android_api": "Sensor.TYPE_GYROSCOPE", "unit": "rad/s", "axes_or_frame": "Apple or Android device X; platform recorded per sequence"},
+        "rotation_rate_y(radians/s)": {"role": "live-input", "android_api": "Sensor.TYPE_GYROSCOPE", "unit": "rad/s", "axes_or_frame": "Apple or Android device Y; handedness audit required"},
+        "rotation_rate_z(radians/s)": {"role": "live-input", "android_api": "Sensor.TYPE_GYROSCOPE", "unit": "rad/s", "axes_or_frame": "Apple or Android device Z; handedness audit required"},
+        "attitude_roll(radians)": {"role": "forbidden", "android_api": null, "unit": "rad", "axes_or_frame": "Core Motion/platform attitude; no proven Android semantic equivalence"},
+        "attitude_pitch(radians)": {"role": "forbidden", "android_api": null, "unit": "rad", "axes_or_frame": "Core Motion/platform attitude; no proven Android semantic equivalence"},
+        "attitude_yaw(radians)": {"role": "forbidden", "android_api": null, "unit": "rad", "axes_or_frame": "Core Motion/platform attitude; no proven Android semantic equivalence"},
+        "gravity_x(G)": {"role": "forbidden", "android_api": null, "unit": "g", "axes_or_frame": "Core Motion/platform-derived gravity"},
+        "gravity_y(G)": {"role": "forbidden", "android_api": null, "unit": "g", "axes_or_frame": "Core Motion/platform-derived gravity"},
+        "gravity_z(G)": {"role": "forbidden", "android_api": null, "unit": "g", "axes_or_frame": "Core Motion/platform-derived gravity"},
+        "user_acc_x(G)": {"role": "forbidden", "android_api": null, "unit": "g", "axes_or_frame": "Core Motion/platform-derived user acceleration"},
+        "user_acc_y(G)": {"role": "forbidden", "android_api": null, "unit": "g", "axes_or_frame": "Core Motion/platform-derived user acceleration"},
+        "user_acc_z(G)": {"role": "forbidden", "android_api": null, "unit": "g", "axes_or_frame": "Core Motion/platform-derived user acceleration"},
+        "magnetic_field_x(microteslas)": {"role": "forbidden", "android_api": null, "unit": "uT", "axes_or_frame": "platform-specific calibration semantics unresolved"},
+        "magnetic_field_y(microteslas)": {"role": "forbidden", "android_api": null, "unit": "uT", "axes_or_frame": "platform-specific calibration semantics unresolved"},
+        "magnetic_field_z(microteslas)": {"role": "forbidden", "android_api": null, "unit": "uT", "axes_or_frame": "platform-specific calibration semantics unresolved"}
+      }
+    }
+  ]
+}

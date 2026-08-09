@@ -139,3 +139,28 @@ class EvaluationResult:
     failure_flags: tuple[str, ...]
     seed: int
     dataset_hash: str
+
+
+@dataclass(frozen=True)
+class DatasetSourceEvidence:
+    source_kind: str
+    url: str
+    revision: str
+    retrieved_on: str
+    supports: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ModelCompatibilityReport:
+    model: str
+    version: str
+    dataset: str
+    required_inputs: tuple[str, ...]
+    required_rate_hz: float
+    preprocessing: tuple[str, ...]
+    training_targets: tuple[str, ...]
+    live_output: bool
+    code_license: str
+    weight_license: str
+    declared_decision: CompatibilityDecision
+    decision_reasons: tuple[str, ...]

@@ -9,8 +9,10 @@ from .contracts import (
     EstimatePoint,
     EstimatorOutput,
     EvaluationResult,
+    DatasetSourceEvidence,
     FieldRole,
     NormalizedSensorSession,
+    ModelCompatibilityReport,
     SensorMetadata,
     SensorSample,
 )
@@ -24,8 +26,10 @@ __all__ = [
     "EstimatePoint",
     "EstimatorOutput",
     "EvaluationResult",
+    "DatasetSourceEvidence",
     "FieldRole",
     "NormalizedSensorSession",
+    "ModelCompatibilityReport",
     "SensorMetadata",
     "SensorSample",
 ]

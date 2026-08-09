@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "retrieved_on": "2026-08-09",
+  "sources": [
+    {
+      "dataset": "RoNIN",
+      "source_kind": "paper",
+      "url": "https://arxiv.org/abs/1905.12853",
+      "revision": "arXiv:1905.12853v2",
+      "supports": ["collection protocol", "subjects and duration", "body-heading target", "orientation dependency", "seen/unseen subject evaluation"]
+    },
+    {
+      "dataset": "RoNIN",
+      "source_kind": "official-code",
+      "url": "https://github.com/Sachini/ronin/tree/805b7f0f28bb164ce89ada9ac05a9470dbe3d715",
+      "revision": "805b7f0f28bb164ce89ada9ac05a9470dbe3d715",
+      "supports": ["HDF5 schema", "feature construction", "orientation-source selection", "ground-truth velocity and heading targets", "GPL-3.0 code license"]
+    },
+    {
+      "dataset": "OxIOD",
+      "source_kind": "paper",
+      "url": "https://arxiv.org/abs/1809.07491",
+      "revision": "arXiv:1809.07491v1",
+      "supports": ["158 sequences", "42 km scale", "attachments", "devices", "Vicon ground truth"]
+    },
+    {
+      "dataset": "OxIOD",
+      "source_kind": "paper",
+      "url": "https://arxiv.org/abs/2001.04061",
+      "revision": "arXiv:2001.04061v1",
+      "supports": ["14.72 hours", "iPhone and Nexus devices", "100 Hz model path", "Vicon and Tango/pseudo-ground-truth use"]
+    },
+    {
+      "dataset": "OxIOD",
+      "source_kind": "official-site",
+      "url": "https://deepio.cs.ox.ac.uk/",
+      "revision": "unavailable during 2026-08-09 audit",
+      "supports": ["artifact download origin only; schema and license require re-check when site is reachable"]
+    },
+    {
+      "dataset": "RIDI",
+      "source_kind": "paper",
+      "url": "https://arxiv.org/abs/1712.09004",
+      "revision": "arXiv:1712.09004v2",
+      "supports": ["six subjects", "four placements", "100 minutes", "200 Hz", "Tango ground truth", "algorithm inputs"]
+    },
+    {
+      "dataset": "RIDI",
+      "source_kind": "official-code",
+      "url": "https://github.com/higerra/ridi_imu/tree/ce5d772a1ef8ce590121f0f0b254910bc07a2949",
+      "revision": "ce5d772a1ef8ce590121f0f0b254910bc07a2949",
+      "supports": ["processed CSV schema", "200 Hz interpolation", "rotation-vector and magnetometer dependency", "post-session optimization", "ground-truth registration option", "MIT code license"]
+    },
+    {
+      "dataset": "RIDI",
+      "source_kind": "official-collector",
+      "url": "https://github.com/higerra/TangoIMURecorder/tree/ca8657b9460a1157c3e9570ec8a6c16e0072b263",
+      "revision": "ca8657b9460a1157c3e9570ec8a6c16e0072b263",
+      "supports": ["Android sensor files", "Tango pose separation", "collector workflow"]
+    }
+  ]
+}
