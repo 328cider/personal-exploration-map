@@ -64,6 +64,10 @@ jobs:
           build_tools="$ANDROID_HOME/build-tools/35.0.0"
           "$build_tools/apksigner" verify --verbose "$app_apk"
           "$build_tools/aapt2" dump permissions "$app_apk" | tee research/pdr/android-capture/app/build/permissions.txt
+          "$build_tools/aapt2" dump badging "$app_apk" | tee research/pdr/android-capture/app/build/badging.txt
+          grep -q "package: name='com.personalexplorationmap.pdrcapture'" research/pdr/android-capture/app/build/badging.txt
+          grep -q "sdkVersion:'28'" research/pdr/android-capture/app/build/badging.txt
+          grep -q "targetSdkVersion:'35'" research/pdr/android-capture/app/build/badging.txt
           ! grep -q "android.permission.INTERNET" research/pdr/android-capture/app/build/permissions.txt
           ! grep -q "android.permission.HIGH_SAMPLING_RATE_SENSORS" research/pdr/android-capture/app/build/permissions.txt
           grep -q "android.permission.FOREGROUND_SERVICE" research/pdr/android-capture/app/build/permissions.txt
@@ -77,6 +81,8 @@ jobs:
             artifacts/pdr-capture/app-debug-androidTest.apk
           cp research/pdr/android-capture/app/build/permissions.txt \
             artifacts/pdr-capture/permissions.txt
+          cp research/pdr/android-capture/app/build/badging.txt \
+            artifacts/pdr-capture/badging.txt
           sha256sum artifacts/pdr-capture/*.apk > artifacts/pdr-capture/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
@@ -86,10 +92,10 @@ jobs:
           retention-days: 14
 
   emulator-e2e:
-    name: Android 15 no-walking batch/flush plumbing gate
+    name: Android 15 install/lifecycle/export pre-device gate
     needs: android-apk
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v5
@@ -106,7 +112,7 @@ jobs:
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Start, record, finalize, extract, and validate on Android 15
+      - name: Clean-install, exercise lifecycle/export, relaunch, and validate on Android 15
         uses: ReactiveCircus/android-emulator-runner@v2.37.0
         with:
           api-level: 35
@@ -125,6 +131,25 @@ jobs:
             artifacts/pdr-capture/app-debug.apk
             artifacts/pdr-capture/app-debug-androidTest.apk
             artifacts/pdr-capture/emulator-evidence
+      - name: Stage only the emulator-qualified C0 preflight APK
+        run: |
+          mkdir -p artifacts/pdr-capture/emulator-qualified
+          cp artifacts/pdr-capture/app-debug.apk \
+            artifacts/pdr-capture/emulator-qualified/pdr-capture-emulator-qualified.apk
+          cp artifacts/pdr-capture/permissions.txt \
+            artifacts/pdr-capture/emulator-qualified/permissions.txt
+          cp artifacts/pdr-capture/badging.txt \
+            artifacts/pdr-capture/emulator-qualified/badging.txt
+          cp artifacts/pdr-capture/emulator-evidence/emulator-device-readiness.json \
+            artifacts/pdr-capture/emulator-qualified/emulator-device-readiness.json
+          cd artifacts/pdr-capture/emulator-qualified
+          sha256sum pdr-capture-emulator-qualified.apk > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pdr-capture-emulator-qualified-c0-preflight
+          path: artifacts/pdr-capture/emulator-qualified/
+          if-no-files-found: error
+          retention-days: 14
       - uses: actions/upload-artifact@v4
         if: always()
         with:

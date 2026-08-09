@@ -14,6 +14,7 @@ import android.hardware.SensorManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.StatFs
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.Button
@@ -47,7 +48,10 @@ class MainActivity : Activity() {
 
     private val finishedReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            refreshStatus("Capture finalized: ${intent?.getStringExtra(CaptureActions.EXTRA_SESSION_ID) ?: "unknown"}")
+            val sessionId = intent?.getStringExtra(CaptureActions.EXTRA_SESSION_ID) ?: "unknown"
+            val outcome = intent?.getStringExtra(CaptureActions.EXTRA_OUTCOME) ?: "unknown"
+            val reason = intent?.getStringExtra(CaptureActions.EXTRA_REASON) ?: "unspecified"
+            refreshStatus("Capture finished: $sessionId; outcome=$outcome; reason=$reason")
         }
     }
 
@@ -124,19 +128,19 @@ class MainActivity : Activity() {
         capability = TextView(this).also { content.addView(it) }
         status = TextView(this).apply { setPadding(0, 12, 0, 12) }.also { content.addView(it) }
 
-        participant = textField(content, "Pseudonymous participant code", "P001")
-        route = textField(content, "Route / protocol ID", "operational-probe-a")
-        cell = textField(content, "Frozen protocol cell ID", "c1-front-right-screen-off-live100")
-        duration = textField(content, "Planned duration (seconds)", "600")
+        participant = textField(content, "Pseudonymous participant code", "P-PILOT-01")
+        route = textField(content, "Route / protocol ID", "stationary-device-probe")
+        cell = textField(content, "Frozen protocol cell ID", "c0-screen-on-live50")
+        duration = textField(content, "Planned duration (seconds)", "120")
         placement = spinner(content, "Placement", PLACEMENTS)
         content.addView(TextView(this).apply {
             text = "Split: development (v1 cannot create tuning or sealed-validation runs without a future frozen-plan import)"
             setPadding(0, 12, 0, 2)
         })
         mode = spinner(content, "Capture mode", CaptureMode.entries.map { it.key })
-        mode.setSelection(CaptureMode.entries.indexOf(CaptureMode.LIVE_100))
+        mode.setSelection(CaptureMode.entries.indexOf(CaptureMode.LIVE_50))
         lifecycle = spinner(content, "Declared lifecycle protocol", LifecycleProtocol.entries.map { it.key })
-        lifecycle.setSelection(LifecycleProtocol.entries.indexOf(LifecycleProtocol.SCREEN_OFF))
+        lifecycle.setSelection(LifecycleProtocol.entries.indexOf(LifecycleProtocol.FOREGROUND_SCREEN_ON))
         motionCondition = spinner(content, "Declared motion condition", AUTHORIZED_MOTION_CONDITIONS.map { it.key })
         motionCondition.setSelection(AUTHORIZED_MOTION_CONDITIONS.indexOf(MotionCondition.STATIONARY))
 
@@ -171,7 +175,7 @@ class MainActivity : Activity() {
             }
         })
         content.addView(TextView(this).apply {
-            text = "Do not enter a name, email, or location in metadata. Interrupted .partial sessions remain visible and count as failed attempts."
+            text = "C0 defaults are preparation only until an authorized plan names this device pseudonym. Do not enter a name, email, or location in metadata. Interrupted .partial sessions remain visible and count as failed attempts."
             textSize = 13f
             setPadding(0, 16, 0, 0)
         })
@@ -262,9 +266,25 @@ class MainActivity : Activity() {
         val snapshot = probeCapabilities(manager, request.sessionId)
         if (!snapshot.supportsImu6) {
             toast("This device does not expose both required accelerometer and gyroscope sensors.")
+            refreshStatus("Start blocked: required IMU6 capability is unavailable")
+            return
+        }
+        val availableBytes = StatFs(filesDir.absolutePath).availableBytes
+        val requiredBytes = requiredStorageHeadroomBytes(request.plannedDurationSeconds)
+        if (availableBytes < requiredBytes) {
+            toast("Not enough storage headroom for this planned duration.")
+            refreshStatus("Start blocked: available storage $availableBytes bytes; required $requiredBytes bytes")
+            return
         }
         val intent = request.putInto(Intent(this, CaptureService::class.java).setAction(CaptureActions.START))
-        startForegroundService(intent)
+        val started = runCatching { startForegroundService(intent) }
+        if (started.isFailure) {
+            pendingRequest = null
+            val error = started.exceptionOrNull()?.javaClass?.simpleName ?: "unknown"
+            toast("Capture service could not start: $error")
+            refreshStatus("Start failed before capture: $error")
+            return
+        }
         sendServiceAction(CaptureActions.ACTIVITY_STATE) {
             putExtra(CaptureActions.EXTRA_STATE, "visible")
             putExtra(CaptureActions.EXTRA_ACTIVITY_SOURCE, "capture-start")
@@ -272,15 +292,24 @@ class MainActivity : Activity() {
         refreshStatus("Start requested: ${request.sessionId}")
     }
 
-    private fun sendServiceAction(action: String, configure: Intent.() -> Unit = {}) {
+    private fun sendServiceAction(action: String, configure: Intent.() -> Unit = {}): Boolean {
         val intent = Intent(this, CaptureService::class.java).setAction(action).apply(configure)
-        startService(intent)
+        return runCatching { startService(intent) }.fold(
+            onSuccess = { true },
+            onFailure = {
+                refreshStatus("Service action failed: $action (${it.javaClass.simpleName})")
+                false
+            },
+        )
     }
 
     private fun refreshCapability() {
         val snapshot = probeCapabilities(getSystemService(SENSOR_SERVICE) as SensorManager, "probe-only")
         val optional = SensorNames.standardOptional.count { it in snapshot.availableTypes }
         capability.text = buildString {
+            append("Build: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}); revision ${BuildConfig.RESEARCH_REVISION.take(12)}")
+            append("\nDevice pseudonym: ${devicePseudonym()}")
+            append("\n")
             append(if (snapshot.supportsImu6) "IMU6 capability: available" else "IMU6 capability: UNSUPPORTED")
             append("\nSensors reported: ${snapshot.records.size}; standard optional types: $optional/${SensorNames.standardOptional.size}")
             if (snapshot.requiredMissing.isNotEmpty()) {

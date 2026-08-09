@@ -45,4 +45,13 @@ class CaptureModeTest {
         assertEquals("unsupported", resolveFinalStatus("unsupported", null))
         assertEquals("invalid", resolveFinalStatus("complete", "writer_io_failure"))
     }
+
+    @Test
+    fun storagePreflightUsesTheSameBoundedEstimateForUiAndService() {
+        assertEquals(
+            MIN_STORAGE_HEADROOM_BYTES + 120L * ESTIMATED_MAX_BYTES_PER_SECOND,
+            requiredStorageHeadroomBytes(120),
+        )
+        assertTrue(requiredStorageHeadroomBytes(300) > requiredStorageHeadroomBytes(120))
+    }
 }

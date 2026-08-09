@@ -137,6 +137,9 @@ Known-path-only truth can evaluate endpoint, distance, discrete turns, topology,
 - The normal physical verdict is never overridden. A separate E0 plumbing gate may tolerate only the virtual sensor's `continuity-gap`, `marginal-imu-coverage`, and `insufficient-imu-coverage` findings when integrity is 100%, writer drops are zero, both mandatory streams sustain at least 45 Hz for 10 seconds, median intervals are at most 25 ms, and no mandatory gap reaches one second.
 - Every E0 result records `product_usable: false`, `counts_toward_capture_kpis: false`, and `physical_sensor_evidence: false`, including when the ordinary validator accepts the virtual bundle. The unmodified physical-validator result is exposed separately as `ordinary_validator_usable` and `ordinary_validator_outcome` for pipeline diagnosis only.
 - Passing E0 is not real sensor, screen-off, battery, OEM, pocket, K1/K2, or estimator evidence.
+- The pre-device E0 flow must use the exact uploaded APK pair and perform a clean uninstall/install, cold launch, visible build revision and IMU capability check, optional-permission-denied capture, foreground-service notification check, Home/screen-off/return lifecycle, fail-closed walking request, stop/finalize, app-private bundle extraction, exported-ZIP replay, force-stop/relaunch persistence check, and target-package crash-buffer scan.
+- Both the app-private bundle and the exported ZIP must produce the same capture-quality and E0 verdict. Evidence is uploaded on failure as well as success so a device run is never used to discover an emulator-reproducible install, launch, lifecycle, or export defect.
+- The raw build artifact is never the handoff artifact. CI publishes `pdr-capture-emulator-qualified-c0-preflight` only after the full emulator job succeeds; it contains the exact app APK, SHA-256 list, package/SDK metadata, permission surface, and non-physical readiness verdict. Publication still does not authorize C0 collection.
 
 ### C0 — real-device capability probe, no walking
 
@@ -146,6 +149,8 @@ Known-path-only truth can evaluate endpoint, distance, discrete turns, topology,
 - Do not ask the user to walk until C0 bundles pass integrity and continuity QA.
 
 The machine template expands these into four separate C0 cells: screen-on live-50/live-100 and screen-off live-50/live-100. It also preregisters four E0 rate/batch cells and future C1 transition, live, batch, and notification-return cells. The current APK cannot execute the C1 walking cells. The checked-in template remains explicitly unauthorized and has rights flags false for personal cells.
+
+The APK UI defaults to the shortest C0 preparation cell (`c0-screen-on-live50`, stationary, hand placement, 120 seconds) rather than a future C1 walking cell. It displays the exact build revision and stable device pseudonym, blocks capture before service startup when mandatory IMU6 or storage headroom is unavailable, and reports service completion outcome/reason. These defaults prevent a future operator from accidentally labeling an initial capability run as walking evidence; they do not authorize personal collection.
 
 ### C1 — minimum one-person operational pilot
 
