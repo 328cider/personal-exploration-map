@@ -134,7 +134,7 @@ Known-path-only truth can evaluate endpoint, distance, discrete turns, topology,
 - 50/100 Hz modes, optional-permission denied paths, screen-off/home/return, notification stop, process interruption, and low-storage/writer-failure fixtures.
 - Validate the exact exported bundle with the same capture-quality validator used for physical runs.
 - Exercise a batched mode in Android 15 CI so the asynchronous FIFO-flush path is not covered only by mocks.
-- The normal physical verdict is never overridden. A separate E0 plumbing gate may tolerate only the virtual sensor's `continuity-gap` and `insufficient-imu-coverage` findings when integrity is 100%, writer drops are zero, both mandatory streams sustain at least 45 Hz for 10 seconds, median intervals are at most 25 ms, and no mandatory gap reaches one second.
+- The normal physical verdict is never overridden. A separate E0 plumbing gate may tolerate only the virtual sensor's `continuity-gap`, `marginal-imu-coverage`, and `insufficient-imu-coverage` findings when integrity is 100%, writer drops are zero, both mandatory streams sustain at least 45 Hz for 10 seconds, median intervals are at most 25 ms, and no mandatory gap reaches one second.
 - An E0 plumbing pass records `product_usable: false`, `counts_toward_capture_kpis: false`, and `physical_sensor_evidence: false` whenever the ordinary validator rejects virtual-sensor timing.
 - Passing E0 is not real sensor, screen-off, battery, OEM, pocket, K1/K2, or estimator evidence.
 

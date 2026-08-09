@@ -11,7 +11,9 @@ from collections.abc import Mapping
 from typing import Any
 
 
-ALLOWED_VIRTUAL_SENSOR_FINDINGS = frozenset({"continuity-gap", "insufficient-imu-coverage"})
+ALLOWED_VIRTUAL_SENSOR_FINDINGS = frozenset(
+    {"continuity-gap", "marginal-imu-coverage", "insufficient-imu-coverage"}
+)
 MANDATORY_SENSORS = ("TYPE_ACCELEROMETER", "TYPE_GYROSCOPE")
 
 

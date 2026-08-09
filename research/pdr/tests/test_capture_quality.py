@@ -559,6 +559,12 @@ class CaptureQualityTests(unittest.TestCase):
         self.assertFalse(gate["product_usable"])
         self.assertFalse(gate["counts_toward_capture_kpis"])
         self.assertFalse(gate["physical_sensor_evidence"])
+        self.assertIn("marginal-imu-coverage", gate["allowed_virtual_sensor_findings"])
+
+        quality["findings"][1]["code"] = "marginal-imu-coverage"
+        marginal_gate = evaluate_emulator_plumbing(quality)
+        self.assertTrue(marginal_gate["accepted"])
+        self.assertFalse(marginal_gate["product_usable"])
 
     def test_emulator_plumbing_gate_rejects_non_timing_failure_and_long_gap(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
