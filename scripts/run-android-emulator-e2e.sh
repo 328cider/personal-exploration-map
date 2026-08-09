@@ -11,5 +11,5 @@ python3 scripts/android-emulator-background-growth-runner.py \
 python3 scripts/android-emulator-coverage-modes.py \
   --artifacts "$EVIDENCE_DIR"
 
-python3 scripts/android-emulator-interaction-runner.py \
+python3 scripts/android-emulator-interaction-compat-runner.py \
   --artifacts "$EVIDENCE_DIR"
