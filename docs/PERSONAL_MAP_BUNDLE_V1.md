@@ -152,9 +152,10 @@ v3以前のsampleは次のprovenanceを持つ。
 
 - `raw_payload_format = legacy-normalized-v1`
 - `ordinal_provenance = legacy-recorded-at-id-v1`
+- `sample_ordinal = NULL`
 - `raw_payload_json = NULL`
 
-legacy rowは通常replayに利用できるが、失われた`NaN`、`-0`、provider受領順を推測しない。legacy rowを含むPersonalMapのlossless bundle exportはfail closedする。
+legacy rowは通常replayに利用できるが、失われた`NaN`、`-0`、provider受領順を推測しない。通常replayだけは従来の`recorded_at, id`順をfallbackとして使う。legacy rowを含むPersonalMapのlossless bundle exportはfail closedする。
 
 ## `markers/<ordinal>.json`
 
