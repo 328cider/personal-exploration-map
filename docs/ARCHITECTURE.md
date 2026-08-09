@@ -140,12 +140,12 @@ engineはmutableなExplorationSessionやcore mutation関数をappへ渡さない
 - transaction callbackへ渡されたtransaction objectだけでcanonical writeを実行する
 - provider observationをSQLite numeric affinityより前にexact payloadとして保存する
 - numeric columnsはfinite-only query/filter projectionでありoriginal truthではない
-- session-local `sample_ordinal`でprovider受領順を保持する
+- 新規sampleはsession-local `sample_ordinal`でprovider受領順を保持する
 - sample identityは`(exploration_id, id)`とする
 - raw observationsと確認済みmarkersをcanonical recordとして保存する
-- PersonalMap snapshotは毎回exact raw evidenceから再生成する
+- PersonalMap snapshotは毎回raw evidenceから再生成する
 - bundle export readは一つのconsistent read snapshot内で逐次実行する
-- legacy normalized rowをexact evidenceへ推測変換しない
+- legacy normalized rowをexact evidenceやprovider受領順へ推測変換しない
 
 Nodeの実SQLiteを使い、migration、foreign-key integrity、rollback、再起動後のreplay、複数sessionのsegment保持、special number、ordinal、legacy fail-closedを検証する。Expo固有のdatabase wrapperは`apps/mobile`に置き、generic adapterへExpoを依存させない。
 
@@ -218,7 +218,7 @@ DB migrationとcanonical SQLite repositoryはengine境界へ接続済みであ�
 端末から得たサンプルを証拠として保持する。
 
 - sample IDとExplorationSession membership
-- provider受領順のsession-local ordinal
+- 新規sampleのprovider受領順を表すsession-local ordinal
 - timestamp
 - source: gnss / pdr / manual / simulation
 - coordinate: geographic / local
@@ -238,13 +238,13 @@ exact raw payload              normalized projection
           └── canonical replay/export    └── bounded query/filter support
 ```
 
-両者が異なる場合、exact payloadがraw evidenceのauthorityである。
+両者が異なる場合、exact payloadがraw evidenceのauthorityである。v3以前のrowはexact payloadとordinalを持たず、legacy normalized evidenceとして制約を明示する。
 
 ### ExplorationSession
 
 1回の記録開始から終了までを表す観測単位。
 
-- raw observationsと受領順
+- raw observationsと利用可能なorder provenance
 - accepted / rejected
 - session-derived track
 - session markers
@@ -312,7 +312,7 @@ position_samples
   └─ finite-only normalized projection
 ```
 
-v1からの移行では、各旧explorationを同IDのPersonalMapへ昇格する。v4以前のraw rowsは既存値を保持し、従来の`recorded_at, id`順をmigration-derived ordinalとして記録するが、元のspecial numberやprovider受領順を復元したとは主張しない。
+v1からの移行では、各旧explorationを同IDのPersonalMapへ昇格する。v4以前のraw rowsは既存のnormalized値を保持し、`sample_ordinal = NULL`、`ordinal_provenance = legacy-recorded-at-id-v1`として制約を明示する。通常replayでは従来の`recorded_at, id`順をfallbackにするが、元のspecial numberやprovider受領順を復元したとは主張しない。
 
 schema migrationは次を満たすまで完了とみなさない。
 
@@ -323,6 +323,7 @@ schema migrationは次を満たすまで完了とみなさない。
 - PersonalMap削除時にsession、sample、markerがcascadeする
 - new exact rowがspecial numberとoptional absenceを往復する
 - duplicate retryでordinalを余分に消費しない
+- legacy rowのordinalが`NULL`のまま保持される
 - legacy rowをlossless bundleへ暗黙に昇格しない
 
 ## Bundle read snapshot
