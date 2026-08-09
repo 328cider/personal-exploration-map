@@ -2,7 +2,14 @@ name: devex-field-test
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "13 19 * * 0"
   pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
     paths:
       - ".github/workflows/devex-field-test.yml"
       - ".dockerignore"
@@ -34,7 +41,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: devex-field-test-v12-${{ github.ref }}
+  group: devex-field-test-v13-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -42,8 +49,83 @@ env:
   EXPO_NO_TELEMETRY: "1"
 
 jobs:
+  classify:
+    name: Classify Android and Docker lanes
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      docker_required: ${{ steps.classify.outputs.docker_required }}
+      apk_required: ${{ steps.classify.outputs.apk_required }}
+      emulator_required: ${{ steps.classify.outputs.emulator_required }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Classify changed paths
+        id: classify
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          docker_required=false
+          apk_required=false
+          emulator_required=false
+
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            docker_required=true
+            apk_required=true
+            emulator_required=true
+          else
+            while IFS= read -r path; do
+              case "$path" in
+                .github/workflows/devex-field-test.yml|scripts/check-ci-budget-policy.mjs)
+                  docker_required=true
+                  apk_required=true
+                  emulator_required=true
+                  ;;
+                package.json|package-lock.json|.nvmrc)
+                  docker_required=true
+                  apk_required=true
+                  emulator_required=true
+                  ;;
+                .dockerignore|compose.yaml|docker/*|scripts/docker-metro.ps1)
+                  docker_required=true
+                  ;;
+                apps/mobile/*|packages/sqlite-adapter/*|scripts/prepare-field-test-sources.mjs|scripts/enable-field-test-debuggable.mjs|scripts/check-tracking-stop-policy.mjs|scripts/android-emulator-*|scripts/run-android-emulator-*|scripts/pull-field-test-bundle.ps1|scripts/verify-field-test-usb-export.sh)
+                  apk_required=true
+                  emulator_required=true
+                  ;;
+                packages/mapping-core/*|packages/mapping-engine/*|packages/experience-sdk/*)
+                  ;;
+                packages/*)
+                  apk_required=true
+                  emulator_required=true
+                  ;;
+              esac
+            done < <(git diff --name-only --no-renames "$BASE_SHA" "$HEAD_SHA")
+          fi
+
+          echo "docker_required=$docker_required" >> "$GITHUB_OUTPUT"
+          echo "apk_required=$apk_required" >> "$GITHUB_OUTPUT"
+          echo "emulator_required=$emulator_required" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Selected CI lanes"
+            echo "- Docker: $docker_required"
+            echo "- Field-test APK: $apk_required"
+            echo "- Android emulator: $emulator_required"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   docker-check:
     name: Docker mobile check
+    needs: classify
+    if: >-
+      needs.classify.result == 'success' &&
+      needs.classify.outputs.docker_required == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -60,6 +142,10 @@ jobs:
 
   field-test-apk:
     name: Standalone USB-debuggable field-test APK
+    needs: classify
+    if: >-
+      needs.classify.result == 'success' &&
+      needs.classify.outputs.apk_required == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -93,7 +179,9 @@ jobs:
         working-directory: apps/mobile/android
         run: |
           chmod +x gradlew
-          ./gradlew :app:assembleRelease --no-daemon --stacktrace
+          ./gradlew :app:assembleRelease \
+            -PreactNativeArchitectures=arm64-v8a,x86_64 \
+            --no-daemon --stacktrace
       - name: Verify bundled, signed, and debuggable APK
         run: |
           set -euo pipefail
@@ -127,7 +215,13 @@ jobs:
 
   emulator-e2e:
     name: Android emulator user-flow and USB extraction gate
-    needs: field-test-apk
+    needs:
+      - classify
+      - field-test-apk
+    if: >-
+      needs.classify.result == 'success' &&
+      needs.classify.outputs.emulator_required == 'true' &&
+      needs.field-test-apk.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
