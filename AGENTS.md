@@ -114,6 +114,19 @@ IssueまたはPRに次を残す。該当しない場合も理由を書く。
 - `Android emulator user-flow gate`が失敗したField-test APKを、ユーザーへ実地試験候補として渡さない。
 - エミュレータ合格を、実GNSS、OEM省電力、電池、ポケットUXの合格と混同しない。
 
+## GitHub Actions budget (mandatory)
+
+`docs/CI_BUDGET_POLICY.md` は人間、Codex、ChatGPT、その他すべての開発エージェントに適用する。
+
+- 実装・レビュー修正・format・ローカル検証中はPRをDraftに保つ。GitHub Actionsをedit-test loopとして使わない。
+- 反復中は対象テストを実行し、Readyにする前の最終headで`npm run check`を実行する。mobileまたはadapter変更では、ローカル環境が対応する限り`npm run mobile:check`も実行する。
+- CIを起動するためだけのpush、未変更headのrerun、安心目的のAPK・emulator・benchmark・fixture拡張をしない。
+- 通常のpackage/static/governance検証はReady PRで実行する。Docker、Field-test APK、Android Emulatorは変更分類が所有する境界だけで実行し、週次fullを分類漏れの安全網にする。
+- 純粋な`mapping-core`、`mapping-engine`、`experience-sdk`変更だけを理由にAPKやemulatorを実行しない。mobile/native/SQLite/dependency/harness変更はfail-closedで必要レーンを選ぶ。
+- Field-test APKのCI ABIは`arm64-v8a`と`x86_64`に限定する。明示的な対応端末要件なしに4 ABIへ戻さない。
+- CIが製品不具合を検出した場合はローカルで再現・修正し、修正をまとめて1回pushする。runner、network、cache、registry、Android SDK等の具体的な外部障害がログで確認できる場合だけ失敗jobをrerunし、PRへ根拠を残す。
+- workflowとCI policyの変更は`node scripts/check-ci-budget-policy.mjs`を通し、分類機構自身を軽量扱いしない。チェックを通すために規則を弱めない。
+
 ## Constitution changes
 
 `PRODUCT_CONSTITUTION.md` の変更は通常の機能変更ではない。次が揃うまで変更しない。
@@ -132,6 +145,7 @@ IssueまたはPRに次を残す。該当しない場合も理由を書く。
 ```bash
 node scripts/check-product-governance.mjs
 node scripts/check-architecture-boundaries.mjs
+node scripts/check-ci-budget-policy.mjs
 npm test
 npm run typecheck
 ```
