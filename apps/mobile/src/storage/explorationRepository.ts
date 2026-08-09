@@ -155,7 +155,11 @@ export async function getLiveExplorationStats(
     `SELECT horizontal_accuracy_meters, recorded_at
      FROM position_samples
      WHERE exploration_id = ?
-     ORDER BY sample_ordinal DESC
+     ORDER BY
+       CASE WHEN sample_ordinal IS NULL THEN 1 ELSE 0 END,
+       sample_ordinal DESC,
+       recorded_at DESC,
+       id DESC
      LIMIT 1`,
     explorationId,
   );
