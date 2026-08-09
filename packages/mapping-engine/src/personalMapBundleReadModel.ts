@@ -24,11 +24,10 @@ export interface PersonalMapBundleMarkerGroup {
 }
 
 /**
- * Read-only repository surface for producing a logical lossless bundle input.
- * Implementations should use consistent-read semantics when the backing store
- * can be modified concurrently.
+ * Queries available only while a repository implementation holds one
+ * consistent read transaction/snapshot.
  */
-export interface PersonalMapBundleReadRepositoryPort {
+export interface PersonalMapBundleReadSnapshotPort {
   loadPersonalMapRecord(
     personalMapId: string,
   ): Promise<StoredPersonalMap | null>;
@@ -42,6 +41,21 @@ export interface PersonalMapBundleReadRepositoryPort {
   loadMarkerGroups(
     explorationIds: readonly string[],
   ): Promise<readonly PersonalMapBundleMarkerGroup[]>;
+}
+
+/**
+ * Read-only repository surface for producing a logical lossless bundle input.
+ *
+ * Tracking may append evidence while an export is being prepared. The adapter
+ * must therefore execute the complete callback against one database snapshot
+ * or read transaction rather than independently opening each query.
+ */
+export interface PersonalMapBundleReadRepositoryPort {
+  withConsistentRead<Result>(
+    operation: (
+      reader: PersonalMapBundleReadSnapshotPort,
+    ) => Promise<Result>,
+  ): Promise<Result>;
 }
 
 export type PersonalMapBundleReadErrorCode =
@@ -141,18 +155,11 @@ function indexGroups<T>(
   return indexed;
 }
 
-/**
- * Loads canonical export evidence in batched, read-only queries and converts it
- * to the input consumed by `buildPersonalMapBundle`.
- *
- * The function does not create files, hash content, open a write transaction,
- * expose a share sheet, or derive accepted/rejected map state.
- */
-export async function loadPersonalMapBundleExportInput(
-  repository: PersonalMapBundleReadRepositoryPort,
+async function loadFromSnapshot(
+  reader: PersonalMapBundleReadSnapshotPort,
   options: LoadPersonalMapBundleExportInputOptions,
 ): Promise<PersonalMapBundleExportInput> {
-  const personalMap = await repository.loadPersonalMapRecord(
+  const personalMap = await reader.loadPersonalMapRecord(
     options.personalMapId,
   );
   if (personalMap === null) {
@@ -171,14 +178,14 @@ export async function loadPersonalMapBundleExportInput(
   }
 
   const [frameAtExport, records] = await Promise.all([
-    repository.loadFrameAtExport(options.personalMapId),
-    repository.listExplorationRecords(options.personalMapId),
+    reader.loadFrameAtExport(options.personalMapId),
+    reader.listExplorationRecords(options.personalMapId),
   ]);
   const explorations = orderedExplorations(options.personalMapId, records);
   const explorationIds = explorations.map((record) => record.id);
   const [rawGroups, markerGroups] = await Promise.all([
-    repository.loadRawSampleGroups(explorationIds),
-    repository.loadMarkerGroups(explorationIds),
+    reader.loadRawSampleGroups(explorationIds),
+    reader.loadMarkerGroups(explorationIds),
   ]);
   const rawByExploration = indexGroups(
     "raw samples",
@@ -209,4 +216,21 @@ export async function loadPersonalMapBundleExportInput(
       ? {}
       : { producer: options.producer }),
   };
+}
+
+/**
+ * Loads canonical export evidence and converts it to the input consumed by
+ * `buildPersonalMapBundle`.
+ *
+ * The complete read executes inside one adapter-provided consistent snapshot.
+ * The function does not create files, hash content, open a write transaction,
+ * expose a share sheet, or derive accepted/rejected map state.
+ */
+export function loadPersonalMapBundleExportInput(
+  repository: PersonalMapBundleReadRepositoryPort,
+  options: LoadPersonalMapBundleExportInputOptions,
+): Promise<PersonalMapBundleExportInput> {
+  return repository.withConsistentRead((reader) =>
+    loadFromSnapshot(reader, options),
+  );
 }
