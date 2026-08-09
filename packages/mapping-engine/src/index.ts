@@ -8,3 +8,4 @@ export * from "./personalMapBundle.ts";
 export * from "./personalMapBundleNumber.ts";
 export * from "./personalMapBundleValidation.ts";
 export * from "./personalMapBundleStaging.ts";
+export * from "./personalMapRestorePreflight.ts";
