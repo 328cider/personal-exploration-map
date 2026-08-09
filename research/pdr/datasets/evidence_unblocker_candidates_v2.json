@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "audit": "pdr-evidence-unblocker-v2",
+  "preregistered_on": "2026-08-09",
+  "discovery_cutoff": "2026-08-09T23:59:59+09:00",
+  "artifact_policy": "official metadata, immutable repository trees, ZIP indexes, README/parser/aggregate files only; no raw sensor rows or model weights",
+  "candidates": [
+    {
+      "id": "ipin-2022-t3",
+      "name": "IPIN 2022 Competition Track 3",
+      "target_scope": "full-pdr",
+      "audit_state": "complete",
+      "classification": "product-input-benchmark-only",
+      "primary_urls": [
+        "https://zenodo.org/records/7612915",
+        "https://zenodo.org/api/records/7612915"
+      ],
+      "discovery_reason": "Open smartphone competition archive with Android parser semantics, user-labelled training filenames, and sparse evaluation ground truth."
+    },
+    {
+      "id": "ipin-2023-2024-t3",
+      "name": "IPIN 2023/2024 Competition Track 3 training lineage",
+      "target_scope": "full-pdr",
+      "audit_state": "complete",
+      "classification": "product-input-benchmark-only",
+      "primary_urls": [
+        "https://zenodo.org/records/8362205",
+        "https://zenodo.org/records/13931119"
+      ],
+      "discovery_reason": "Recent open smartphone competition packages; audit treats byte-identical training members as one corpus rather than two independent datasets."
+    },
+    {
+      "id": "xdr-2023",
+      "name": "xDR Challenge 2023",
+      "target_scope": "full-pdr",
+      "audit_state": "complete",
+      "classification": "reject-unresolved",
+      "primary_urls": [
+        "https://unit.aist.go.jp/rihsa/xDR-Challenge-2023/",
+        "https://github.com/PDR-benchmark-standardization-committee/xDR-Challenge-2023-evaluation"
+      ],
+      "discovery_reason": "Android 9-axis IMU and approximately 100 Hz LiDAR position/orientation truth are the closest newly found technical match."
+    },
+    {
+      "id": "wang-sle",
+      "name": "Benchmark Dataset for Adaptive Stride Length Estimation",
+      "target_scope": "distance-component",
+      "audit_state": "complete",
+      "classification": "reject-unresolved",
+      "primary_urls": [
+        "https://github.com/Archeries/StrideLengthEstimation/tree/c96f67c79a81a8f2098eee051dd41c0c1ba1d102",
+        "https://doi.org/10.3390/s19040840"
+      ],
+      "discovery_reason": "Android 100 Hz raw 9-axis phone IMU with per-stride foot-IMU distance labels."
+    },
+    {
+      "id": "wang-wde",
+      "name": "Walking Distance Estimation dataset",
+      "target_scope": "distance-component",
+      "audit_state": "complete",
+      "classification": "reject-unresolved",
+      "primary_urls": [
+        "https://github.com/wq1989/WalkingDistanceEstimation/tree/634ac708a71aeae30d41814546f85ebfc71e1411",
+        "https://doi.org/10.3390/rs11091140"
+      ],
+      "discovery_reason": "Android 100 Hz raw IMU, per-stride labels, and five phone carrying modes provide a stronger placement stress test than SLE."
+    },
+    {
+      "id": "forestback",
+      "name": "ForestBack dataset",
+      "target_scope": "full-pdr",
+      "audit_state": "complete",
+      "classification": "reject-unresolved",
+      "primary_urls": [
+        "https://arxiv.org/abs/2606.14421",
+        "https://github.com/Aueaphum2541/ForestBack-Dataset/tree/02924917f21ea218d464649494197058d6d51cbe"
+      ],
+      "discovery_reason": "A 2026 release claiming 100 Hz IMU, heading, trajectory, turn, barometer, power, and notebook evidence."
+    },
+    {
+      "id": "el-sle",
+      "name": "EL-SLE",
+      "target_scope": "distance-component",
+      "audit_state": "complete",
+      "classification": "reject-unresolved",
+      "primary_urls": [
+        "https://doi.org/10.3390/s22186864",
+        "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC9501393/fullTextXML"
+      ],
+      "discovery_reason": "Five Android devices and VIO-labelled stride data over 31.5 km could address device diversity if an auditable artifact exists."
+    }
+  ],
+  "screened_out": [
+    {
+      "id": "xdr-2025",
+      "reason": "iOS/ARKit/UWB/navigation-robot task with request-gated data and product-incompatible mandatory inputs"
+    },
+    {
+      "id": "urwalking-optical-flow",
+      "reason": "dataset is marked coming soon and camera inference violates the frozen passive raw-sensor input contract"
+    },
+    {
+      "id": "har-pmd",
+      "reason": "Android-compatible HAR inputs but activity-only labels do not supervise heading, trajectory, or stride length"
+    },
+    {
+      "id": "ipin-foot-mounted-tracks",
+      "reason": "foot-mounted placement cannot be reproduced by a normally carried Android phone"
+    }
+  ]
+}
