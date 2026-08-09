@@ -9,6 +9,7 @@ on:
       - "scripts/analyze-field-test-summary.test.mjs"
       - "scripts/analyze-field-test-summary-safety.test.mjs"
       - "scripts/analyze-latest-field-test.ps1"
+      - "scripts/collect-and-analyze-field-test.ps1"
       - "docs/FIELD_TEST_OBJECTIVE_ANALYSIS.md"
 
 permissions:
@@ -33,12 +34,17 @@ jobs:
           node --test
           scripts/analyze-field-test-summary.test.mjs
           scripts/analyze-field-test-summary-safety.test.mjs
-      - name: Parse Windows Docker wrapper with PowerShell
+      - name: Parse Windows wrappers with PowerShell
         shell: pwsh
         run: |
-          $source = [System.IO.File]::ReadAllText("scripts/analyze-latest-field-test.ps1")
-          [void][ScriptBlock]::Create($source)
-      - name: Exercise wrapper path mapping without host Node
+          foreach ($path in @(
+            "scripts/analyze-latest-field-test.ps1",
+            "scripts/collect-and-analyze-field-test.ps1"
+          )) {
+            $source = [System.IO.File]::ReadAllText($path)
+            [void][ScriptBlock]::Create($source)
+          }
+      - name: Exercise analyzer wrapper path mapping without host Node
         shell: pwsh
         run: |
           $bundleRoot = Join-Path $env:GITHUB_WORKSPACE "artifacts/device-bundles"
@@ -79,6 +85,19 @@ jobs:
           if ($null -ne $difference) {
             $difference | Format-Table | Out-String | Write-Error
             throw "Docker wrapper arguments did not match the expected container-only command."
+          }
+      - name: Keep combined collection output inside the repository
+        shell: pwsh
+        run: |
+          $outside = Join-Path $env:RUNNER_TEMP "pem-device-bundles"
+          try {
+            & ./scripts/collect-and-analyze-field-test.ps1 -OutputRoot $outside
+            throw "The collection wrapper unexpectedly accepted an external output path."
+          }
+          catch {
+            if ($_.Exception.Message -notmatch "must stay inside the repository") {
+              throw
+            }
           }
       - name: Assert the analyzer has no runtime dependencies
         run: |
