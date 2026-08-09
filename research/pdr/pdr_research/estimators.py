@@ -18,6 +18,7 @@ from .contracts import (
     SensorSample,
 )
 from .profiles import PROFILES
+from .step_detection import detect_rate_stable_steps, get_step_detector_config
 
 
 ACCELEROMETER = "TYPE_ACCELEROMETER"
@@ -376,11 +377,16 @@ def run_b0(session: NormalizedSensorSession, *, fixed_stride_m: float = 0.72) ->
 
 
 def _b1_requirement(
-    capability_profile: str, *, weinberg_gain: float
+    capability_profile: str,
+    *,
+    weinberg_gain: float,
+    step_detector_config_id: str | None,
 ) -> EstimatorRequirement:
     if capability_profile not in PROFILES:
         raise ValueError(f"Unknown capability profile: {capability_profile}")
     version = "1.1.0"
+    if step_detector_config_id is not None:
+        version = f"1.2.0+step-{step_detector_config_id}"
     if not math.isclose(weinberg_gain, 0.64):
         version += f"+weinberg-k{weinberg_gain:.3f}"
     return EstimatorRequirement(
@@ -400,18 +406,30 @@ def run_b1(
     capability_profile: str = "imu6",
     fallback_stride_m: float = 0.66,
     weinberg_gain: float = 0.64,
+    step_detector_config_id: str | None = None,
 ) -> EstimatorRun:
     if not 0.1 <= weinberg_gain <= 1.0:
         raise ValueError("Weinberg gain must be between 0.1 and 1.0")
     requirement = _b1_requirement(
-        capability_profile, weinberg_gain=weinberg_gain
+        capability_profile,
+        weinberg_gain=weinberg_gain,
+        step_detector_config_id=step_detector_config_id,
     )
     available = _available_sensor_types(session)
     missing = _missing_requirements(requirement, available)
     if missing:
         return _unsupported(requirement, missing)
 
-    acceleration_candidates = _acceleration_step_candidates(session)
+    if step_detector_config_id is None:
+        acceleration_candidates = _acceleration_step_candidates(session)
+    else:
+        step_detector_config = get_step_detector_config(step_detector_config_id)
+        detected_steps = detect_rate_stable_steps(
+            session, config=step_detector_config
+        )
+        acceleration_candidates = tuple(
+            (step.timestamp_ns, step.amplitude_mps2) for step in detected_steps
+        )
     use_android_steps = capability_profile in {
         "step-enabled",
         "enriched-with-pressure/GNSS",
@@ -433,6 +451,10 @@ def run_b1(
             if capability_profile in {"step-enabled", "enriched-with-pressure/GNSS"}
             else "custom-step-detector"
         )
+        if step_detector_config_id is not None:
+            fallback_flags.discard("custom-step-detector")
+            fallback_flags.discard("custom-step-detector-fallback")
+            fallback_flags.add(f"rate-stable-step-detector-{step_detector_config_id}")
     if not steps:
         return _unsupported(requirement, ("walking-events:not-detected",))
     fallback_flags.add(f"weinberg-gain-{weinberg_gain:.3f}")

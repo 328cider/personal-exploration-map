@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "experiment": "ronin-rate-stable-step-detector-v1",
+  "dataset": "RoNIN",
+  "evidence_kind": "public-sequence-benchmark-only",
+  "artifact": {
+    "doi": "10.20383/102.0543",
+    "archive": "unseen_subjects_test_set.zip",
+    "archive_size_bytes": 3211376453,
+    "official_archive_sha256": "d518eb150f5d44f74c56ce4b05e671cb73e507fcf6fc1ebcf7f1116bcd93bbb9",
+    "range_listing_bytes": 5751,
+    "selected_sequence_range_bytes": 205538149,
+    "full_archive_downloaded": false,
+    "license_decision": "benchmark-only; non-commercial scientific research"
+  },
+  "input_contract": {
+    "frozen_detector_live_inputs": [
+      "raw/imu/acce timestamp",
+      "raw/imu/acce x/y/z in m/s^2"
+    ],
+    "android_mapping": [
+      "Sensor.TYPE_ACCELEROMETER",
+      "SensorEvent.timestamp",
+      "SensorEvent.values"
+    ],
+    "post_freeze_optional_android_comparator": [
+      "raw/imu/step -> Sensor.TYPE_STEP_COUNTER"
+    ],
+    "evaluation_only": [
+      "synced/time",
+      "pose/tango_pos",
+      "pose/tango_ori",
+      "info/start_frame",
+      "info/imu_time_offset",
+      "info/align_tango_to_body"
+    ],
+    "forbidden_live_inputs": [
+      "pose/ekf_ori",
+      "Tango pose",
+      "body-heading truth",
+      "future trajectory",
+      "completed path shape"
+    ]
+  },
+  "sequences": [
+    {
+      "sequence": "a051_3",
+      "role": "development",
+      "subject_key": "a051",
+      "device": "asus4",
+      "duration_s": 392.6450000799923,
+      "http_range_bytes": 67114615,
+      "data_hdf5_compressed_bytes": 63827344,
+      "data_hdf5_uncompressed_bytes": 86131360,
+      "data_hdf5_crc32": "9ec7f174",
+      "data_hdf5_sha256": "33d7831b1123257a85f62d6d3213a0ad24579e8cddaf038ef69c0e3a50080504",
+      "info_json_sha256": "5ebdbd2d1024adf044e722b3f733ddee5b023e823c99badbdb48018a07af15ae",
+      "platform_step_counter_delta": 271,
+      "platform_step_counter_boundary_min": 271,
+      "platform_step_counter_boundary_max": null
+    },
+    {
+      "sequence": "a052_2",
+      "role": "validation-primary",
+      "subject_key": "a052",
+      "device": "samsung1",
+      "duration_s": 389.9750000085123,
+      "http_range_bytes": 67114615,
+      "data_hdf5_compressed_bytes": 66627855,
+      "data_hdf5_uncompressed_bytes": 88664904,
+      "data_hdf5_crc32": "d02b6076",
+      "data_hdf5_sha256": "aa06aaa3ce5d0fd5cab3bd052863b946aad5bec6cc6400a5e58384a212a1283f",
+      "info_json_sha256": "e59e4baa106cdbd7e726d36bf5af09645dec1932f890e9641cc3d4a4b3c21582",
+      "platform_step_counter_delta": 559,
+      "platform_step_counter_boundary_min": 553,
+      "platform_step_counter_boundary_max": null
+    },
+    {
+      "sequence": "a049_1",
+      "role": "validation-confirmatory",
+      "subject_key": "a049",
+      "device": "asus7",
+      "duration_s": 381.73000000833235,
+      "http_range_bytes": 71308919,
+      "data_hdf5_compressed_bytes": 69926280,
+      "data_hdf5_uncompressed_bytes": 94020560,
+      "data_hdf5_crc32": "507f5af1",
+      "data_hdf5_sha256": "57a4c217a80d21561b967eb271c42ab0dfe10aa7061dfb6e38937c66879aaa63",
+      "info_json_sha256": "448822026ee4b31888fff6730aa1e12a3f16e11eb6bc308e43981f97ec885081",
+      "platform_step_counter_delta": 452,
+      "platform_step_counter_boundary_min": 452,
+      "platform_step_counter_boundary_max": null
+    }
+  ],
+  "leakage_notes": [
+    "Sequence roles and gates were committed before any assigned raw member was fetched.",
+    "Detector parameters and implementation hashes were committed before either validation member was fetched.",
+    "Trajectory truth was not part of development ranking or validation rate-stability gates.",
+    "Platform Step Counter comparison was added after validation and did not modify the frozen detector."
+  ]
+}

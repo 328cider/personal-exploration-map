@@ -16,6 +16,9 @@ sys.path.insert(0, str(ROOT))
 from pdr_research.compatibility import validate_session  # noqa: E402
 from pdr_research.estimators import run_b0  # noqa: E402
 from pdr_research.ronin import load_ronin_raw_fixture  # noqa: E402
+from pdr_research.ronin_step_counter import (  # noqa: E402
+    load_ronin_step_counter_reference,
+)
 
 
 class RoNINAdapterTests(unittest.TestCase):
@@ -50,6 +53,18 @@ class RoNINAdapterTests(unittest.TestCase):
             handle.create_dataset(
                 "pose/tango_ori",
                 data=np.tile(np.array((1.0, 0.0, 0.0, 0.0)), (count, 1)),
+            )
+            handle.create_dataset(
+                "raw/imu/step",
+                data=np.array(
+                    (
+                        (-100_000_000, 10.0),
+                        (500_000_000, 11.0),
+                        (1_000_000_000, 13.0),
+                        (3_500_000_000, 14.0),
+                        (4_500_000_000, 15.0),
+                    )
+                ),
             )
         info_path.write_text(
             json.dumps(
@@ -115,6 +130,20 @@ class RoNINAdapterTests(unittest.TestCase):
         self.assertTrue(395 <= counts["TYPE_ACCELEROMETER"] <= 402)
         self.assertTrue(395 <= counts["TYPE_GYROSCOPE"] <= 402)
         self.assertTrue(195 <= counts["TYPE_GAME_ROTATION_VECTOR"] <= 202)
+
+    def test_platform_step_counter_is_an_optional_aggregate_reference(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            data_path, info_path = self._fixture(Path(directory))
+            reference = load_ronin_step_counter_reference(
+                data_path=data_path, info_path=info_path
+            )
+        self.assertEqual(reference.sensor_type, "TYPE_STEP_COUNTER")
+        self.assertEqual(reference.counter_delta, 4)
+        self.assertEqual(reference.boundary_min_count, 4)
+        self.assertEqual(reference.boundary_max_count, 4)
+        self.assertEqual(reference.callback_jump_count, 1)
+        self.assertEqual(reference.unobserved_increment_count, 1)
+        self.assertIn("not", reference.limitation)
 
 
 if __name__ == "__main__":
