@@ -13,10 +13,10 @@ test("GPX filename is deterministic, UTC, portable, and location-neutral", () =>
   });
 
   assert.equal(filename, "personal-map-20260809T150405123Z.gpx");
-  assert.match(filename, /^[a-z0-9.-]+$/);
+  assert.match(filename, /^[A-Za-z0-9.-]+$/);
   assert.equal(/[\\/:*?"<>|]/u.test(filename), false);
   assert.equal(filename.includes("Tokyo"), false);
-  assert.equal(filename.includes("35."), false);
+  assert.equal(filename.includes("35.681"), false);
 });
 
 test("GeoJSON uses a distinct standard extension without map metadata", () => {
@@ -26,7 +26,8 @@ test("GeoJSON uses a distinct standard extension without map metadata", () => {
   });
 
   assert.equal(filename, "personal-map-19700101T000000000Z.geojson");
-  assert.equal(filename.includes("map-1"), false);
+  assert.equal(filename.includes("personal-map-id-1"), false);
+  assert.equal(filename.includes("My exploration"), false);
 });
 
 test("millisecond precision prevents collisions between rapid explicit exports", () => {
