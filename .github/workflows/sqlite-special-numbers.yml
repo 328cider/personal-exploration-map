@@ -1,0 +1,39 @@
+name: sqlite-special-numbers
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/sqlite-special-numbers.yml"
+      - "experiments/006-sqlite-special-numbers.mjs"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sqlite-special-numbers-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  measure:
+    name: Measure Node SQLite numeric fidelity
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Run non-asserting measurement
+        run: >-
+          node experiments/006-sqlite-special-numbers.mjs
+          artifacts/sqlite-special-numbers/report.json
+      - name: Print measured facts
+        run: cat artifacts/sqlite-special-numbers/report.json
+      - name: Upload measurement
+        uses: actions/upload-artifact@v4
+        with:
+          name: sqlite-special-numbers
+          path: artifacts/sqlite-special-numbers/report.json
+          if-no-files-found: error
+          retention-days: 30
