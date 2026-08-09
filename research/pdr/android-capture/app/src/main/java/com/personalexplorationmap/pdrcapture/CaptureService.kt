@@ -111,6 +111,7 @@ class CaptureService : Service(), SensorEventListener2, LocationListener {
                             val sessionId = runCatching { CaptureRequest.fromIntent(intent).sessionId }
                                 .getOrDefault("unknown")
                             notifyFinished(sessionId, null, "invalid", reason)
+                            stopForeground(STOP_FOREGROUND_REMOVE)
                             stopSelf(startId)
                         }
                     }
@@ -136,13 +137,17 @@ class CaptureService : Service(), SensorEventListener2, LocationListener {
 
     private fun startCapture(captureRequest: CaptureRequest) {
         check(BuildConfig.RESEARCH_SCHEMA_VERSION == SCHEMA_VERSION) { "Build/schema contract mismatch" }
+        request = captureRequest
+        startedElapsedRealtimeNs = SystemClock.elapsedRealtimeNanos()
+        // startForegroundService callers give the service only a short deadline to promote itself.
+        // Promote before validating a rejected request so fail-closed input cannot crash the app.
+        // No writer or sensor registration exists at this point, so this is not capture evidence.
+        startForegroundCompat(buildNotification(), false)
         require(isMotionCaptureAuthorized(captureRequest.motionCondition)) {
             "This APK revision is not authorized for personal walking capture"
         }
-        request = captureRequest
-        startedElapsedRealtimeNs = SystemClock.elapsedRealtimeNanos()
         val actualLocation = request.requestLocation && hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)
-        startForegroundCompat(buildNotification(), actualLocation)
+        if (actualLocation) startForegroundCompat(buildNotification(), true)
 
         val root = File(filesDir, CAPTURE_ROOT).apply { mkdirs() }
         writer = BundleWriter(root, request.sessionId, startRecord(actualLocation))

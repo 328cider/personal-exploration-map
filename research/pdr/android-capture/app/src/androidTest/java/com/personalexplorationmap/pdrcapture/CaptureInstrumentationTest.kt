@@ -230,7 +230,7 @@ class CaptureInstrumentationTest {
 
     private fun diagnosticText(completed: File): String =
         completed.listFiles()
-            ?.filter { it.name.startsWith("diagnostics-") }
+            ?.filter { it.name.startsWith("diagnostic_events-") }
             .orEmpty()
             .joinToString("\n") { it.readText() }
 
