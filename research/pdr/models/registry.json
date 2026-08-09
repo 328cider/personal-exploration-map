@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "models": [
+    {
+      "model": "RoNIN ResNet official checkpoint",
+      "version": "official repository commit 805b7f0",
+      "dataset": "RoNIN",
+      "required_inputs": ["synced/gyro_uncalib", "synced/acce", "synced/game_rv"],
+      "required_rate_hz": 200,
+      "preprocessing": ["subtract sequence initial gyro bias", "apply dataset acceleration bias and scale", "rotate IMU to heading-agnostic/global frame with selected orientation", "training/validation may select game_rv, gyro integration, or EKF using ground-truth-derived orientation error; test forces game_rv"],
+      "training_targets": ["Tango-derived 2D velocity"],
+      "live_output": true,
+      "code_license": "GPL-3.0",
+      "weight_license": "official custom data/model license: non-commercial scientific research only; commercial product use prohibited",
+      "decision": "benchmark-only",
+      "decision_reasons": ["Official 200 Hz checkpoint exceeds the initial 50/100 Hz product profile.", "Training preprocessing can be selected with ground-truth-derived orientation error and may use dataset EKF orientation.", "Game rotation vector is optional on Android and has no imu6 fallback in the official checkpoint.", "The official custom data/model license prohibits commercial product use."]
+    },
+    {
+      "model": "RoNIN body-heading official checkpoint",
+      "version": "official repository commit 805b7f0",
+      "dataset": "RoNIN",
+      "required_inputs": ["synced/gyro_uncalib", "synced/acce", "synced/game_rv"],
+      "required_rate_hz": 200,
+      "preprocessing": ["same globalized six-channel feature path as RoNIN velocity models", "1000-sample heading window", "official raw compiler reorders Android x,y,z,w game_rv to synchronized w,x,y,z"],
+      "training_targets": ["Tango-to-body-alignment-derived body heading"],
+      "live_output": true,
+      "code_license": "GPL-3.0",
+      "weight_license": "official custom data/model license: non-commercial scientific research only; commercial product use prohibited",
+      "decision": "benchmark-only",
+      "decision_reasons": ["Body heading is a valid training target but is unavailable as a product input.", "Feature path still requires optional platform orientation at 200 Hz.", "The published checkpoint includes unpublished private training data and cannot be fully reproduced.", "The official custom license prohibits commercial product use.", "The released checkpoint was trained on the entire dataset and is not untouched evidence for released test sequences."]
+    },
+    {
+      "model": "RIDI official SVR cascade",
+      "version": "official repository commit ce5d772",
+      "dataset": "RIDI",
+      "required_inputs": ["time", "gyro_x", "gyro_y", "gyro_z", "linacce_x", "linacce_y", "linacce_z", "grav_x", "grav_y", "grav_z", "magnet_x", "magnet_y", "magnet_z", "rv_w", "rv_x", "rv_y", "rv_z"],
+      "required_rate_hz": 200,
+      "preprocessing": ["interpolate every stream to a 200 Hz rotation-vector timeline", "initialize global orientation from gravity and magnetometer", "optional post-session global optimization", "evaluation CLI can register the estimated start portion to ground truth"],
+      "training_targets": ["Tango-derived velocity and motion labels"],
+      "live_output": false,
+      "code_license": "MIT for code repository",
+      "weight_license": "unclear; downloaded model artifact has no verified separate grant",
+      "decision": "benchmark-only",
+      "decision_reasons": ["Requires optional platform-derived linear acceleration, gravity, rotation vector, and magnetometer at 200 Hz.", "Full algorithm performs post-session optimization and the evaluation path may align with ground truth.", "Official README warns the pretrained model was trained on a small group.", "Dataset and model artifact rights are separate from the MIT code license and remain unresolved."]
+    },
+    {
+      "model": "OxIOD L-IONet reference result",
+      "version": "paper arXiv:2001.04061v1",
+      "dataset": "OxIOD",
+      "required_inputs": ["rotation_rate_x(radians/s)", "rotation_rate_y(radians/s)", "rotation_rate_z(radians/s)", "gravity_x(G)", "gravity_y(G)", "gravity_z(G)", "user_acc_x(G)", "user_acc_y(G)", "user_acc_z(G)"],
+      "required_rate_hz": 100,
+      "preprocessing": ["paper/data release mixes Apple Core Motion and Android device semantics", "released synchronized files omit a directly equivalent Android raw accelerometer channel in the documented header"],
+      "training_targets": ["Vicon or Tango/pseudo-ground-truth motion"],
+      "live_output": true,
+      "code_license": "unknown official product grant",
+      "weight_license": "unknown",
+      "decision": "benchmark-only",
+      "decision_reasons": ["Gyroscope is the only currently approved product-like input in the documented synchronized header; the published inertial path also needs platform-derived gravity/user acceleration that are forbidden for Android product inference.", "Exact downloadable artifact schema and license are not currently retrievable from the official site.", "A partial-input replay is not equivalent to the published model."]
+    }
+  ]
+}

@@ -44,8 +44,8 @@ def build():
 - Estimators received only raw Android IMU-device accelerometer, gyroscope, Game Rotation Vector, and raw IMU timestamps.
 - Tango pose, synchronized time, `start_frame`, and `imu_time_offset` were isolated to evaluation.
 - B0 was unsupported because no product-compatible step-event stream was admitted.
-- B1 v1.1.0 uses Android's documented `atan2(R[1], R[4])` azimuth convention rather than generic Z-yaw extraction.
-- All supported B1 ideal runs failed a catastrophic distance, heading, turn, or mirror gate at both 50 and 100 Hz. Turn MAE was about 43–60 degrees over 76 events.
+- B1 v1.1.0 uses Android's documented `atan2(R[1], R[4])` azimuth convention, and raw adapter v2 preserves RoNIN's Android `x,y,z,w` quaternion order.
+- All supported B1 ideal runs failed a catastrophic distance, heading, turn, or mirror gate at both 50 and 100 Hz. Turn MAE was about 43–83 degrees over 76 events.
 - Decision: stop B0/B1 through B1 v1.1.0 as product candidates, do not start a personal pilot, and keep Android lifecycle feasibility as a separate unknown.
 """
         ),
@@ -57,7 +57,7 @@ The official custom license is non-commercial scientific-research only and prohi
 
 ### Assumptions and claim boundary
 
-1. `raw/imu/acce`, `raw/imu/gyro`, and `raw/imu/game_rv` preserve Android API semantics; the HDF quaternion is explicitly reordered from `w,x,y,z` to Android-like `x,y,z,w`.
+1. `raw/imu/acce`, `raw/imu/gyro`, and `raw/imu/game_rv` preserve Android API semantics; the raw HDF quaternion already uses Android-like `x,y,z,w`. RoNIN's official compiler reorders only the synchronized copy to `w,x,y,z`.
 2. Source rates above 200 Hz are downsampled causally to 50/100 Hz and are not product requirements.
 3. Rotation-vector azimuth follows Android `SensorManager.getOrientation()` (`atan2(R[1], R[4])`) and is converted to mathematical heading with `pi/2 - azimuth`.
 4. Callback timestamps and Android sensor capability metadata are absent, so this sequence cannot pass lifecycle or device-support gates.
@@ -73,7 +73,7 @@ import subprocess
 import sys
 
 repository_root = Path.cwd()
-report_path = Path("/outputs/ronin-a054_1-replay.json")
+report_path = Path("/outputs/ronin-a054_1-replay-v2.json")
 sequence_root = Path("/data/ronin/a054_1")
 manifest_path = repository_root / "research" / "pdr" / "datasets" / "manifests" / "ronin-a054_1.json"
 
@@ -126,6 +126,7 @@ for record in report["records"]:
 assert report["record_count"] == 32
 assert report["supported_record_count"] == 24
 assert report["future_sample_violations"] == 0
+assert report["source_adapter_id"] == "ronin-raw-hdf5-v2"
 assert report["decision"] == "benchmark-only-not-product-go"
 assert manifest["license"]["commercial_product_use"] == "prohibited"
 
@@ -179,7 +180,7 @@ print("All license, leakage, capability, batching, gap, and stop-boundary assert
 
 1. The raw Android-field adapter and label-isolation gates work on a real HDF5 sequence at both target rates.
 2. The current step detector/stride rule estimates roughly 570–613 m for about 381 m of truth, so low endpoint drift in `imu6` does not imply acceptable distance.
-3. Correct Android azimuth semantics reduce platform heading MAE, but the paths remain mirrored and have catastrophic turn error. Device orientation is still not body heading.
+3. Correct raw quaternion semantics produce 90.7–93.7° platform heading MAE; the paths remain mirrored and have catastrophic turn error. Device orientation is not body heading.
 4. Callback batching independence and explicit gap uncertainty work, but real callback gaps and screen-off behavior are absent from the artifact.
 5. Confidence is sufficient to stop these exact baseline configurations. It is not sufficient for a product Go, a personal pilot, or an Android feasibility claim.
 """

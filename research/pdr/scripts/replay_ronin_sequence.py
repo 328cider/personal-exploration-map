@@ -166,6 +166,7 @@ def main() -> None:
         "dataset": "RoNIN",
         "sequence": artifact_manifest["sequence"],
         "artifact_member_sha256": actual_hash,
+        "source_adapter_id": "ronin-raw-hdf5-v2",
         "license": artifact_manifest["license"],
         "evidence_kind": "public-sequence-benchmark-only",
         "decision": "benchmark-only-not-product-go",

@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "experiment": "ronin-body-heading-v1",
+  "dataset": "RoNIN",
+  "phase": "development-stop",
+  "evidence_kind": "public-sequence-benchmark-only",
+  "source_adapter_id": "ronin-raw-hdf5-v2",
+  "split_sha256": "cf3c6d8a4ea1a4e93357f07f69c7cb96958d023ebe30e552fa06444e3bc9dd02",
+  "implementation_sha256": {
+    "pdr_research/body_heading.py": "dd27645aa823520ed2fcc9fd09f0342c7065e2ce97eb57c9c570136851826c31",
+    "pdr_research/body_heading_evaluation.py": "8e66cc6cf8620bd1f35082ed268f4f966eb21a67d3d2abaf8a94a4d4106cc9c1",
+    "pdr_research/ronin.py": "2ef314f6a352e1b471af6c2ce0c74c44e9e7354777218d9dec44a3790b77a127",
+    "scripts/analyze_body_heading.py": "414dec8bd7eb90b73ffd949bdda57dd125a7142350ea18ba840be9040e3547d3"
+  },
+  "development_sequences": [
+    {"sequence": "a049_1", "subject_key": "a049", "device": "asus7", "data_hdf5_sha256": "57a4c217a80d21561b967eb271c42ab0dfe10aa7061dfb6e38937c66879aaa63", "http_range_bytes": 71308919, "reference_mean_z_range_mps2": [9.87199397452137, 9.873835110395131], "horizontal_mean_max_mps2": 0.010032505198099248, "orientation_lag_p95_max_ms": 19.714356},
+    {"sequence": "a051_3", "subject_key": "a051", "device": "asus4", "data_hdf5_sha256": "33d7831b1123257a85f62d6d3213a0ad24579e8cddaf038ef69c0e3a50080504", "http_range_bytes": 67114615, "reference_mean_z_range_mps2": [9.845801559459483, 9.846118753657962], "horizontal_mean_max_mps2": 0.003319085694443261, "orientation_lag_p95_max_ms": 19.714356},
+    {"sequence": "a052_2", "subject_key": "a052", "device": "samsung1", "data_hdf5_sha256": "aa06aaa3ce5d0fd5cab3bd052863b946aad5bec6cc6400a5e58384a212a1283f", "http_range_bytes": 67114615, "reference_mean_z_range_mps2": [9.74164724170385, 9.742868052011643], "horizontal_mean_max_mps2": 0.01734703339584204, "orientation_lag_p95_max_ms": 24.230573},
+    {"sequence": "a054_1", "subject_key": "a054", "device": "asus4", "data_hdf5_sha256": "ac322c857d942d9ee2e30037251d7d7b4d37534441f6bc75671e86f12176e8d6", "http_range_bytes": 67114615, "reference_mean_z_range_mps2": [9.843507852163539, 9.850139709701544], "horizontal_mean_max_mps2": 0.004909735953625756, "orientation_lag_p95_max_ms": 19.714356}
+  ],
+  "candidate_grid": {
+    "count": 90,
+    "window_seconds": [1.0, 1.5, 2.0, 3.0, 5.0],
+    "weighting": ["uniform", "horizontal-energy"],
+    "smoothing_tau_seconds": [0.0, 0.25, 0.5],
+    "minimum_anisotropy": [1.0, 1.5, 2.0],
+    "eligible_count": 0,
+    "selected_config_id": null
+  },
+  "best_diagnostic_only": {
+    "config_id": "bhpca-w1000-e-s500-a20",
+    "worst_sequence_mean_heading_mae_deg": 96.40731146705261,
+    "subject_balanced_mean_heading_mae_deg": 84.54916175402946,
+    "subject_balanced_mean_turn_mae_deg": 45.00175992087233,
+    "worst_p95_rate_disagreement_deg": 179.74697830440698,
+    "rejection_reasons": ["a049_1:p95-rate-disagreement", "a051_3:p95-rate-disagreement", "a052_2:p95-rate-disagreement", "a054_1:p95-rate-disagreement"]
+  },
+  "direct_device_heading_mae_deg": {
+    "a049_1": 76.09217834601903,
+    "a051_3": 63.019336756433795,
+    "a052_2": 99.70809789396745,
+    "a054_1": 90.15933525958884
+  },
+  "validation_state": {
+    "a050_1": "not-fetched",
+    "a019_3": "not-fetched",
+    "a058_1": "not-fetched"
+  },
+  "decision": "stop-no-candidate-survived-preregistered-gates",
+  "product_integration": "none",
+  "personal_pilot": "not-authorized"
+}

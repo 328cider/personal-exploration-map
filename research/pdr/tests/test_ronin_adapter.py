@@ -39,12 +39,12 @@ class RoNINAdapterTests(unittest.TestCase):
             axis=1,
         )
         gyro = np.zeros((count, 3))
-        game_rv_wxyz = np.tile(np.array((1.0, 0.0, 0.0, 0.0)), (count, 1))
+        game_rv_xyzw = np.tile(np.array((0.0, 0.0, 0.0, 1.0)), (count, 1))
         with h5py.File(data_path, "w") as handle:
             handle.create_dataset("raw/imu/acce", data=np.column_stack((raw_ns, acceleration)))
             handle.create_dataset("raw/imu/gyro", data=np.column_stack((raw_ns, gyro)))
             handle.create_dataset(
-                "raw/imu/game_rv", data=np.column_stack((raw_ns, game_rv_wxyz))
+                "raw/imu/game_rv", data=np.column_stack((raw_ns, game_rv_xyzw))
             )
             handle.create_dataset("synced/time", data=seconds)
             handle.create_dataset(

@@ -14,14 +14,14 @@
       "source_kind": "official-code",
       "url": "https://github.com/Sachini/ronin/tree/805b7f0f28bb164ce89ada9ac05a9470dbe3d715",
       "revision": "805b7f0f28bb164ce89ada9ac05a9470dbe3d715",
-      "supports": ["HDF5 schema", "feature construction", "orientation-source selection", "ground-truth velocity and heading targets", "GPL-3.0 code license"]
+      "supports": ["HDF5 schema", "raw game_rv x,y,z,w ordering and synchronized w,x,y,z reorder", "feature construction", "orientation-source selection", "ground-truth velocity and heading targets", "GPL-3.0 code license"]
     },
     {
       "dataset": "RoNIN",
       "source_kind": "official-artifact",
       "url": "https://www.frdr-dfdr.ca/repo/dataset/816d1e8c-1fc3-47ff-b8ea-a36ff51d682a",
       "revision": "DOI 10.20383/102.0543; LICENSE.txt sha256 683253758bc392e4d2b36bcac06d21ec3cfc3ce0a19b2e50839f1ac00f38ca5f",
-      "supports": ["non-commercial scientific research-only terms", "commercial-use prohibition", "redistribution restriction", "official archive and member checksums", "raw Android HDF5 paths"]
+      "supports": ["non-commercial scientific research-only terms", "commercial-use prohibition", "redistribution restriction", "official archive and model checksums", "raw Android HDF5 paths", "released model training provenance and reproducibility limitation"]
     },
     {
       "dataset": "OxIOD",

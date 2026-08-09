@@ -32,7 +32,7 @@ class PublicDataPreflightTests(unittest.TestCase):
             set(self.specs),
             {
                 "ronin-hdf5-v1",
-                "ronin-raw-hdf5-v1",
+                "ronin-raw-hdf5-v2",
                 "ridi-processed-csv-v1",
                 "oxiod-synced-csv-v1",
             },

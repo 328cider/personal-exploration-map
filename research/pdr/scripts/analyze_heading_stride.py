@@ -128,6 +128,7 @@ def main() -> None:
         "dataset": "RoNIN",
         "sequence": artifact_manifest["sequence"],
         "artifact_member_sha256": actual_hash,
+        "source_adapter_id": "ronin-raw-hdf5-v2",
         "evidence_kind": "public-sequence-diagnostic-only",
         "android_heading_definition": {
             "source": (

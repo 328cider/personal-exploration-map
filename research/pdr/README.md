@@ -16,6 +16,10 @@ Start with:
 - `RATE_STABILITY_PROTOCOL.md` for the preregistered split and validation gates;
 - `RATE_STABILITY_RESULT.md` for the frozen detector result and the post-freeze
   Android Step Counter comparison;
+- `BODY_HEADING_PROTOCOL.md` for the preregistered causal body-heading split,
+  candidate family, and untouched validation gates;
+- `BODY_HEADING_RESULT.md` for the adapter-v2 correction, 90-candidate
+  development Stop, untouched validation state, and official-model audit;
 - `datasets/registry.json` for the initial public-dataset audit;
 - `notebooks/01_synthetic_foundation.ipynb` for the executable Phase 1 example;
 - `notebooks/02_public_dataset_audit.ipynb` for the executed metadata audit;
@@ -24,7 +28,9 @@ Start with:
 - `notebooks/05_heading_stride_diagnostic.ipynb` for the executed heading and
   stride sensitivity diagnostic.
 - `notebooks/06_rate_stable_step_detector.ipynb` for leakage-controlled
-  development/validation and independent result QA.
+  development/validation and independent result QA;
+- `notebooks/07_body_heading_gate.ipynb` for the executed body-heading Stop and
+  metadata-only official-model audit.
 
 Run the research checks from the repository root:
 
@@ -64,6 +70,8 @@ The network range fetcher uses only the Python standard library. HDF5/notebook
 work uses version-pinned Python packages inside the research Docker image. Raw
 datasets, derived datasets, model weights, and benchmark outputs belong in the
 ignored `data/`, `models/`, and `outputs/` directories and must not be committed.
+The small `models/registry.json` metadata allowlist is the only tracked exception;
+it contains no weights or executable model payload.
 
 ## Boundary
 
