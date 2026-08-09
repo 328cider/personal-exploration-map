@@ -3,9 +3,10 @@
 Collects a USB Field-test bundle and generates the coordinate-free objective report.
 
 .DESCRIPTION
-Runs the existing USB collector, restarts the Field-test app by default, then
-uses Docker Desktop to analyze the newest local bundle. No host Node.js, npm,
-JDK, Android SDK, or Android Studio is required. Raw location remains local.
+Runs the existing USB collector for the dedicated Field-test package, restarts
+the app by default, then uses Docker Desktop to analyze the newest local bundle.
+No host Node.js, npm, JDK, Android SDK, or Android Studio is required. Raw
+location remains local.
 
 .EXAMPLE
 .\scripts\collect-and-analyze-field-test.ps1
@@ -18,7 +19,6 @@ JDK, Android SDK, or Android Studio is required. Raw location remains local.
 #>
 param(
     [string]$OutputRoot = "artifacts\device-bundles",
-    [string]$PackageName = "com.cider328.personalexplorationmap.fieldtest",
     [string]$Serial = "",
     [ValidateSet("s0", "generic")]
     [string]$Mode = "s0",
@@ -29,6 +29,7 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+$fieldTestPackage = "com.cider328.personalexplorationmap.fieldtest"
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $resolvedOutputRoot = if ([System.IO.Path]::IsPathRooted($OutputRoot)) {
     [System.IO.Path]::GetFullPath($OutputRoot)
@@ -59,7 +60,7 @@ if (-not (Test-Path -LiteralPath $analyzeScript)) {
 
 $collectionArguments = @{
     OutputRoot = $resolvedOutputRoot
-    PackageName = $PackageName
+    PackageName = $fieldTestPackage
 }
 if ($Serial.Length -gt 0) {
     $collectionArguments.Serial = $Serial
