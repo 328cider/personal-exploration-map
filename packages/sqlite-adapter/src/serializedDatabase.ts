@@ -32,11 +32,11 @@ class AsyncOperationQueue {
 /**
  * Serializes every operation entering an AsyncSqliteDatabase from the app.
  *
- * The transaction callback receives the transaction executor supplied by the
- * underlying database directly. It deliberately does not re-enter this queue,
- * because the transaction itself already owns the queue slot and re-entry
- * would deadlock. Code inside a transaction must therefore await operations in
- * order rather than running them with Promise.all.
+ * Transaction callbacks receive the executor supplied by the underlying
+ * database directly. They deliberately do not re-enter this queue, because the
+ * transaction already owns the queue slot and re-entry would deadlock. Code
+ * inside either transaction type must therefore await operations in order
+ * rather than running them with Promise.all.
  */
 export function serializeAsyncSqliteDatabase(
   database: AsyncSqliteDatabase,
@@ -67,6 +67,12 @@ export function serializeAsyncSqliteDatabase(
       ...params: readonly SqliteBindValue[]
     ): Promise<readonly T[]> {
       return queue.run(() => database.getAllAsync<T>(source, ...params));
+    },
+
+    withReadTransactionAsync(
+      task: (transaction: AsyncSqliteExecutor) => Promise<void>,
+    ): Promise<void> {
+      return queue.run(() => database.withReadTransactionAsync(task));
     },
 
     withExclusiveTransactionAsync(
