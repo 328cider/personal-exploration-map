@@ -82,6 +82,7 @@ class CommonBaselineTests(unittest.TestCase):
                 )
                 self.assertEqual(result.metrics["future_sample_violations"], 0)
                 self.assertGreater(result.metrics["output_point_count"], 10)
+                self.assertGreater(result.metrics["evaluated_turn_count"], 0)
 
     def test_missing_optional_sensors_take_explicit_b1_fallbacks(self) -> None:
         fixture = complete_fixture()
@@ -142,6 +143,17 @@ class CommonBaselineTests(unittest.TestCase):
         gapped = drop_time_ranges(fixture.session, ((2.0, 2.6),))
         ideal = run_b0(fixture.session)
         degraded = run_b0(gapped)
+        assert ideal.output is not None and degraded.output is not None
+        self.assertGreater(
+            degraded.output.points[-1].uncertainty_m,
+            ideal.output.points[-1].uncertainty_m,
+        )
+
+    def test_b1_gap_penalty_is_visible_even_when_a_step_is_missed(self) -> None:
+        fixture = complete_fixture(rate=50)
+        gapped = drop_time_ranges(fixture.session, ((2.0, 2.6),))
+        ideal = run_b1(fixture.session, capability_profile="imu6")
+        degraded = run_b1(gapped, capability_profile="imu6")
         assert ideal.output is not None and degraded.output is not None
         self.assertGreater(
             degraded.output.points[-1].uncertainty_m,

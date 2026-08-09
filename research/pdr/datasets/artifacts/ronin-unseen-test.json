@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "dataset": "RoNIN",
+  "artifact": "unseen_subjects_test_set.zip",
+  "doi": "10.20383/102.0543",
+  "official_record_url": "https://www.frdr-dfdr.ca/repo/dataset/816d1e8c-1fc3-47ff-b8ea-a36ff51d682a",
+  "archive_url": "https://www.frdr-dfdr.ca/repo/files/8/published/publication_538/submitted_data/Data/unseen_subjects_test_set.zip",
+  "archive_size_bytes": 3211376453,
+  "archive_sha256": "d518eb150f5d44f74c56ce4b05e671cb73e507fcf6fc1ebcf7f1116bcd93bbb9",
+  "archive_hash_verification": "official-published-checksum; range extraction does not re-hash the full archive",
+  "license_url": "https://www.frdr-dfdr.ca/repo/files/8/published/publication_538/submitted_data/LICENSE.txt",
+  "license_sha256": "683253758bc392e4d2b36bcac06d21ec3cfc3ce0a19b2e50839f1ac00f38ca5f",
+  "readme_url": "https://www.frdr-dfdr.ca/repo/files/8/published/publication_538/submitted_data/README.txt",
+  "readme_sha256": "db029236fd707344d37cda4c338b166fc952b84a5d6f6e1a67a16af0bac371c8",
+  "terms": {
+    "allowed_scope": "non-commercial scientific research benchmark only",
+    "commercial_product_use": "prohibited",
+    "redistribution": "prohibited without prior written permission from SFU",
+    "citation_required": true,
+    "product_decision": "benchmark-only"
+  },
+  "retrieved_on": "2026-08-09",
+  "provenance": [
+    "Official FRDR record metadata and HTTP file inventory",
+    "Official LICENSE.txt and README.txt verified against FRDR-published SHA-256 checksums",
+    "Official frdr-dfdr-checksums.txt generated 2024-09-29"
+  ]
+}

@@ -17,13 +17,43 @@
       ],
       "inference_fields": ["synced/gyro_uncalib", "synced/acce", "synced/game_rv"],
       "fields": {
-        "synced/time": {"role": "live-input", "android_api": "SensorEvent.timestamp", "unit": "s from sequence reference", "axes_or_frame": "monotonic sequence time"},
+        "synced/time": {"role": "evaluation-only", "android_api": null, "unit": "s from sequence reference", "axes_or_frame": "dataset cross-device synchronized time; not the raw Android SensorEvent timestamp"},
         "synced/gyro_uncalib": {"role": "live-input", "android_api": "Sensor.TYPE_GYROSCOPE_UNCALIBRATED", "unit": "rad/s", "axes_or_frame": "Android device axes before official global rotation"},
         "synced/acce": {"role": "live-input", "android_api": "Sensor.TYPE_ACCELEROMETER", "unit": "m/s^2", "axes_or_frame": "Android device axes before official global rotation"},
         "synced/game_rv": {"role": "live-input", "android_api": "Sensor.TYPE_GAME_ROTATION_VECTOR", "unit": "unit quaternion", "axes_or_frame": "Android game rotation vector; optional platform-fused input"},
         "pose/tango_pos": {"role": "evaluation-only", "android_api": null, "unit": "m", "axes_or_frame": "corrected Tango world frame"},
         "pose/tango_ori": {"role": "evaluation-only", "android_api": null, "unit": "unit quaternion", "axes_or_frame": "corrected Tango world frame"},
         "pose/ekf_ori": {"role": "forbidden", "android_api": null, "unit": "unit quaternion", "axes_or_frame": "dataset EKF output"},
+        "info/align_tango_to_body": {"role": "training-label", "android_api": null, "unit": "unit quaternion", "axes_or_frame": "Tango-to-body alignment"}
+      }
+    },
+    {
+      "id": "ronin-raw-hdf5-v1",
+      "dataset": "RoNIN",
+      "format": "hdf5-inventory",
+      "source_rate_hz": 400,
+      "product_required_rate_hz": 100,
+      "timestamp_field": "raw/imu/acce",
+      "required_fields": [
+        "raw/imu/acce",
+        "raw/imu/gyro",
+        "raw/imu/game_rv",
+        "synced/time",
+        "pose/tango_pos",
+        "pose/tango_ori"
+      ],
+      "inference_fields": ["raw/imu/acce", "raw/imu/gyro", "raw/imu/game_rv"],
+      "fields": {
+        "raw/imu/acce": {"role": "live-input", "android_api": "Sensor.TYPE_ACCELEROMETER / SensorEvent", "unit": "m/s^2", "axes_or_frame": "Android device axes; first column is raw IMU system timestamp ns"},
+        "raw/imu/gyro": {"role": "live-input", "android_api": "Sensor.TYPE_GYROSCOPE / SensorEvent", "unit": "rad/s", "axes_or_frame": "Android device axes; first column is raw IMU system timestamp ns"},
+        "raw/imu/game_rv": {"role": "live-input", "android_api": "Sensor.TYPE_GAME_ROTATION_VECTOR / SensorEvent", "unit": "unit quaternion", "axes_or_frame": "Android device orientation; artifact stores w,x,y,z and adapter reorders to Android x,y,z,w"},
+        "raw/imu/step": {"role": "forbidden", "android_api": "Sensor.TYPE_STEP_COUNTER", "unit": "count", "axes_or_frame": "raw IMU time, but cross-stream use in the published synchronized benchmark requires dataset time-alignment metadata"},
+        "synced/time": {"role": "evaluation-only", "android_api": null, "unit": "s", "axes_or_frame": "cross-device synchronized dataset timeline"},
+        "pose/tango_pos": {"role": "evaluation-only", "android_api": null, "unit": "m", "axes_or_frame": "corrected Tango world frame"},
+        "pose/tango_ori": {"role": "evaluation-only", "android_api": null, "unit": "unit quaternion", "axes_or_frame": "corrected Tango world frame"},
+        "pose/ekf_ori": {"role": "forbidden", "android_api": null, "unit": "unit quaternion", "axes_or_frame": "dataset EKF output"},
+        "info/start_frame": {"role": "evaluation-only", "android_api": null, "unit": "row index", "axes_or_frame": "dataset-declared end of calibration interval"},
+        "info/imu_time_offset": {"role": "evaluation-only", "android_api": null, "unit": "s", "axes_or_frame": "cross-device dataset time alignment"},
         "info/align_tango_to_body": {"role": "training-label", "android_api": null, "unit": "unit quaternion", "axes_or_frame": "Tango-to-body alignment"}
       }
     },

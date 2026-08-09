@@ -116,13 +116,21 @@ and rate reduction. Golden tests must expose 90-degree rotation, mirror image,
 false self-intersection, and distance-scale error. Synthetic motion validates the
 pipeline and metrics; it is not evidence that pocket PDR works.
 
-### Phase 2 — public-data audit (metadata audit implemented; data not downloaded)
+### Phase 2 — public-data audit (RoNIN one-sequence gate implemented)
 
 Complete sequence-level reports for OxIOD, RoNIN, and RIDI. Evaluate B0/B1 first
 using only Android-compatible fields. Audit official pretrained-model inputs and
 licenses before execution. Replay the same sequences at 50/100 Hz and with gaps,
 batching, and missing optional sensors. Split by dataset/user/device/placement and
 sequence before windowing.
+
+The official RoNIN FRDR terms, archive size, and published checksums are pinned.
+The smallest unseen-subject sequence (`a054_1`) is fetched by HTTP Range without
+downloading the 3.2 GB archive, and only `raw/imu/acce`, `raw/imu/gyro`, and
+`raw/imu/game_rv` enter estimators. Cross-device synchronized time, Tango pose,
+`start_frame`, and `imu_time_offset` remain evaluation-only. The same sequence is
+replayed at 50/100 Hz with batch, gap, and missing-orientation scenarios. RIDI
+and OxIOD still require the same artifact-specific gate.
 
 ### Phase 3 — common baselines (synthetic replay implemented; public data gated)
 

@@ -17,6 +17,13 @@
       "supports": ["HDF5 schema", "feature construction", "orientation-source selection", "ground-truth velocity and heading targets", "GPL-3.0 code license"]
     },
     {
+      "dataset": "RoNIN",
+      "source_kind": "official-artifact",
+      "url": "https://www.frdr-dfdr.ca/repo/dataset/816d1e8c-1fc3-47ff-b8ea-a36ff51d682a",
+      "revision": "DOI 10.20383/102.0543; LICENSE.txt sha256 683253758bc392e4d2b36bcac06d21ec3cfc3ce0a19b2e50839f1ac00f38ca5f",
+      "supports": ["non-commercial scientific research-only terms", "commercial-use prohibition", "redistribution restriction", "official archive and member checksums", "raw Android HDF5 paths"]
+    },
+    {
       "dataset": "OxIOD",
       "source_kind": "paper",
       "url": "https://arxiv.org/abs/1809.07491",

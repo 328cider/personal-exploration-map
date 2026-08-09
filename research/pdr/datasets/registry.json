@@ -8,15 +8,15 @@
       "platform": "Android phone plus Tango ground-truth system",
       "split_keys": ["dataset", "user", "device", "placement", "sequence"],
       "license": {
-        "research": "official repository and artifacts state research use; verify exact downloaded artifact terms",
-        "redistribution": "unknown",
-        "product": "research-only"
+        "research": "official custom license permits non-commercial scientific research",
+        "redistribution": "prohibited without prior written permission from SFU",
+        "product": "commercial product and service use prohibited"
       },
       "decision": "benchmark-only",
       "decision_reasons": [
         "Android raw IMU is a candidate input subset, but every downloaded column and preprocessing step still needs a sequence manifest.",
         "Tango pose, ground-truth trajectory, and true body heading are evaluation-only.",
-        "Official code is GPL-3.0 and must remain isolated from product packages; artifact product rights are not established."
+        "Official code is GPL-3.0 and must remain isolated from product packages; the artifact custom license expressly prohibits commercial product use."
       ],
       "fields": [
         {

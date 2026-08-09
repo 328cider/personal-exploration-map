@@ -30,7 +30,12 @@ class PublicDataPreflightTests(unittest.TestCase):
         self.assertEqual(validate_adapter_specs(self.specs), ())
         self.assertEqual(
             set(self.specs),
-            {"ronin-hdf5-v1", "ridi-processed-csv-v1", "oxiod-synced-csv-v1"},
+            {
+                "ronin-hdf5-v1",
+                "ronin-raw-hdf5-v1",
+                "ridi-processed-csv-v1",
+                "oxiod-synced-csv-v1",
+            },
         )
 
     def test_public_models_remain_benchmark_only(self) -> None:

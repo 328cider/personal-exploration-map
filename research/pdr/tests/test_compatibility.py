@@ -34,10 +34,14 @@ class CompatibilityTests(unittest.TestCase):
         for report in self.reports:
             self.assertEqual(computed_decision(report), CompatibilityDecision.BENCHMARK_ONLY)
 
-    def test_unresolved_product_rights_are_visible_for_every_initial_dataset(self) -> None:
+    def test_product_rights_are_explicit_for_every_initial_dataset(self) -> None:
         for report in self.reports:
             codes = {finding.code for finding in audit_report(report)}
-            self.assertIn("product-license-unresolved", codes)
+            if report.dataset == "RoNIN":
+                self.assertIn("prohibited", report.product_license.lower())
+                self.assertNotIn("product-license-unresolved", codes)
+            else:
+                self.assertIn("product-license-unresolved", codes)
 
     def test_training_and_evaluation_fields_cannot_leak_into_live_input(self) -> None:
         ronin = next(report for report in self.reports if report.dataset == "RoNIN")
