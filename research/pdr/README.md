@@ -20,6 +20,8 @@ Start with:
   candidate family, and untouched validation gates;
 - `BODY_HEADING_RESULT.md` for the adapter-v2 correction, 90-candidate
   development Stop, untouched validation state, and official-model audit;
+- `LEARNED_TRAINING_DATA_PROTOCOL.md` for the preregistered rights, Android
+  semantics, target-fitness, and clean-split gate before any learned model;
 - `datasets/registry.json` for the initial public-dataset audit;
 - `notebooks/01_synthetic_foundation.ipynb` for the executable Phase 1 example;
 - `notebooks/02_public_dataset_audit.ipynb` for the executed metadata audit;
