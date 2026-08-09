@@ -48,6 +48,9 @@ SYSTEM_ANR_LABELS = (
     "System UI isn't responding",
     "Process system isn't responding",
 )
+# Fixed Android 15 Pixel CI profile. This rectangle excludes the timer,
+# sample-count cards, and bottom actions, and measures only the visible map.
+MAP_CANVAS_CROP_RATIOS = (0.09, 0.65, 0.91, 0.88)
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
@@ -311,7 +314,12 @@ def decode_png_rgb(path: Path) -> tuple[int, int, bytes]:
     return width, height, bytes(rgb)
 
 
-def changed_pixel_ratio(first: Path, second: Path) -> float:
+def changed_pixel_ratio(
+    first: Path,
+    second: Path,
+    *,
+    crop_ratios: tuple[float, float, float, float] | None = None,
+) -> float:
     first_width, first_height, before = decode_png_rgb(first)
     second_width, second_height, after = decode_png_rgb(second)
     if (first_width, first_height) != (second_width, second_height):
@@ -320,12 +328,26 @@ def changed_pixel_ratio(first: Path, second: Path) -> float:
             f"{second_width}x{second_height}"
         )
 
-    changed = sum(
-        1
-        for index in range(0, len(before), 3)
-        if before[index : index + 3] != after[index : index + 3]
-    )
-    return changed / max(1, first_width * first_height)
+    if crop_ratios is None:
+        minimum_x = 0
+        minimum_y = 0
+        maximum_x = first_width
+        maximum_y = first_height
+    else:
+        minimum_x = int(first_width * crop_ratios[0])
+        minimum_y = int(first_height * crop_ratios[1])
+        maximum_x = int(first_width * crop_ratios[2])
+        maximum_y = int(first_height * crop_ratios[3])
+
+    changed = 0
+    total = max(1, (maximum_x - minimum_x) * (maximum_y - minimum_y))
+    for y in range(minimum_y, maximum_y):
+        row_start = (y * first_width + minimum_x) * 3
+        for x_offset in range(maximum_x - minimum_x):
+            index = row_start + x_offset * 3
+            if before[index : index + 3] != after[index : index + 3]:
+                changed += 1
+    return changed / total
 
 
 def assert_screen_changed(
@@ -335,8 +357,11 @@ def assert_screen_changed(
     minimum_ratio: float,
     label: str,
 ) -> float:
-    ratio = changed_pixel_ratio(before, after)
-    smoke.log(f"{label} changed-pixel ratio={ratio:.6f} source=stdlib-png-ae")
+    live_map_assertion = "live map" in label
+    crop = MAP_CANVAS_CROP_RATIOS if live_map_assertion else None
+    ratio = changed_pixel_ratio(before, after, crop_ratios=crop)
+    source = "stdlib-png-map-canvas" if live_map_assertion else "stdlib-png-full"
+    smoke.log(f"{label} changed-pixel ratio={ratio:.6f} source={source}")
     if ratio < minimum_ratio:
         raise smoke.SmokeFailure(
             f"{label} did not change enough: ratio={ratio:.6f}, "
