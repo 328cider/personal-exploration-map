@@ -130,9 +130,13 @@ class CaptureInstrumentationTest {
         Thread.sleep(5_000)
         shell(inst, "input keyevent KEYCODE_POWER")
         shell(inst, "wm dismiss-keyguard")
-        val returned = inst.startActivitySync(
+        context.startActivity(
             Intent(context, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                .addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP,
+                )
                 .putExtra(CaptureActions.EXTRA_ACTIVITY_SOURCE, "emulator-return"),
         )
         Thread.sleep(4_000)
@@ -143,7 +147,6 @@ class CaptureInstrumentationTest {
         assertTrue(diagnostics.contains("hidden"))
         assertTrue(diagnostics.contains("visible"))
         assertMandatoryStreams(completed)
-        returned.finish()
         activity.finish()
     }
 

@@ -45,6 +45,7 @@ class BundleWriter(
     startRecord: JSONObject,
 ) {
     val partialDirectory = File(captureRoot, "$sessionId.partial")
+    private val startRecordJson = startRecord.toString()
     private val queue = ArrayBlockingQueue<Command>(16_384)
     private val stopped = CountDownLatch(1)
     private val dropped = AtomicLong(0)
@@ -78,6 +79,8 @@ class BundleWriter(
         if (!accepted) dropped.incrementAndGet()
         return accepted
     }
+
+    fun finalManifestBase(): JSONObject = JSONObject(startRecordJson)
 
     fun markFatal(message: String) {
         fatal.compareAndSet(null, message)
@@ -198,8 +201,6 @@ private class RotatingStream(
 
 fun finalizeBundle(
     writer: BundleWriter,
-    request: CaptureRequest,
-    startedElapsedRealtimeNs: Long,
     stopReason: String,
     status: String,
 ): File {
@@ -207,33 +208,10 @@ fun finalizeBundle(
     val endedElapsedRealtimeNs = SystemClock.elapsedRealtimeNanos()
     val summary = writer.finish()
     val finalStatus = resolveFinalStatus(status, summary.fatalError)
-    val manifest = JSONObject()
-        .put("schema_version", SCHEMA_VERSION)
-        .put("session_id", request.sessionId)
+    val manifest = writer.finalManifestBase()
         .put("status", finalStatus)
         .put("stop_reason", stopReason)
-        .put("started_elapsed_realtime_ns", startedElapsedRealtimeNs)
         .put("ended_elapsed_realtime_ns", endedElapsedRealtimeNs)
-        .put("protocol", JSONObject()
-            .put("program_id", request.programId)
-            .put("program_revision", request.programRevision)
-            .put("cell_id", request.protocolCellId)
-            .put("participant_code", request.participantCode)
-            .put("device_pseudonym", request.devicePseudonym)
-            .put("placement", request.placement)
-            .put("route_id", request.routeId)
-            .put("split", request.split)
-            .put("lifecycle", request.lifecycle.key)
-            .put("motion_condition", request.motionCondition.key)
-            .put("planned_duration_s", request.plannedDurationSeconds))
-        .put("capture_config", JSONObject()
-            .put("mode", request.mode.key)
-            .put("target_rate_hz", request.mode.targetRateHz)
-            .put("sampling_period_us", request.mode.samplingPeriodUs)
-            .put("max_report_latency_us", request.mode.maxReportLatencyUs)
-            .put("step_sensors_requested", request.requestStepSensors)
-            .put("location_requested", request.requestLocation)
-            .put("wake_lock_requested", request.holdWakeLock))
         .put("writer", JSONObject()
             .put("dropped_records", summary.droppedRecords)
             .put("fatal_error", summary.fatalError ?: JSONObject.NULL)

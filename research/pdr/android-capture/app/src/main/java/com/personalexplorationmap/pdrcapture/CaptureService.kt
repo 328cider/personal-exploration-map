@@ -571,7 +571,7 @@ class CaptureService : Service(), SensorEventListener2, LocationListener {
             }
 
             val completed = runCatching {
-                finalizeBundle(writer, request, startedElapsedRealtimeNs, finalReason, finalStatus)
+                finalizeBundle(writer, finalReason, finalStatus)
             }
             if (completed.isFailure) {
                 finalStatus = "invalid"
