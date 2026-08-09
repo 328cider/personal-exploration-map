@@ -164,3 +164,24 @@ class ModelCompatibilityReport:
     weight_license: str
     declared_decision: CompatibilityDecision
     decision_reasons: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class EstimatorRequirement:
+    estimator: str
+    version: str
+    required_capability_profile: str
+    required_sensor_types: frozenset[str]
+    any_of_sensor_types: tuple[frozenset[str], ...] = ()
+    optional_sensor_types: frozenset[str] = frozenset()
+    mode: str = "live"
+
+
+@dataclass(frozen=True)
+class EstimatorRun:
+    requirement: EstimatorRequirement
+    supported: bool
+    output: EstimatorOutput | None
+    used_sensor_types: frozenset[str]
+    missing_requirements: tuple[str, ...] = ()
+    fallback_flags: tuple[str, ...] = ()

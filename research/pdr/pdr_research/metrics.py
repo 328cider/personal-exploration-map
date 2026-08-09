@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from bisect import bisect_right
+from dataclasses import replace
 import math
 from typing import Sequence
 
-from .contracts import EvaluationResult
+from .contracts import EstimatorOutput, EvaluationResult
 from .synthetic import TruthPoint
 
 
@@ -32,6 +34,10 @@ def _wrap_degrees(value: float) -> float:
     return (value + 180.0) % 360.0 - 180.0
 
 
+def _wrap_radians(value: float) -> float:
+    return (value + math.pi) % (2.0 * math.pi) - math.pi
+
+
 def _signed_area(points: Sequence[Point]) -> float:
     if len(points) < 3:
         return 0.0
@@ -46,7 +52,10 @@ def _orientation(a: Point, b: Point, c: Point) -> float:
 
 
 def _proper_intersection(a: Point, b: Point, c: Point, d: Point) -> bool:
-    return _orientation(a, b, c) * _orientation(a, b, d) < 0 and _orientation(c, d, a) * _orientation(c, d, b) < 0
+    return (
+        _orientation(a, b, c) * _orientation(a, b, d) < 0
+        and _orientation(c, d, a) * _orientation(c, d, b) < 0
+    )
 
 
 def _simplify_collinear(points: Sequence[Point], tolerance: float = 1e-8) -> tuple[Point, ...]:
@@ -61,10 +70,16 @@ def _simplify_collinear(points: Sequence[Point], tolerance: float = 1e-8) -> tup
     return tuple(simplified)
 
 
-def self_intersection_count(points: Sequence[Point]) -> int:
+def self_intersection_count(
+    points: Sequence[Point], *, endpoints_are_adjacent: bool | None = None
+) -> int:
     points = _simplify_collinear(points)
     count = 0
-    closed = len(points) > 2 and _distance(points[0], points[-1]) < 1e-6
+    closed = (
+        len(points) > 2 and _distance(points[0], points[-1]) < 1e-6
+        if endpoints_are_adjacent is None
+        else endpoints_are_adjacent
+    )
     segment_count = len(points) - 1
     for left in range(segment_count):
         for right in range(left + 2, segment_count):
@@ -107,11 +122,22 @@ def evaluate_trajectory(
     truth_area = _signed_area(truth_xy)
     estimate_area = _signed_area(estimate_xy)
     mirrored = abs(truth_area) > 1.0 and truth_area * estimate_area < 0.0
-    truth_intersections = self_intersection_count(truth_xy)
-    estimate_intersections = self_intersection_count(estimate_xy)
+    truth_is_closed = _distance(truth_xy[0], truth_xy[-1]) < 1e-6
+    truth_intersections = self_intersection_count(
+        truth_xy, endpoints_are_adjacent=truth_is_closed
+    )
+    estimate_intersections = self_intersection_count(
+        estimate_xy, endpoints_are_adjacent=truth_is_closed
+    )
     false_intersections = max(0, estimate_intersections - truth_intersections)
-    truth_closure_ratio = _distance(truth_xy[0], truth_xy[-1]) / truth_length if truth_length else 0.0
-    estimate_closure_ratio = _distance(estimate_xy[0], estimate_xy[-1]) / estimate_length if estimate_length else 0.0
+    truth_closure_ratio = (
+        _distance(truth_xy[0], truth_xy[-1]) / truth_length if truth_length else 0.0
+    )
+    estimate_closure_ratio = (
+        _distance(estimate_xy[0], estimate_xy[-1]) / estimate_length
+        if estimate_length
+        else 0.0
+    )
     false_loop_closure = truth_closure_ratio > 0.5 and estimate_closure_ratio < 0.05
 
     flags: list[str] = []
@@ -143,9 +169,115 @@ def evaluate_trajectory(
             "mirrored": mirrored,
             "false_self_intersections": false_intersections,
             "false_loop_closure": false_loop_closure,
-            "topology_correct": not mirrored and false_intersections == 0 and not false_loop_closure,
+            "topology_correct": (
+                not mirrored and false_intersections == 0 and not false_loop_closure
+            ),
         },
         failure_flags=tuple(flags),
         seed=seed,
         dataset_hash=dataset_hash,
     )
+
+
+def _interpolate_truth(truth: Sequence[TruthPoint], timestamp_ns: int) -> TruthPoint:
+    timestamps = [point.timestamp_ns for point in truth]
+    right = bisect_right(timestamps, timestamp_ns)
+    if right <= 0:
+        return truth[0]
+    if right >= len(truth):
+        return truth[-1]
+    left_point = truth[right - 1]
+    right_point = truth[right]
+    interval = right_point.timestamp_ns - left_point.timestamp_ns
+    fraction = (timestamp_ns - left_point.timestamp_ns) / interval if interval else 0.0
+    heading_delta = _wrap_radians(
+        right_point.body_heading_rad - left_point.body_heading_rad
+    )
+    return TruthPoint(
+        timestamp_ns=timestamp_ns,
+        x_m=left_point.x_m + (right_point.x_m - left_point.x_m) * fraction,
+        y_m=left_point.y_m + (right_point.y_m - left_point.y_m) * fraction,
+        body_heading_rad=_wrap_radians(left_point.body_heading_rad + heading_delta * fraction),
+        stride_m=left_point.stride_m + (right_point.stride_m - left_point.stride_m) * fraction,
+    )
+
+
+def _turn_errors_deg(
+    truth: Sequence[TruthPoint], output: EstimatorOutput
+) -> tuple[float, ...]:
+    truth_turns: list[tuple[int, float]] = []
+    previous_heading = truth[0].body_heading_rad
+    for point in truth[1:]:
+        delta = _wrap_radians(point.body_heading_rad - previous_heading)
+        if abs(math.degrees(delta)) >= 30.0:
+            truth_turns.append((point.timestamp_ns, delta))
+        previous_heading = point.body_heading_rad
+    output_timestamps = [point.timestamp_ns for point in output.points]
+    errors: list[float] = []
+    for timestamp_ns, truth_delta in truth_turns:
+        right = bisect_right(output_timestamps, timestamp_ns)
+        if right <= 0 or right >= len(output.points):
+            continue
+        before = output.points[right - 1].heading_rad
+        after = output.points[right].heading_rad
+        estimated_delta = _wrap_radians(after - before)
+        errors.append(abs(math.degrees(_wrap_radians(estimated_delta - truth_delta))))
+    return tuple(errors)
+
+
+def evaluate_estimator_output(
+    *,
+    session_id: str,
+    truth: Sequence[TruthPoint],
+    output: EstimatorOutput,
+    seed: int,
+    dataset_hash: str,
+) -> EvaluationResult:
+    if len(output.points) < 2:
+        raise ValueError("Estimator output requires at least two points")
+    matched_truth = tuple(
+        _interpolate_truth(truth, point.timestamp_ns) for point in output.points
+    )
+    result = evaluate_trajectory(
+        session_id=session_id,
+        truth=matched_truth,
+        estimate_xy=tuple((point.x_m, point.y_m) for point in output.points),
+        estimator=output.estimator,
+        estimator_version=output.version,
+        capability_profile=output.required_capability_profile,
+        seed=seed,
+        dataset_hash=dataset_hash,
+    )
+    heading_errors = tuple(
+        abs(
+            math.degrees(
+                _wrap_radians(point.heading_rad - truth_point.body_heading_rad)
+            )
+        )
+        for point, truth_point in zip(output.points, matched_truth)
+    )
+    turn_errors = _turn_errors_deg(truth, output)
+    heading_mae = sum(heading_errors) / len(heading_errors)
+    turn_mae = sum(turn_errors) / len(turn_errors) if turn_errors else 0.0
+    future_violations = sum(
+        point.source_end_ns > point.timestamp_ns for point in output.points
+    )
+    metrics = dict(result.metrics)
+    metrics.update(
+        {
+            "heading_mae_deg": heading_mae,
+            "turn_angle_mae_deg": turn_mae,
+            "evaluated_turn_count": len(turn_errors),
+            "output_point_count": len(output.points),
+            "maximum_uncertainty_m": max(point.uncertainty_m for point in output.points),
+            "future_sample_violations": future_violations,
+        }
+    )
+    flags = list(result.failure_flags)
+    if heading_mae >= 45.0 and "catastrophic-heading" not in flags:
+        flags.append("catastrophic-heading")
+    if turn_errors and turn_mae >= 45.0 and "catastrophic-turn" not in flags:
+        flags.append("catastrophic-turn")
+    if future_violations:
+        flags.append("future-sample-leakage")
+    return replace(result, metrics=metrics, failure_flags=tuple(flags))
