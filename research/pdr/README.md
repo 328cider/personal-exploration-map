@@ -28,6 +28,8 @@ Start with:
   benchmark that measures learned body-heading headroom after the data gate;
 - `LEARNED_HEADING_RESULT.md` for the 36-candidate residual-ridge development
   Stop, rate-instability diagnosis, and still-sealed validation groups;
+- `DIRECT_HEADING_PROTOCOL.md` for the preregistered direct circular recurrent
+  headroom test that leaves those validation groups sealed;
 - `datasets/registry.json` for the initial public-dataset audit;
 - `notebooks/01_synthetic_foundation.ipynb` for the executable Phase 1 example;
 - `notebooks/02_public_dataset_audit.ipynb` for the executed metadata audit;
