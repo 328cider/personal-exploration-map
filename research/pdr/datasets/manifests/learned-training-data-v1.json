@@ -1,0 +1,336 @@
+{
+  "schema_version": 1,
+  "audit": "learned-pdr-training-data-v1",
+  "protocol": "LEARNED_TRAINING_DATA_PROTOCOL.md",
+  "protocol_sha256": "000bfe0f9f55ab0120adba373ff09309d79dcbe3926c1be6bb66df7849df46d8",
+  "executed_on": "2026-08-09",
+  "target": "learned body heading or direct horizontal velocity from future Android-capturable inputs",
+  "artifact_download_policy": "bounded official metadata only; no new dataset rows or model weights",
+  "raw_sensor_rows_downloaded": 0,
+  "source_snapshots": [
+    {
+      "id": "idol-zenodo-api",
+      "url": "https://zenodo.org/api/records/4484093",
+      "sha256": "cbcfcd25c460636a6046c9fdeced6ad8995a0f7767792b31201e3178d3cc501e",
+      "evidence_sha256": "4d95c9ac2f377547f785bcfc8c1e8ab71d204c1a77d65461febc3a734e958952",
+      "download_bytes": 10900,
+      "locked_claims": {"record": 4484093, "version": "v1.0", "license": "cc-by-4.0", "access": "open", "file_count": 4}
+    },
+    {
+      "id": "advio-zenodo-api",
+      "url": "https://zenodo.org/api/records/1476931",
+      "sha256": "ca393130ab8b9bd2d8e5c0b59313987acab6c8596238dee659f02ca08be6d9ba",
+      "evidence_sha256": "d7f07e80b80effe70874af973dadb3daf68b13a0c64abe936cd9827cc74daf95",
+      "download_bytes": 11093,
+      "locked_claims": {"record": 1476931, "license": "cc-by-nc-4.0", "access": "open", "file_count": 23}
+    },
+    {
+      "id": "dryad-walking-api",
+      "url": "https://datadryad.org/api/v2/datasets/doi%3A10.5061%2Fdryad.n2z34tn5q",
+      "sha256": "510dc96468390d684b531c1edf75c858997897cc9368332faec8e167b5123888",
+      "evidence_sha256": "de215490631f5d4558e02a5a447b15f60a49621760a949b6cf9b59f9e226142b",
+      "download_bytes": 13559,
+      "locked_claims": {"identifier": "doi:10.5061/dryad.n2z34tn5q", "version": 6, "license": "CC0-1.0", "storage_bytes": 166454135}
+    },
+    {
+      "id": "fda-wearables-page",
+      "url": "https://cdrh-rst.fda.gov/open-access-wearables-dataset-evaluate-factors-impacting-accuracy-smartphone-gait-metrics",
+      "sha256": "99f81236e76dff681403e1855706fa9e6f36b5f8e742cc67fd2862caa378c567",
+      "evidence_sha256": "920154fd7a8011d1aa7dd4e55f2c495e542bac57cce9a0fdf2c9ff6097f25371",
+      "download_bytes": 59724,
+      "locked_claims": {"participants": 20, "rate_hz": 100, "android_device": "Samsung Galaxy S22", "placements": ["lower back", "right thigh"], "final_trials": 374, "continuous_2d_truth": false}
+    },
+    {
+      "id": "fda-synapse-access-wiki",
+      "url": "https://repo-prod.prod.sagebase.org/repo/v1/entity/syn51664250/wiki/623160",
+      "sha256": "bf6c0bc956cd3efca6edd65afa4cef59d49a8c62d730a467a49796e3f2a508ae",
+      "evidence_sha256": "db890c9b983406ff58bbb4716dd51cc74dc95ee5be5e225eafd80c2b36565179",
+      "download_bytes": 947,
+      "locked_claims": {"scope": "research and development and/or educational purposes", "redistribution": "prohibited", "account_required": true, "commercial_ml_and_derived_weight_rights": "not stated"}
+    },
+    {
+      "id": "rudacop-official-page",
+      "url": "http://gartseev.ru/projects/ipin2019",
+      "resolved_url": "https://sites.google.com/site/gartseev/projects/ipin2019",
+      "sha256": "f62f6b9a6752870dd2035c6e921af4f5713096c7397cc06011ddf798fc1cf9d7",
+      "evidence_sha256": "7024e71044435bbc0805a975c65cb241adb59dcb9f6f057d72bb0f3d4d9f58f1",
+      "download_bytes": 105690,
+      "locked_claims": {"download_freely_claimed": true, "email_purpose_requested": true, "dataset_license_present": false, "commercial_ml_and_derived_weight_rights": "not stated"}
+    },
+    {
+      "id": "ridi-official-page",
+      "url": "https://yanhangpublic.github.io/ridi/index.html",
+      "sha256": "55f61e6ee9507ae4fefa75b3cc3558c0f49924a47f7a2afac7fdd4762b721608",
+      "evidence_sha256": "9a0205c085d12e6db986f71dce360745c11255747946e405235845286ffcf174",
+      "download_bytes": 3182,
+      "locked_claims": {"download_link_present": true, "dataset_license_present": false, "commercial_ml_and_derived_weight_rights": "not stated"}
+    },
+    {
+      "id": "oxiod-official-page",
+      "url": "http://deepio.cs.ox.ac.uk/",
+      "sha256": "28f6507aa5cb6e6deca270fe51ed37dea2ae493010e31e8b79cb5d6708d8ea62",
+      "evidence_sha256": "04edb6332a459a25b5fce6eea4bc2cf1859429cd7b9f130ea3e683263c256ff5",
+      "download_bytes": 11597,
+      "locked_claims": {"download_size_label": "1.01G", "dataset_license_present": false, "commercial_ml_and_derived_weight_rights": "not stated", "https_certificate_note": "hostname mismatch from the Docker standard-library client; audited over the official HTTP endpoint"}
+    }
+  ],
+  "candidates": [
+    {
+      "id": "ronin",
+      "name": "RoNIN",
+      "platform_and_collection": "Android phones attached to a Tango ground-truth rig; natural placements and seen/unseen subjects",
+      "inference_features": ["raw_accelerometer", "raw_gyroscope", "game_rotation_vector"],
+      "fields": [
+        {"name": "raw_accelerometer", "role": "live-input", "android_api": "Sensor.TYPE_ACCELEROMETER / SensorEvent.values and timestamp"},
+        {"name": "raw_gyroscope", "role": "live-input", "android_api": "Sensor.TYPE_GYROSCOPE / SensorEvent.values and timestamp"},
+        {"name": "game_rotation_vector", "role": "live-input", "android_api": "Sensor.TYPE_GAME_ROTATION_VECTOR / SensorEvent.values and timestamp"},
+        {"name": "tango_pose", "role": "evaluation-only", "android_api": null},
+        {"name": "ground_truth_velocity", "role": "training-label", "android_api": null},
+        {"name": "ground_truth_body_heading", "role": "training-label", "android_api": null},
+        {"name": "ekf_orientation", "role": "forbidden", "android_api": null}
+      ],
+      "group_split_keys": ["subject", "device", "placement", "sequence"],
+      "primary_evidence": [
+        {"url": "https://www.frdr-dfdr.ca/repo/dataset/816d1e8c-1fc3-47ff-b8ea-a36ff51d682a", "revision": "DOI 10.20383/102.0543; LICENSE sha256 683253758bc392e4d2b36bcac06d21ec3cfc3ce0a19b2e50839f1ac00f38ca5f"},
+        {"url": "https://github.com/Sachini/ronin/tree/805b7f0f28bb164ce89ada9ac05a9470dbe3d715", "revision": "805b7f0f28bb164ce89ada9ac05a9470dbe3d715"},
+        {"url": "https://arxiv.org/abs/1905.12853", "revision": "arXiv:1905.12853v2"}
+      ],
+      "gate": {
+        "inference_inputs": {"state": "pass", "evidence": "Adapter v2 maps only Android raw accelerometer, gyroscope, optional Game Rotation Vector, and original sensor timestamps."},
+        "raw_semantics": {"state": "pass", "evidence": "Raw game_rv x,y,z,w ordering and device axes were independently corrected and physically sanity-checked."},
+        "target_fitness": {"state": "pass", "evidence": "Tango-derived continuous velocity and body heading exist as labels only."},
+        "rate_50_100_hz": {"state": "pass", "evidence": "Raw streams can be deterministically anti-aliased and replayed at both locked rates; the official 200 Hz checkpoint is not reused."},
+        "leakage_controls": {"state": "pass", "evidence": "Subject/device/placement/sequence identifiers support pre-window group splits."},
+        "provenance": {"state": "pass", "evidence": "Public archive, sequence hashes, pinned adapter, and public-only retraining path can be fixed; the private-data official checkpoint is excluded."},
+        "rights": {"state": "fail", "evidence": "The artifact-specific custom license permits non-commercial scientific research and prohibits commercial product/service use."},
+        "deployment": {"state": "fail", "evidence": "Dataset-derived product weights are outside the grant; GPL reference code and supplied weights remain isolated."}
+      },
+      "classification": "benchmark-only",
+      "allowed_next_use": "Frozen benchmark-only technical-headroom experiment with non-shippable weights; no product training or distribution."
+    },
+    {
+      "id": "ridi",
+      "name": "RIDI",
+      "platform_and_collection": "Android Tango phone, ten subjects, four placements, roughly 200 Hz, Tango trajectory truth",
+      "inference_features": ["raw_accelerometer", "raw_gyroscope", "rotation_vector", "magnetic_field"],
+      "fields": [
+        {"name": "raw_accelerometer", "role": "live-input", "android_api": "Sensor.TYPE_ACCELEROMETER / SensorEvent.values and timestamp"},
+        {"name": "raw_gyroscope", "role": "live-input", "android_api": "Sensor.TYPE_GYROSCOPE / SensorEvent.values and timestamp"},
+        {"name": "rotation_vector", "role": "live-input", "android_api": "Sensor.TYPE_ROTATION_VECTOR / SensorEvent.values and timestamp"},
+        {"name": "magnetic_field", "role": "live-input", "android_api": "Sensor.TYPE_MAGNETIC_FIELD / SensorEvent.values and timestamp"},
+        {"name": "tango_pose", "role": "evaluation-only", "android_api": null},
+        {"name": "ground_truth_velocity", "role": "training-label", "android_api": null},
+        {"name": "corrected_orientation", "role": "forbidden", "android_api": null}
+      ],
+      "group_split_keys": ["subject", "placement", "sequence"],
+      "primary_evidence": [
+        {"url": "https://yanhangpublic.github.io/ridi/index.html", "revision": "HTML sha256 55f61e6ee9507ae4fefa75b3cc3558c0f49924a47f7a2afac7fdd4762b721608"},
+        {"url": "https://github.com/higerra/ridi_imu/tree/ce5d772a1ef8ce590121f0f0b254910bc07a2949", "revision": "ce5d772a1ef8ce590121f0f0b254910bc07a2949"},
+        {"url": "https://arxiv.org/abs/1712.09004", "revision": "arXiv:1712.09004v2"}
+      ],
+      "gate": {
+        "inference_inputs": {"state": "pass", "evidence": "The Android collector exposes raw accelerometer/gyroscope and optional platform sensors; Tango fields are excluded."},
+        "raw_semantics": {"state": "unknown", "evidence": "The official page links an unversioned Box artifact; archive-specific raw-vs-processed columns and calibration terms were not retrieved under this metadata-only gate."},
+        "target_fitness": {"state": "pass", "evidence": "Continuous Tango trajectory supports velocity supervision when kept label-only."},
+        "rate_50_100_hz": {"state": "pass", "evidence": "The 200 Hz sequence stream can be anti-aliased to 100/50 Hz; 200 Hz is not made a product requirement."},
+        "leakage_controls": {"state": "pass", "evidence": "Subject, placement, and sequence groups are described before windowing."},
+        "provenance": {"state": "unknown", "evidence": "The data download is not record-versioned or content-hashed on the official project page."},
+        "rights": {"state": "unknown", "evidence": "The official data page has a download link but no dataset license; the MIT code license does not license data or derived weights."},
+        "deployment": {"state": "unknown", "evidence": "Artifact and derived-weight product rights are not stated."}
+      },
+      "classification": "reject-unresolved",
+      "allowed_next_use": "Owner/artifact license clarification and a bounded archive manifest only; no rows, training, or weight distribution."
+    },
+    {
+      "id": "oxiod",
+      "name": "OxIOD",
+      "platform_and_collection": "Mixed iPhone and Nexus devices, multiple attachments, Vicon/Tango or derived trajectory truth",
+      "inference_features": ["raw_gyroscope_android_subset"],
+      "fields": [
+        {"name": "raw_gyroscope_android_subset", "role": "live-input", "android_api": "Sensor.TYPE_GYROSCOPE / SensorEvent.values and timestamp"},
+        {"name": "core_motion_attitude", "role": "forbidden", "android_api": null},
+        {"name": "core_motion_user_acceleration", "role": "forbidden", "android_api": null},
+        {"name": "ground_truth_position", "role": "training-label", "android_api": null},
+        {"name": "vicon_or_tango_pose", "role": "evaluation-only", "android_api": null}
+      ],
+      "group_split_keys": ["user", "device", "attachment", "sequence"],
+      "primary_evidence": [
+        {"url": "http://deepio.cs.ox.ac.uk/", "revision": "HTML sha256 28f6507aa5cb6e6deca270fe51ed37dea2ae493010e31e8b79cb5d6708d8ea62"},
+        {"url": "https://arxiv.org/abs/1809.07491", "revision": "arXiv:1809.07491v1"},
+        {"url": "https://arxiv.org/abs/2001.04061", "revision": "arXiv:2001.04061v1"}
+      ],
+      "gate": {
+        "inference_inputs": {"state": "fail", "evidence": "Accessible synchronized schema does not establish a full Android raw accelerometer plus gyroscope subset; Apple Core Motion fields are not Android inputs."},
+        "raw_semantics": {"state": "fail", "evidence": "Platform attitude, gravity, and user-acceleration semantics are mixed across Apple and Android and cannot be silently mapped."},
+        "target_fitness": {"state": "pass", "evidence": "Fine-grained trajectory truth exists for continuous inertial odometry supervision."},
+        "rate_50_100_hz": {"state": "pass", "evidence": "The documented model/data path includes 100 Hz operation."},
+        "leakage_controls": {"state": "pass", "evidence": "User, device, attachment, and sequence groups are documented."},
+        "provenance": {"state": "unknown", "evidence": "The official 1.01G download has no visible immutable record version or artifact checksum."},
+        "rights": {"state": "unknown", "evidence": "No dataset license or commercial ML/derived-weight grant appears on the official page."},
+        "deployment": {"state": "unknown", "evidence": "Product rights for data and resulting weights are not stated."}
+      },
+      "classification": "reject-unresolved",
+      "allowed_next_use": "License/schema clarification only; do not download or train a product candidate."
+    },
+    {
+      "id": "advio",
+      "name": "ADVIO",
+      "platform_and_collection": "Rigid iPhone, Pixel, and Tango rig; raw phone IMU is iPhone-only while Pixel exports ARCore pose",
+      "inference_features": [],
+      "fields": [
+        {"name": "iphone_raw_accelerometer", "role": "forbidden", "android_api": null},
+        {"name": "iphone_raw_gyroscope", "role": "forbidden", "android_api": null},
+        {"name": "pixel_arcore_pose", "role": "forbidden", "android_api": null},
+        {"name": "ground_truth_pose", "role": "training-label", "android_api": null},
+        {"name": "known_fixation_points", "role": "evaluation-only", "android_api": null}
+      ],
+      "group_split_keys": ["sequence"],
+      "primary_evidence": [
+        {"url": "https://github.com/AaltoVision/ADVIO/tree/346e5968b49d361b87142f66c5c665cc6a8e8dfe", "revision": "346e5968b49d361b87142f66c5c665cc6a8e8dfe"},
+        {"url": "https://zenodo.org/records/1476931", "revision": "record 1476931; metadata sha256 ca393130ab8b9bd2d8e5c0b59313987acab6c8596238dee659f02ca08be6d9ba"}
+      ],
+      "gate": {
+        "inference_inputs": {"state": "fail", "evidence": "Raw accelerometer/gyroscope/magnetometer files are documented under iPhone; the Pixel directory contains ARCore pose only."},
+        "raw_semantics": {"state": "fail", "evidence": "Apple CoreMotion g/device-frame signals are explicit but are not a captured Android raw stream from the rig."},
+        "target_fitness": {"state": "pass", "evidence": "A 100 Hz continuous ground-truth pose is available as a label."},
+        "rate_50_100_hz": {"state": "pass", "evidence": "The iPhone raw stream and truth are documented at 100 Hz, but this does not cure platform mismatch."},
+        "leakage_controls": {"state": "fail", "evidence": "Twenty-three rig sequences do not provide the user/device/placement diversity needed for passive phone generalization."},
+        "provenance": {"state": "pass", "evidence": "Zenodo record 1476931 exposes 23 versioned files and the official code page is revision-pinned."},
+        "rights": {"state": "fail", "evidence": "ADVIO data is CC BY-NC 4.0 and therefore cannot support commercial product training."},
+        "deployment": {"state": "fail", "evidence": "Non-commercial data-derived weights cannot be treated as shippable product assets."}
+      },
+      "classification": "benchmark-only",
+      "allowed_next_use": "Non-commercial visual-inertial benchmark only; no Android product-model claim."
+    },
+    {
+      "id": "idol",
+      "name": "IDOL",
+      "platform_and_collection": "iPhone 8 rigidly attached to a LiDAR-VIO Stencil rig; 15 users, three buildings, 100 Hz",
+      "inference_features": [],
+      "fields": [
+        {"name": "iphone_raw_accelerometer", "role": "forbidden", "android_api": null},
+        {"name": "iphone_raw_gyroscope", "role": "forbidden", "android_api": null},
+        {"name": "iphone_raw_magnetometer", "role": "forbidden", "android_api": null},
+        {"name": "iphone_coremotion_orientation", "role": "forbidden", "android_api": null},
+        {"name": "stencil_ground_truth_pose", "role": "training-label", "android_api": null},
+        {"name": "stencil_imu", "role": "evaluation-only", "android_api": null}
+      ],
+      "group_split_keys": ["subject", "building", "known_unknown_split", "trajectory"],
+      "primary_evidence": [
+        {"url": "https://zenodo.org/records/4484093", "revision": "v1.0, record 4484093; metadata sha256 cbcfcd25c460636a6046c9fdeced6ad8995a0f7767792b31201e3178d3cc501e"}
+      ],
+      "gate": {
+        "inference_inputs": {"state": "fail", "evidence": "The only smartphone raw stream is from iPhone 8, not an Android SensorEvent stream."},
+        "raw_semantics": {"state": "fail", "evidence": "iPhone axes and CoreMotion orientation are documented but cannot be assumed semantically identical to Android raw/fused sensors."},
+        "target_fitness": {"state": "pass", "evidence": "Continuous Stencil position and orientation are available as labels."},
+        "rate_50_100_hz": {"state": "pass", "evidence": "All readings are sampled at 100 Hz."},
+        "leakage_controls": {"state": "pass", "evidence": "Subject IDs and disjoint known/unknown user splits are explicit before windowing."},
+        "provenance": {"state": "pass", "evidence": "Zenodo v1.0 fixes four file records with checksums and documents synchronization/alignment."},
+        "rights": {"state": "pass", "evidence": "Zenodo records the dataset under CC BY 4.0, which does not impose a non-commercial restriction."},
+        "deployment": {"state": "pass", "evidence": "A clean implementation may respect CC BY attribution, but platform/rig incompatibility still blocks this target."}
+      },
+      "classification": "benchmark-only",
+      "allowed_next_use": "Cross-platform/fixed-rig benchmark only; do not label resulting behavior Android passive-PDR evidence."
+    },
+    {
+      "id": "fda-wearables",
+      "name": "FDA Open-Access Wearables gait dataset",
+      "platform_and_collection": "Samsung Galaxy S22 and iPhone 10 at lower back/right thigh, five orientations, straight/curved trials, 20 participants, 100 Hz",
+      "inference_features": ["android_uncalibrated_accelerometer", "android_uncalibrated_gyroscope"],
+      "fields": [
+        {"name": "android_uncalibrated_accelerometer", "role": "live-input", "android_api": "Sensor.TYPE_ACCELEROMETER_UNCALIBRATED / SensorEvent.values and timestamp"},
+        {"name": "android_uncalibrated_gyroscope", "role": "live-input", "android_api": "Sensor.TYPE_GYROSCOPE_UNCALIBRATED / SensorEvent.values and timestamp"},
+        {"name": "reference_xsens_imu", "role": "evaluation-only", "android_api": null},
+        {"name": "pressure_walkway_contact", "role": "training-label", "android_api": null},
+        {"name": "aligned_common_frame", "role": "forbidden", "android_api": null}
+      ],
+      "group_split_keys": ["participant", "phone", "placement", "orientation", "trial"],
+      "primary_evidence": [
+        {"url": "https://cdrh-rst.fda.gov/open-access-wearables-dataset-evaluate-factors-impacting-accuracy-smartphone-gait-metrics", "revision": "RST24HD01.01; extracted-evidence sha256 920154fd7a8011d1aa7dd4e55f2c495e542bac57cce9a0fdf2c9ff6097f25371"},
+        {"url": "https://www.synapse.org/Synapse:syn51850495", "revision": "syn51850495; access wiki 623160 sha256 bf6c0bc956cd3efca6edd65afa4cef59d49a8c62d730a467a49796e3f2a508ae"}
+      ],
+      "gate": {
+        "inference_inputs": {"state": "pass", "evidence": "The Samsung Galaxy S22 stream contains uncalibrated 3-axis phone acceleration and gyroscope data obtainable from Android sensors."},
+        "raw_semantics": {"state": "pass", "evidence": "The FDA explicitly distinguishes uncalibrated phone data from aligned/reference data; only the unaligned raw subset is eligible."},
+        "target_fitness": {"state": "fail", "evidence": "Reference IMUs and a short pressure walkway support gait/contact metrics, not continuous 2D trajectory or body heading."},
+        "rate_50_100_hz": {"state": "pass", "evidence": "Phone, reference IMU, and walkway sampling are set to 100 Hz and can be downsampled to 50 Hz."},
+        "leakage_controls": {"state": "pass", "evidence": "Participant, platform, placement, orientation, and trial factors support grouped splits."},
+        "provenance": {"state": "pass", "evidence": "The FDA catalog ID, Synapse entity IDs, synchronization method, and final 374-trial count are explicit."},
+        "rights": {"state": "unknown", "evidence": "The access wiki permits research/development and education and prohibits redistribution, but does not explicitly grant commercial ML training or derived-weight product rights."},
+        "deployment": {"state": "unknown", "evidence": "No explicit product/derived-weight distribution boundary is stated."}
+      },
+      "classification": "reject-unresolved",
+      "allowed_next_use": "Terms clarification first; scientifically useful only for step/contact and placement robustness, not the heading/velocity target."
+    },
+    {
+      "id": "dryad-walking",
+      "name": "An inertial and positioning dataset for the walking activity",
+      "platform_and_collection": "Nineteen participants using heterogeneous personal Android/iOS phones handheld outdoors; GNSS, device step count, and trundle-wheel distance",
+      "inference_features": ["android_subset_acceleration_with_gravity", "android_subset_rotation_rate", "android_subset_gnss", "android_subset_step_count"],
+      "fields": [
+        {"name": "android_subset_acceleration_with_gravity", "role": "live-input", "android_api": "Sensor.TYPE_ACCELEROMETER / SensorEvent.values and timestamp"},
+        {"name": "android_subset_rotation_rate", "role": "live-input", "android_api": "Sensor.TYPE_GYROSCOPE / SensorEvent.values and timestamp"},
+        {"name": "android_subset_gnss", "role": "post-session-input", "android_api": "Location latitude/longitude/accuracy/speed/bearing and elapsedRealtimeNanos"},
+        {"name": "android_subset_step_count", "role": "live-input", "android_api": "Sensor.TYPE_STEP_COUNTER / SensorEvent.values and timestamp"},
+        {"name": "trundle_wheel_distance", "role": "training-label", "android_api": null},
+        {"name": "device_orientation_angles", "role": "forbidden", "android_api": null},
+        {"name": "phone_estimated_distance", "role": "forbidden", "android_api": null}
+      ],
+      "group_split_keys": ["subject", "device", "operating_system", "track"],
+      "primary_evidence": [
+        {"url": "https://datadryad.org/dataset/doi:10.5061/dryad.n2z34tn5q", "revision": "version 6, published 2024-11-01; API sha256 510dc96468390d684b531c1edf75c858997897cc9368332faec8e167b5123888"}
+      ],
+      "gate": {
+        "inference_inputs": {"state": "pass", "evidence": "An Android-only subset can map acceleration-with-gravity, rotation rate, GNSS, and platform step count to ordinary Android APIs."},
+        "raw_semantics": {"state": "unknown", "evidence": "Two apps and mixed operating systems require a row-level Android subset and timestamp/axis audit before use."},
+        "target_fitness": {"state": "fail", "evidence": "Truth is total or one-metre incremental distance; GNSS/device heading is not accurate continuous body-heading or 2D trajectory truth."},
+        "rate_50_100_hz": {"state": "fail", "evidence": "Personal-phone rates vary by track and missing intervals are explicit; 50/100 Hz availability cannot be assumed."},
+        "leakage_controls": {"state": "pass", "evidence": "Subject, device/OS, and track metadata exist before windowing."},
+        "provenance": {"state": "pass", "evidence": "Dryad version 6 is immutable, licensed, and reports 166454135 storage bytes plus subject/track structure."},
+        "rights": {"state": "pass", "evidence": "Dryad records the artifact under CC0-1.0."},
+        "deployment": {"state": "pass", "evidence": "CC0 does not impose a non-commercial or redistribution restriction; privacy and attribution provenance remain documented."}
+      },
+      "classification": "auxiliary-only",
+      "allowed_next_use": "Android-subset preflight for distance, gap, and heterogeneous-device robustness only; never use GNSS/device heading as body-heading truth."
+    },
+    {
+      "id": "rudacop",
+      "name": "RuDaCoP",
+      "platform_and_collection": "About 1200 Android smartphone sequences from more than 100 people, multiple devices and natural placements, with two foot-mounted reference IMUs",
+      "inference_features": ["raw_accelerometer", "raw_gyroscope", "raw_magnetic_field"],
+      "fields": [
+        {"name": "raw_accelerometer", "role": "live-input", "android_api": "Sensor.TYPE_ACCELEROMETER / SensorEvent.values and timestamp"},
+        {"name": "raw_gyroscope", "role": "live-input", "android_api": "Sensor.TYPE_GYROSCOPE / SensorEvent.values and timestamp"},
+        {"name": "raw_magnetic_field", "role": "live-input", "android_api": "Sensor.TYPE_MAGNETIC_FIELD / SensorEvent.values and timestamp"},
+        {"name": "foot_imu_trajectory", "role": "training-label", "android_api": null},
+        {"name": "zupt_joint_postprocessed_truth", "role": "evaluation-only", "android_api": null}
+      ],
+      "group_split_keys": ["person", "device", "placement", "sequence"],
+      "primary_evidence": [
+        {"url": "https://arxiv.org/abs/1908.03609", "revision": "arXiv:1908.03609v1"},
+        {"url": "http://gartseev.ru/projects/ipin2019", "revision": "redirected official-page extracted-evidence sha256 7024e71044435bbc0805a975c65cb241adb59dcb9f6f057d72bb0f3d4d9f58f1"}
+      ],
+      "gate": {
+        "inference_inputs": {"state": "pass", "evidence": "The paper describes exact Android OS smartphone sensor readings with accelerometer, gyroscope, and magnetic streams; foot IMUs remain labels only."},
+        "raw_semantics": {"state": "pass", "evidence": "Units, calibrated/uncalibrated sensor variants, Android-origin readings, and device/placement metadata are documented."},
+        "target_fitness": {"state": "pass", "evidence": "Post-processed foot-IMU trajectories provide continuous labels without entering inference."},
+        "rate_50_100_hz": {"state": "pass", "evidence": "Recorded streams can be causally resampled to the locked 50/100 Hz profiles without requiring a 200 Hz product path."},
+        "leakage_controls": {"state": "pass", "evidence": "Person, device, placement, and sequence diversity support group-level splits."},
+        "provenance": {"state": "unknown", "evidence": "The official page offers email/temporary links but no immutable artifact record, version, or checksum."},
+        "rights": {"state": "unknown", "evidence": "The official page says freely downloadable but states no dataset license, commercial ML grant, redistribution terms, or derived-weight rights."},
+        "deployment": {"state": "unknown", "evidence": "Product training and resulting weight distribution require written owner/legal clarification."}
+      },
+      "classification": "reject-unresolved",
+      "allowed_next_use": "Highest-priority owner/license clarification candidate; do not request/download rows or train until rights and an immutable artifact manifest are obtained."
+    }
+  ],
+  "classification_counts": {
+    "auxiliary-only": 1,
+    "benchmark-only": 3,
+    "product-training-compatible": 0,
+    "reject-unresolved": 4
+  },
+  "product_training_compatible_candidates": [],
+  "decision": "stop-product-oriented-training",
+  "next_research_boundary": "No personal pilot and no product model training. A separately preregistered benchmark-only headroom experiment may use non-shippable weights, while RuDaCoP/RIDI/OxIOD/FDA require artifact-specific rights clarification."
+}

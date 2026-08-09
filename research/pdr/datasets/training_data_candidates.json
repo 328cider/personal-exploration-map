@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "audit": "learned-pdr-training-data-v1",
+  "registered_on": "2026-08-09",
+  "artifact_download_policy": "metadata-and-schema-only; no bulk sensor rows",
+  "candidates": [
+    {"id": "ronin", "name": "RoNIN", "primary_urls": ["https://www.frdr-dfdr.ca/repo/dataset/816d1e8c-1fc3-47ff-b8ea-a36ff51d682a", "https://github.com/Sachini/ronin/tree/805b7f0f28bb164ce89ada9ac05a9470dbe3d715"], "audit_state": "complete", "classification": "benchmark-only"},
+    {"id": "ridi", "name": "RIDI", "primary_urls": ["https://yanhangpublic.github.io/ridi/index.html", "https://github.com/higerra/ridi_imu/tree/ce5d772a1ef8ce590121f0f0b254910bc07a2949"], "audit_state": "complete", "classification": "reject-unresolved"},
+    {"id": "oxiod", "name": "OxIOD", "primary_urls": ["https://deepio.cs.ox.ac.uk/", "https://arxiv.org/abs/1809.07491", "https://arxiv.org/abs/2001.04061"], "audit_state": "complete", "classification": "reject-unresolved"},
+    {"id": "advio", "name": "ADVIO", "primary_urls": ["https://github.com/AaltoVision/ADVIO/tree/346e5968b49d361b87142f66c5c665cc6a8e8dfe", "https://zenodo.org/records/1476931"], "audit_state": "complete", "classification": "benchmark-only"},
+    {"id": "idol", "name": "IDOL", "primary_urls": ["https://zenodo.org/records/4484093"], "audit_state": "complete", "classification": "benchmark-only"},
+    {"id": "fda-wearables", "name": "FDA Open-Access Wearables gait dataset", "primary_urls": ["https://cdrh-rst.fda.gov/open-access-wearables-dataset-evaluate-factors-impacting-accuracy-smartphone-gait-metrics", "https://www.synapse.org/Synapse:syn51850495"], "audit_state": "complete", "classification": "reject-unresolved"},
+    {"id": "dryad-walking", "name": "An inertial and positioning dataset for the walking activity", "primary_urls": ["https://doi.org/10.5061/dryad.n2z34tn5q"], "audit_state": "complete", "classification": "auxiliary-only"},
+    {"id": "rudacop", "name": "RuDaCoP", "primary_urls": ["https://arxiv.org/abs/1908.03609", "http://gartseev.ru/projects/ipin2019"], "audit_state": "complete", "classification": "reject-unresolved"}
+  ]
+}

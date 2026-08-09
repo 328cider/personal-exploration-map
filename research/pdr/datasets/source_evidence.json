@@ -66,6 +66,62 @@
       "supports": ["Android sensor files", "Tango pose separation", "collector workflow"]
     },
     {
+      "dataset": "ADVIO",
+      "source_kind": "official-code-and-data-description",
+      "url": "https://github.com/AaltoVision/ADVIO/tree/346e5968b49d361b87142f66c5c665cc6a8e8dfe",
+      "revision": "346e5968b49d361b87142f66c5c665cc6a8e8dfe",
+      "supports": ["iPhone raw IMU at 100 Hz", "Pixel ARCore-only export", "100 Hz derived ground-truth pose", "CC BY-NC 4.0 data license"]
+    },
+    {
+      "dataset": "ADVIO",
+      "source_kind": "official-artifact-metadata",
+      "url": "https://zenodo.org/records/1476931",
+      "revision": "record 1476931; API evidence sha256 d7f07e80b80effe70874af973dadb3daf68b13a0c64abe936cd9827cc74daf95",
+      "supports": ["23 files", "open access", "CC BY-NC 4.0"]
+    },
+    {
+      "dataset": "IDOL",
+      "source_kind": "official-artifact-metadata",
+      "url": "https://zenodo.org/records/4484093",
+      "revision": "v1.0; record 4484093; API evidence sha256 4d95c9ac2f377547f785bcfc8c1e8ab71d204c1a77d65461febc3a734e958952",
+      "supports": ["15 users and three buildings", "iPhone 8 fixed to Stencil rig", "100 Hz phone IMU and continuous pose", "subject IDs and known/unknown split", "CC BY 4.0"]
+    },
+    {
+      "dataset": "FDA Open-Access Wearables",
+      "source_kind": "official-regulatory-science-record",
+      "url": "https://cdrh-rst.fda.gov/open-access-wearables-dataset-evaluate-factors-impacting-accuracy-smartphone-gait-metrics",
+      "revision": "RST24HD01.01; extracted-evidence sha256 920154fd7a8011d1aa7dd4e55f2c495e542bac57cce9a0fdf2c9ff6097f25371",
+      "supports": ["Samsung Galaxy S22 and iPhone 10", "uncalibrated accelerometer and gyroscope", "20 participants", "100 Hz", "lower-back/right-thigh placement", "pressure-walkway and reference-IMU truth"]
+    },
+    {
+      "dataset": "FDA Open-Access Wearables",
+      "source_kind": "official-access-terms",
+      "url": "https://repo-prod.prod.sagebase.org/repo/v1/entity/syn51664250/wiki/623160",
+      "revision": "wiki 623160; sha256 bf6c0bc956cd3efca6edd65afa4cef59d49a8c62d730a467a49796e3f2a508ae",
+      "supports": ["research/development or education access", "redistribution prohibition", "Synapse-account requirement", "no explicit commercial-ML or derived-weight term"]
+    },
+    {
+      "dataset": "Dryad walking",
+      "source_kind": "official-artifact-metadata",
+      "url": "https://datadryad.org/dataset/doi:10.5061/dryad.n2z34tn5q",
+      "revision": "version 6; API evidence sha256 de215490631f5d4558e02a5a447b15f60a49621760a949b6cf9b59f9e226142b",
+      "supports": ["19 subjects and 203 tracks", "heterogeneous Android/iOS personal phones", "accelerometer/gyroscope/GNSS/step count", "total or incremental distance truth", "gap metadata", "CC0-1.0"]
+    },
+    {
+      "dataset": "RuDaCoP",
+      "source_kind": "paper",
+      "url": "https://arxiv.org/abs/1908.03609",
+      "revision": "arXiv:1908.03609v1",
+      "supports": ["about 1200 Android smartphone sequences", "multiple people/devices/placements", "Android raw inertial streams", "foot-IMU-derived trajectory truth"]
+    },
+    {
+      "dataset": "RuDaCoP",
+      "source_kind": "official-distribution-page",
+      "url": "https://sites.google.com/site/gartseev/projects/ipin2019",
+      "revision": "extracted-evidence sha256 7024e71044435bbc0805a975c65cb241adb59dcb9f6f057d72bb0f3d4d9f58f1",
+      "supports": ["free-download wording", "email purpose request", "absence of an artifact license or commercial-ML/derived-weight terms"]
+    },
+    {
       "dataset": "Android platform",
       "source_kind": "official-code",
       "url": "https://android.googlesource.com/platform/frameworks/base/+/android16-qpr2-release/core/java/android/hardware/SensorManager.java",
