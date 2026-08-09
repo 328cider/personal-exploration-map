@@ -42,7 +42,8 @@ interface PersonalMapListRow {
 }
 
 interface NextSampleOrdinalRow {
-  readonly next_ordinal: number;
+  readonly row_count: number;
+  readonly after_max: number;
 }
 
 interface ExistingSampleRow {
@@ -163,12 +164,14 @@ async function nextSampleOrdinal(
   explorationId: string,
 ): Promise<number> {
   const row = await database.getFirstAsync<NextSampleOrdinalRow>(
-    `SELECT COALESCE(MAX(sample_ordinal), -1) + 1 AS next_ordinal
+    `SELECT
+       COUNT(*) AS row_count,
+       COALESCE(MAX(sample_ordinal), -1) + 1 AS after_max
      FROM position_samples
      WHERE exploration_id = ?`,
     explorationId,
   );
-  return Number(row?.next_ordinal ?? 0);
+  return Math.max(Number(row?.row_count ?? 0), Number(row?.after_max ?? 0));
 }
 
 async function assertIdempotentExistingSample(
@@ -439,7 +442,11 @@ async function loadReplay(
   const positionRows = await database.getAllAsync<PositionRow>(
     `SELECT * FROM position_samples
      WHERE exploration_id = ?
-     ORDER BY sample_ordinal ASC`,
+     ORDER BY
+       CASE WHEN raw_payload_format = 'legacy-normalized-v1' THEN 0 ELSE 1 END,
+       CASE WHEN raw_payload_format = 'legacy-normalized-v1' THEN recorded_at END,
+       CASE WHEN raw_payload_format = 'legacy-normalized-v1' THEN id END,
+       sample_ordinal`,
     exploration.id,
   );
   const markerRows = await database.getAllAsync<MarkerRow>(
