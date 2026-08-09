@@ -18,6 +18,7 @@ import re
 import subprocess
 import sys
 import time
+from typing import Iterable
 
 
 SCRIPT_PATH = Path(__file__).with_name("android-emulator-interaction-smoke.py")
@@ -44,6 +45,59 @@ def raw_screenshot(artifacts: Path, name: str) -> Path:
             + result.stderr.decode("utf-8", errors="replace")
         )
     return path
+
+
+def inject_route(
+    points: Iterable[tuple[float, float]],
+    delay_seconds: float = 6.0,
+) -> None:
+    """Restore the route helper expected by the interaction smoke suite."""
+
+    for longitude, latitude in points:
+        started = time.monotonic()
+        smoke.inject_location(longitude, latitude)
+        remaining = delay_seconds - (time.monotonic() - started)
+        if remaining > 0:
+            time.sleep(remaining)
+
+
+def save_debug_state(artifacts: Path, prefix: str) -> None:
+    """Capture failure evidence without waiting for an active UI to become idle."""
+
+    artifacts.mkdir(parents=True, exist_ok=True)
+    try:
+        raw_screenshot(artifacts, prefix)
+    except Exception as error:  # noqa: BLE001 - diagnostics must continue
+        (artifacts / f"{prefix}-screenshot-error.txt").write_text(
+            str(error),
+            encoding="utf-8",
+        )
+
+    commands: dict[str, list[str]] = {
+        "logcat": ["adb", "logcat", "-d", "-v", "threadtime"],
+        "activity": ["adb", "shell", "dumpsys", "activity", "activities"],
+        "package": ["adb", "shell", "dumpsys", "package", smoke.PACKAGE],
+        "location": ["adb", "shell", "dumpsys", "location"],
+        "notification": [
+            "adb",
+            "shell",
+            "dumpsys",
+            "notification",
+            "--noredact",
+        ],
+    }
+    for name, command in commands.items():
+        result = smoke.run(command, check=False, timeout=60)
+        (artifacts / f"{prefix}-{name}.txt").write_text(
+            result.stdout + "\n" + result.stderr,
+            encoding="utf-8",
+        )
+
+
+# The interaction suite was originally layered on a base smoke module that
+# exposed these helpers. Keep the compatibility adapter local to this harness.
+smoke.inject_route = inject_route
+smoke.save_debug_state = save_debug_state
 
 
 def field_app_is_top_resumed() -> bool:
