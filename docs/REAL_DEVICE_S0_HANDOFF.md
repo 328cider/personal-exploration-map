@@ -13,12 +13,15 @@
 - アプリ名: `探索マップ Field Test`
 - package: `com.cider328.personalexplorationmap.fieldtest`
 - build: Metro不要、スマホ単体で動作
-- source commit: `0ad4e847d6c3bca290c5781547d924cfde618c92`
-- merged commit: `74b70715da59c74bab585b2b3c0d2a3fd919c5f7`
-- workflow run: `31264093837`
-- APK SHA-256: `b61f3b3f68e16f21099cc4f4f474743399b89d5af56b1bb1c53ccee1dc09358d`
+- source commit: `9437abb374d07d6cb549543a9185c7a11a4d90f6`
+- merged commit: `166172eca5ad5e6d6b673111483186c6171fe368`
+- workflow run: `31311862191`
+- Actions artifact: `9037728411`
+- APK SHA-256: `c0e142f278852d8fc9504aa4a1a7a699487278472e74fa4f2c339769b6b074cf`
 
 既存のField-test版をアンインストールせず、同じ署名のAPKを上書きインストールする。アンインストールすると端末内データが失われる可能性がある。
+
+このAPKだけがUSB抽出用のdebuggable releaseであり、通常packageはdebuggable化しない。
 
 ## 実地前に完了している検証
 
@@ -36,8 +39,15 @@
 - notification tapから記録画面への復帰
 - 発見modal、default marker保存、live count更新、Review永続化
 - Fatal、React Native、既知のExpo SQLite raceがないこと
+- PowerShell USB collectorの実行
+- `run-as`によるapp-private dataとSQLiteの抽出
+- 開始・終了environment eventのSQLite保存
+- 座標なし診断に端末、時刻、電池、権限、集計値が含まれること
+- 座標なし診断に緯度経度、地図名・ID、marker文、地図画像が含まれないこと
+- raw bundleがローカル保存のみで、自動uploadされないこと
+- bundle内ファイルのSHA-256検証
 
-エミュレータで代替できるUI、終了、保存、通知、markerの基本不具合はこのgateで止める。
+エミュレータで代替できるUI、終了、保存、通知、marker、USB抽出の基本不具合はこのgateで止める。
 
 ## 実機でのみ確認するもの
 
@@ -51,20 +61,18 @@
 - 実際の場所を地図から思い出せるか
 - Timelineや一般GPS loggerより「自分の探索で地図が育つ」と感じるか
 
-## S0前の記録
+## S0前の確認
 
-次だけをメモする。
+端末、Android、開始時刻、開始時電池、権限、省電力状態はアプリが自動記録し、試験後のUSB bundleにも含まれる。手作業で転記しなくてよい。
 
-```text
-端末メーカー・機種:
-Androidバージョン:
-開始時電池残量:
-バッテリーセーバー: ON / OFF
-アプリの電池設定: 制限なし / 最適化 / 制限あり
-位置権限の初期状態:
-```
+最初のS0は切り分けのため、可能なら次の条件にする。
 
-最初のS0は切り分けのため、可能ならバッテリーセーバーOFF、アプリ電池設定を`制限なし`にする。省電力条件はS0成功後に別条件として試す。
+- バッテリーセーバーをOFF
+- アプリの電池設定を`制限なし`
+- 位置情報をON
+- USBデバッグを有効化し、このPCを許可
+
+省電力条件はS0成功後に別条件として試す。OEM固有の設定を変更した場合だけ、その変更内容を短くメモする。
 
 ## S0手順
 
@@ -88,9 +96,45 @@ Androidバージョン:
     - `軌跡`
 14. アプリを終了し、再起動する。
 15. PersonalMapと発見が残っていることを確認する。
-16. `座標なし集計を共有`で診断テキストを生成する。
+16. `座標なし集計を共有`で診断テキストを生成できることを確認する。
+17. PCへUSB接続し、次節のコマンドでField-test bundleを回収する。
 
 歩行中に画面を見ない。地図確認と発見入力は安全に停止してから行う。
+
+## USBでの自動回収
+
+リポジトリの最新`main`を取得し、Windows PowerShellで次を実行する。
+
+```powershell
+git switch main
+git pull --ff-only
+.\scripts\pull-field-test-bundle.ps1 -RestartApp
+```
+
+ADBがPATHにない場合、scriptはGoogle公式platform-toolsをリポジトリ配下の`.local`へ取得する。Node.js、npm、JDK、Android SDKはホストへ要求しない。
+
+正常終了すると、次が生成される。
+
+```text
+artifacts\device-bundles\
+├─ pem-field-test-<UTC日時>\
+│  ├─ coordinate-free-diagnostics.txt
+│  ├─ manifest.json
+│  ├─ SHA256SUMS.txt
+│  ├─ app\app-private-data.tar
+│  └─ system\...
+└─ pem-field-test-<UTC日時>.zip
+```
+
+### 通常共有するもの
+
+`coordinate-free-diagnostics.txt`には、端末、Android、開始・終了時刻、電池、権限、省電力、sample数、欠落、精度、callback、marker入力時間、状態遷移、最終エラーが含まれる。
+
+緯度経度、local座標、地図名・ID、marker文、地図画像は含まれない。通常の不具合報告には、まずこのテキストと主観メモを使う。
+
+### ローカル限定のもの
+
+`pem-field-test-<UTC日時>.zip`と`app-private-data.tar`には、raw位置とapp-private dataが含まれる。自動uploadされない。公開Issueや通常のチャットには添付せず、必要な場合だけprivateな経路で意図的に共有する。
 
 ## S0 Pass
 
@@ -104,6 +148,7 @@ Androidバージョン:
 - 探索を終了してReviewへ進める
 - 三表示を切り替えられる
 - 再起動後もPersonalMapと発見が残る
+- USB bundleを回収できる
 - 繰り返し操作を妨げるcrashやblocking errorがない
 
 経路精度や差別化の最終評価はS0 Pass条件にしない。S0は機能成立性のgateである。
@@ -124,16 +169,16 @@ Androidバージョン:
 共有するもの:
 
 ```text
-端末機種 / Android:
 失敗した手順番号:
 画面のエラー文:
 通知の有無:
-開始 / 終了時電池:
-座標なし集計:
+座標なし診断:
 そのほかの違和感:
 ```
 
-正確な住所、座標、raw location log、特定可能な地図画像は共有しない。
+端末、Android、時刻、電池、権限、省電力などは座標なし診断から取得する。正確な住所、座標、raw location log、特定可能な地図画像は共有しない。
+
+USB回収自体に失敗した場合は、PowerShellのエラー全文も共有する。歩行試験はやり直さず、端末内データを保持したまま回収経路を修正する。
 
 ## S0後の順序
 
