@@ -2,6 +2,11 @@ name: emulator-harness-only
 
 on:
   pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
     paths:
       - ".github/workflows/emulator-harness-only.yml"
       - "scripts/android-emulator-smoke.py"
@@ -32,6 +37,9 @@ env:
 
 jobs:
   classify:
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.draft == false
     name: Classify latest PR push
     runs-on: ubuntu-latest
     outputs:
@@ -82,6 +90,7 @@ jobs:
     name: Android emulator harness-only gate
     needs: classify
     if: >-
+      needs.classify.result == 'success' &&
       needs.classify.outputs.harness_only == 'true' &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
