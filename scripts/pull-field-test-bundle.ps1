@@ -1,5 +1,5 @@
 param(
-    [string]$OutputRoot = "artifacts\device-bundles",
+    [string]$OutputRoot = "artifacts/device-bundles",
     [string]$PackageName = "com.cider328.personalexplorationmap.fieldtest",
     [string]$Serial = "",
     [switch]$RestartApp
@@ -14,6 +14,15 @@ function Get-Utf8NoBomEncoding {
 
 function Write-Utf8File([string]$Path, [string]$Content) {
     [System.IO.File]::WriteAllText($Path, $Content, (Get-Utf8NoBomEncoding))
+}
+
+function Resolve-AbsoluteLocalPath([string]$PathValue) {
+    if ([System.IO.Path]::IsPathRooted($PathValue)) {
+        return [System.IO.Path]::GetFullPath($PathValue)
+    }
+
+    $workingDirectory = (Get-Location).Path
+    return [System.IO.Path]::GetFullPath((Join-Path $workingDirectory $PathValue))
 }
 
 function Get-Sha256Text([string]$Value) {
@@ -98,8 +107,8 @@ function Resolve-Adb {
     }
 
     $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-    $toolRoot = Join-Path $repoRoot ".local\android-platform-tools"
-    $adbPath = Join-Path $toolRoot "platform-tools\adb.exe"
+    $toolRoot = Join-Path $repoRoot ".local/android-platform-tools"
+    $adbPath = Join-Path $toolRoot "platform-tools/adb.exe"
     if (Test-Path $adbPath) {
         return $adbPath
     }
@@ -155,7 +164,9 @@ else {
 
 $adbPrefix = @("-s", $deviceSerial)
 $timestamp = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
-$outputDirectory = Join-Path $OutputRoot ("pem-field-test-" + $timestamp)
+$resolvedOutputRoot = Resolve-AbsoluteLocalPath $OutputRoot
+New-Item -ItemType Directory -Force -Path $resolvedOutputRoot | Out-Null
+$outputDirectory = Join-Path $resolvedOutputRoot ("pem-field-test-" + $timestamp)
 $systemDirectory = Join-Path $outputDirectory "system"
 $appDirectory = Join-Path $outputDirectory "app"
 New-Item -ItemType Directory -Force -Path $systemDirectory, $appDirectory | Out-Null
