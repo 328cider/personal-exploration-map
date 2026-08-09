@@ -62,7 +62,7 @@ function probe() {
 
         try {
           database
-            .prepare(`INSERT INTO ${table}(id, value) VALUES (?, ?)`) 
+            .prepare(`INSERT INTO ${table}(id, value) VALUES (?, ?)`)
             .run(candidate.name, candidate.value);
           result.insert = { ok: true };
 
