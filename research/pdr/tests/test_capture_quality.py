@@ -505,6 +505,12 @@ class CaptureQualityTests(unittest.TestCase):
         for token in forbidden:
             self.assertNotIn(token, source)
 
+    def test_emulator_evidence_extraction_uses_manifest_inventory(self) -> None:
+        script = (ANDROID_CAPTURE / "scripts" / "run-emulator-e2e.sh").read_text(encoding="utf-8")
+        self.assertIn('manifest["files"]', script)
+        self.assertIn("unsafe or duplicate manifest evidence path", script)
+        self.assertNotIn("ls files/pdr-captures", script)
+
 
 if __name__ == "__main__":
     unittest.main()

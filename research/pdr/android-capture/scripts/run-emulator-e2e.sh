@@ -26,17 +26,32 @@ if [[ "$instrument_status" -ne 0 ]] || ! grep -q "OK (1 test)" "$evidence_dir/in
   exit 1
 fi
 
-files=(session_start.json session_manifest.json COMPLETED)
-while IFS= read -r path; do files+=("$path"); done < <(
-  adb shell run-as "$package" sh -c 'ls files/pdr-captures/emulator-e2e.complete/*.jsonl' \
-    | tr -d '\r' \
-    | sed 's#^files/pdr-captures/emulator-e2e.complete/##'
-)
+bundle_root="files/pdr-captures/emulator-e2e.complete"
+adb exec-out run-as "$package" cat "$bundle_root/session_manifest.json" \
+  > "$evidence_dir/bundle/session_manifest.json"
+adb exec-out run-as "$package" cat "$bundle_root/COMPLETED" \
+  > "$evidence_dir/bundle/COMPLETED"
 
-for relative in "${files[@]}"; do
-  adb exec-out run-as "$package" cat "files/pdr-captures/emulator-e2e.complete/$relative" \
+while IFS= read -r relative; do
+  adb exec-out run-as "$package" cat "$bundle_root/$relative" \
     > "$evidence_dir/bundle/$relative"
-done
+done < <(
+  python - "$evidence_dir/bundle/session_manifest.json" <<'PY'
+import json
+import pathlib
+import sys
+
+manifest = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+seen = set()
+for entry in manifest["files"]:
+    relative = entry["path"]
+    path = pathlib.PurePosixPath(relative)
+    if path.is_absolute() or len(path.parts) != 1 or relative in seen:
+        raise SystemExit(f"unsafe or duplicate manifest evidence path: {relative!r}")
+    seen.add(relative)
+    print(relative)
+PY
+)
 
 python research/pdr/scripts/validate_capture_bundle.py "$evidence_dir/bundle" \
   --output "$evidence_dir/capture-quality.json"
