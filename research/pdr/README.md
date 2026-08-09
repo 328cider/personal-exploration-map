@@ -16,6 +16,8 @@ Start with:
 - `RATE_STABILITY_PROTOCOL.md` for the preregistered split and validation gates;
 - `RATE_STABILITY_RESULT.md` for the frozen detector result and the post-freeze
   Android Step Counter comparison;
+- `BODY_HEADING_PROTOCOL.md` for the preregistered causal body-heading split,
+  candidate family, and untouched validation gates;
 - `datasets/registry.json` for the initial public-dataset audit;
 - `notebooks/01_synthetic_foundation.ipynb` for the executable Phase 1 example;
 - `notebooks/02_public_dataset_audit.ipynb` for the executed metadata audit;
