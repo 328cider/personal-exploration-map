@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   appendPositionSample,
   createExplorationSession,
+  endExploration,
   replayExploration,
   type RawPositionSample,
 } from "../src/index.ts";
@@ -90,6 +91,49 @@ test("replay preserves cached evidence and derives from the first in-window fix"
     originLatitude: 35.1,
     originLongitude: 139,
   });
+});
+
+test("replay keeps post-end observations raw with a distinct rejection", () => {
+  const inside = geographicSample("inside", 15_000, 35.1);
+  const afterEnd = geographicSample("after-end", 21_000, 35.2);
+
+  const session = replayExploration({
+    id: "exploration",
+    name: "Replay",
+    startedAtMs: 10_000,
+    endedAtMs: 20_000,
+    samples: [afterEnd, inside],
+  });
+
+  assert.deepEqual(
+    session.rawSamples.map((sample) => sample.id),
+    ["inside", "after-end"],
+  );
+  assert.deepEqual(
+    session.track.map((point) => point.sampleId),
+    ["inside"],
+  );
+  assert.deepEqual(session.rejectedSamples, [
+    { sampleId: "after-end", reason: "sample-after-session-end" },
+  ]);
+});
+
+test("late delivery of an in-window timestamp remains session-not-recording", () => {
+  const initial = createExplorationSession({
+    id: "exploration",
+    name: "Pocket walk",
+    startedAtMs: 10_000,
+  }).session;
+  const completed = endExploration(initial, 20_000).session;
+  const delayedInsideWindow = geographicSample("delayed", 19_000, 35.1);
+
+  const mutation = appendPositionSample(completed, delayedInsideWindow);
+
+  assert.deepEqual(mutation.session.rawSamples, [delayedInsideWindow]);
+  assert.deepEqual(mutation.session.track, []);
+  assert.deepEqual(mutation.session.rejectedSamples, [
+    { sampleId: "delayed", reason: "session-not-recording" },
+  ]);
 });
 
 test("a non-finite timestamp is retained as raw evidence and rejected", () => {
