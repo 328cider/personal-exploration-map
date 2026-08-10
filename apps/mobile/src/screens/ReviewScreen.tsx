@@ -1,4 +1,11 @@
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import type { PersonalMapSnapshot } from "@exploration-map/mapping-core";
 import type { PersonalMapListItem } from "@exploration-map/mapping-engine";
 
@@ -28,9 +35,12 @@ export function ReviewScreen({
   onContinue,
   onHome,
 }: ReviewScreenProps) {
+  const [mapInteractionEnabled, setMapInteractionEnabled] = useState(false);
+
   return (
     <ScrollView
       contentContainerStyle={styles.content}
+      scrollEnabled={!mapInteractionEnabled}
       showsVerticalScrollIndicator={false}
     >
       <Text style={styles.eyebrow}>YOUR PERSONAL MAP</Text>
@@ -40,7 +50,59 @@ export function ReviewScreen({
       </Text>
 
       <View style={styles.canvasWrapper}>
-        <TrackCanvas interactive snapshot={snapshot} />
+        <View
+          accessibilityLabel="地図操作モード"
+          style={[
+            styles.mapInteractionCard,
+            mapInteractionEnabled ? styles.mapInteractionCardActive : null,
+          ]}
+        >
+          <View style={styles.mapInteractionCopy}>
+            <Text style={styles.mapInteractionTitle}>
+              {mapInteractionEnabled
+                ? "地図操作中"
+                : "ページスクロール優先"}
+            </Text>
+            <Text style={styles.mapInteractionHint}>
+              {mapInteractionEnabled
+                ? "ページのスクロールを一時停止しています。1本指で地図を移動できます。"
+                : "通常は1本指でページをスクロールします。地図を動かす時だけ操作モードにしてください。"}
+            </Text>
+          </View>
+          <Pressable
+            accessibilityLabel={
+              mapInteractionEnabled
+                ? "地図操作を終了してページスクロールへ戻る"
+                : "地図操作を開始"
+            }
+            accessibilityRole="button"
+            accessibilityState={{ selected: mapInteractionEnabled }}
+            onPress={() => setMapInteractionEnabled((enabled) => !enabled)}
+            style={({ pressed }: { readonly pressed: boolean }) => [
+              styles.mapInteractionButton,
+              mapInteractionEnabled
+                ? styles.mapInteractionButtonActive
+                : null,
+              pressed ? styles.mapInteractionButtonPressed : null,
+            ]}
+          >
+            <Text
+              style={[
+                styles.mapInteractionButtonText,
+                mapInteractionEnabled
+                  ? styles.mapInteractionButtonTextActive
+                  : null,
+              ]}
+            >
+              {mapInteractionEnabled ? "操作を終了" : "地図を操作"}
+            </Text>
+          </Pressable>
+        </View>
+
+        <TrackCanvas
+          interactive={mapInteractionEnabled}
+          snapshot={snapshot}
+        />
       </View>
 
       <View style={styles.legend}>
@@ -175,6 +237,60 @@ const styles = StyleSheet.create({
   },
   canvasWrapper: {
     marginTop: spacing.lg,
+  },
+  mapInteractionCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+    padding: spacing.sm,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: palette.border,
+    backgroundColor: palette.surface,
+  },
+  mapInteractionCardActive: {
+    borderColor: palette.primary,
+    backgroundColor: palette.primarySoft,
+  },
+  mapInteractionCopy: {
+    flex: 1,
+  },
+  mapInteractionTitle: {
+    color: palette.ink,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  mapInteractionHint: {
+    color: palette.mutedInk,
+    fontSize: 10,
+    lineHeight: 15,
+    marginTop: 2,
+  },
+  mapInteractionButton: {
+    minWidth: 102,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.sm,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: palette.primary,
+    backgroundColor: palette.surface,
+  },
+  mapInteractionButtonActive: {
+    backgroundColor: palette.primary,
+  },
+  mapInteractionButtonPressed: {
+    opacity: 0.78,
+  },
+  mapInteractionButtonText: {
+    color: palette.primary,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  mapInteractionButtonTextActive: {
+    color: palette.white,
   },
   legend: {
     flexDirection: "row",
