@@ -3,6 +3,8 @@ param(
     [string]$OutputDirectory = "",
     [ValidateSet("s0", "generic")]
     [string]$Mode = "s0",
+    [ValidateRange(0, [int]::MaxValue)]
+    [int]$ExplorationIndex = 0,
     [switch]$NoFailExit
 )
 
@@ -93,12 +95,18 @@ $arguments = @(
 if ($containerOutput.Length -gt 0) {
     $arguments += @("--output-dir", $containerOutput)
 }
+if ($ExplorationIndex -gt 0) {
+    $arguments += @("--exploration-index", $ExplorationIndex)
+}
 if ($NoFailExit) {
     $arguments += "--no-fail-exit"
 }
 
 Write-Host "Analyzing Field-test evidence inside Docker..."
 Write-Host "Input: $resolvedBundle"
+if ($ExplorationIndex -gt 0) {
+    Write-Host "Exploration index: $ExplorationIndex"
+}
 & $docker.Source @arguments
 $exitCode = $LASTEXITCODE
 
@@ -111,6 +119,10 @@ else {
 
 if ($exitCode -eq 2) {
     throw "Objective S0 status is FAIL. Do not repeat the walk. Keep the bundle and return the failure to code/emulator analysis."
+}
+if ($exitCode -eq 3) {
+    Write-Warning "Objective S0 status is INCONCLUSIVE. This is not a product failure. Keep the bundle and complete the missing S0 steps in one continuous exploration before drawing a product conclusion."
+    return
 }
 if ($exitCode -ne 0) {
     throw "Field-test analyzer failed with exit code $exitCode."
