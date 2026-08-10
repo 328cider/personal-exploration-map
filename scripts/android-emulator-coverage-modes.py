@@ -119,6 +119,26 @@ def swipe_inside(node: ET.Element) -> None:
     time.sleep(1)
 
 
+def swipe_up_inside(node: ET.Element) -> None:
+    left, top, right, bottom = parse_bounds(node)
+    width = right - left
+    height = bottom - top
+    x = left + width // 2
+    start_y = bottom - max(24, height // 5)
+    end_y = top + max(24, height // 5)
+    adb_shell(
+        "input",
+        "touchscreen",
+        "swipe",
+        str(x),
+        str(start_y),
+        str(x),
+        str(end_y),
+        "500",
+    )
+    time.sleep(1)
+
+
 def wait_for_node(
     artifacts: Path,
     needle: str,
@@ -176,6 +196,19 @@ def select_mode(
 
 
 def exercise_viewport(artifacts: Path) -> None:
+    enter_button = wait_for_node(
+        artifacts,
+        "地図操作を開始",
+        prefix="viewport-enter-mode",
+    )
+    screenshot(artifacts, "09a-review-scroll-priority")
+    tap_node(enter_button)
+    wait_for_node(
+        artifacts,
+        "地図操作を終了してページスクロールへ戻る",
+        prefix="viewport-mode-active",
+    )
+
     zoom_button = wait_for_node(
         artifacts,
         "地図を拡大",
@@ -193,7 +226,7 @@ def exercise_viewport(artifacts: Path) -> None:
         "地図の倍率 4×",
         prefix="viewport-zoom-readout",
     )
-    screenshot(artifacts, "09a-review-map-zoom-4x")
+    screenshot(artifacts, "09b-review-map-mode-zoom-4x")
 
     canvas = wait_for_node(
         artifacts,
@@ -206,7 +239,7 @@ def exercise_viewport(artifacts: Path) -> None:
         "地図の倍率 4×",
         prefix="viewport-pan-retains-zoom",
     )
-    screenshot(artifacts, "09b-review-map-panned")
+    screenshot(artifacts, "09c-review-map-mode-panned")
 
     fit_button = wait_for_node(
         artifacts,
@@ -219,7 +252,45 @@ def exercise_viewport(artifacts: Path) -> None:
         "地図の倍率 1×",
         prefix="viewport-fit-readout",
     )
-    screenshot(artifacts, "09c-review-map-fit-restored")
+    screenshot(artifacts, "09d-review-map-fit-restored")
+
+    exit_button = wait_for_node(
+        artifacts,
+        "地図操作を終了してページスクロールへ戻る",
+        prefix="viewport-exit-mode",
+    )
+    tap_node(exit_button)
+    wait_for_node(
+        artifacts,
+        "地図操作を開始",
+        prefix="viewport-scroll-restored",
+    )
+    screenshot(artifacts, "09e-review-scroll-mode-restored")
+
+
+def verify_scroll_from_map(artifacts: Path) -> None:
+    interaction_button = wait_for_node(
+        artifacts,
+        "地図操作を開始",
+        prefix="scroll-check-button-before",
+    )
+    before_top = parse_bounds(interaction_button)[1]
+    canvas = wait_for_node(
+        artifacts,
+        "探索地図",
+        prefix="scroll-check-canvas",
+    )
+    swipe_up_inside(canvas)
+
+    root = dump_ui(artifacts, "09f-review-scrolled-from-map")
+    interaction_after = find_node(root, "地図操作を開始")
+    if interaction_after is not None:
+        after_top = parse_bounds(interaction_after)[1]
+        if after_top >= before_top - 48:
+            raise CoverageFailure(
+                "one-finger vertical swipe from the non-interactive map did not scroll Review"
+            )
+    screenshot(artifacts, "09f-review-scrolled-from-map")
 
 
 def main() -> int:
@@ -261,10 +332,12 @@ def main() -> int:
             "位置の不確実性",
             "12-location-uncertainty-restored",
         )
+        verify_scroll_from_map(artifacts)
         (artifacts / "coverage-modes-result.json").write_text(
             '{"status":"passed","semantics":"uncertainty-separated-from-coverage",'
             '"modes":["uncertainty","cells","track"],'
-            '"viewport":["zoom-4x","pan","fit-reset"]}\n',
+            '"viewport":["explicit-map-mode","zoom-4x","pan","fit-reset",'
+            '"scroll-restored"]}\n',
             encoding="utf-8",
         )
         print("[coverage-modes] passed", flush=True)
