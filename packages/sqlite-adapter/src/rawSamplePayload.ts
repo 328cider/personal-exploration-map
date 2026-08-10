@@ -6,7 +6,7 @@ import {
   decodePersonalMapBundleNumber,
   encodePersonalMapBundleNumber,
   PersonalMapBundleNumberDecodeError,
-} from "@exploration-map/mapping-engine";
+} from "../../mapping-engine/src/personalMapBundleNumber.ts";
 
 export const SQLITE_RAW_SAMPLE_PAYLOAD_FORMAT =
   "raw-position-sample-exact-v1" as const;
