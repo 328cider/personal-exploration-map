@@ -1,6 +1,6 @@
 # Android Emulator E2E gate
 
-更新日: 2026-08-08
+更新日: 2026-08-10
 
 ## 目的
 
@@ -12,15 +12,16 @@
 
 ```text
 Pure TypeScript tests
-  └─ map truth、品質判定、frame、transaction、replay、renderer geometry
+  └─ map truth、品質判定、frame、transaction、replay、renderer geometry、
+     viewport zoom/pan math
 
 Android Emulator E2E
   └─ APK起動、基本UI、権限済み記録、擬似GNSS、live preview、
-     explored-space切替、通知、marker、終了、再起動後の保持
+     Review zoom/pan/reset、explored-space切替、通知、marker、終了、再起動後の保持
 
 Android実端末
   └─ 実GNSS、長時間画面OFF、OEM省電力、電池、ポケット内UX、
-     explored-space表現の実利用価値
+     広域PersonalMapの局所閲覧価値、explored-space表現の実利用価値
 ```
 
 エミュレータ合格は実端末成立を証明しない。ただし、エミュレータ不合格のAPKを実地試験可能とは扱わない。
@@ -55,22 +56,26 @@ Android実端末
 11. appをforce-stopして再起動
 12. PersonalMapがHomeとReviewに残ることを確認
 
-### explored-space表示
+### Review viewport / explored-space表示
 
-13. 既定表示が`探索範囲`であることを確認
-14. `セル`、`軌跡`、`探索範囲`を順に切り替える
-15. 各表示の説明と画面をartifactへ保存
-16. renderer切替後もPersonalMapの終了・保持が壊れていないことを確認
+13. Reviewの初期表示がPersonalMap全体fit・倍率1倍であることを確認
+14. accessibility controlから2回拡大し、倍率4倍になることを確認
+15. 拡大した地図を1本指swipeでpanし、appがcrashせず倍率を維持することを確認
+16. `全体`で倍率1倍・fit表示へ戻ることを確認
+17. 既定表示が`位置の不確実性`であることを確認
+18. `通過セル`、`軌跡`、`不確実性`を順に切り替える
+19. viewport操作と各表示の説明・画面をartifactへ保存
+20. renderer操作後もPersonalMapの終了・保持が壊れていないことを確認
 
 ### 通知・発見入力
 
-17. 同じPersonalMapへ2回目のExplorationSessionを開始
-18. foreground-service notificationにpackageと`探索を記録中`が含まれることを確認
-19. notificationを押し、記録中画面へ戻れることを確認
-20. `＋ 発見を記録`からmodalを開き、default category `気になる`を保存
-21. 記録画面の発見数が1へ更新されることを確認
-22. 終了後のReviewに`気になる`が残ることを確認
-23. logcatに既知のFatal、React Native、Expo SQLite native statement errorがないことを確認
+21. 同じPersonalMapへ2回目のExplorationSessionを開始
+22. foreground-service notificationにpackageと`探索を記録中`が含まれることを確認
+23. notificationを押し、記録中画面へ戻れることを確認
+24. `＋ 発見を記録`からmodalを開き、default category `気になる`を保存
+25. 記録画面の発見数が1へ更新されることを確認
+26. 終了後のReviewに`気になる`が残ることを確認
+27. logcatに既知のFatal、React Native、Expo SQLite native statement errorがないことを確認
 
 すべての操作はユーザーが触るUIと通常のmapping-engine command経由で行う。test専用にSQLiteへcanonical dataを直接挿入しない。
 
@@ -83,10 +88,10 @@ Android実端末
 - logcat
 - activity / package / location / notification dumpsys
 - harness version metadata
-- lifecycle、coverage、interactionのassertion結果JSON
+- lifecycle、viewport、coverage、interactionのassertion結果JSON
 - 失敗時の例外
 
-スクリーンショットは位置座標を既存地図へ重ねたものではないが、実際の位置履歴を含む可能性があるため、public Issueへ無条件に添付しない。
+viewport evidenceには、1倍初期表示、4倍拡大、pan後、全体fit復帰を含める。スクリーンショットは位置座標を既存地図へ重ねたものではないが、実際の位置履歴を含む可能性があるため、public Issueへ無条件に添付しない。
 
 ## 実装原則
 
@@ -95,7 +100,8 @@ Android実端末
 - 擬似GNSSはmap truthへ通常のraw observationとして入る
 - emulator専用の位置をproduction PersonalMapへ混ぜない
 - rendererはread-onlyのまま
-- live previewを確認するためにbackground中のpollingを追加しない
+- viewport stateをSQLiteやmapping-coreへ保存しない
+- live previewを確認するためにbackground中のpollingや操作controlsを追加しない
 - UI文言変更でtestが失敗した場合、単にselectorを緩めず、ユーザー導線の意味が維持されているか確認する
 - emulator provisioningの独自shell実装を増やさず、採用Actionの設定へ寄せる
 - notificationとmarkerは直接DBを検査せず、ユーザーから見える状態とReviewへの永続化で確認する
@@ -110,7 +116,7 @@ Android実端末
 - product governance / architecture / mobile write boundary: success
 - 既知のP0 UI blockerがopenではない
 - emulator artifactの主要画面を目視レビュー済み
-- explored-space切替、通知、marker、終了、再起動後保持が黒箱E2Eで成功
+- Reviewのzoom/pan/fit reset、explored-space切替、通知、marker、終了、再起動後保持が黒箱E2Eで成功
 
 実端末では、エミュレータで代替できない以下だけを優先して検証する。
 
@@ -120,4 +126,5 @@ Android実端末
 - 実端末上のforeground service notificationと復帰差
 - 電池消費
 - スマホをしまった状態の身体的UX
+- 長距離区間を含むPersonalMapで徒歩・発見周辺を実際に拡大して読めるか
 - explored-space表現の実用上の差別化
