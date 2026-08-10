@@ -1,11 +1,11 @@
-# Field-test客観S0解析
+# Field-test客観解析
 
 更新日: 2026-08-10
-対象: Issue #77 / Issue #3 / Issue #114
+対象: Issue #77 / Issue #3 / Issue #114 / Issue #119
 
 ## 目的
 
-実探索後にUSBで回収したField-test bundleから、端末・時刻・電池・権限・位置サンプル・欠落・provider lifecycle・エラーを毎回手作業で読み取らず、S0の客観的な技術状態を一定の規則で整理する。
+実探索後にUSBで回収したField-test bundleから、端末・時刻・電池・権限・位置サンプル・欠落・provider lifecycle・エラーを毎回手作業で読み取らず、客観的な技術状態を一定の規則で整理する。
 
 この解析は、製品のGo / Narrow / Stopを自動決定しない。次は端末から判断できないため、`docs/FIELD_EXPLORATION_REVIEW_TEMPLATE.md`で人が評価する。
 
@@ -57,7 +57,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\scripts\collect-and-a
 4. checksumsとローカルZIPを生成する
 5. Field-testアプリを再起動する
 6. Docker内で最新bundleを解析する
-7. Markdown / JSONの客観S0レポートを生成する
+7. Markdown / JSONの客観レポートを生成する
 
 複数のAndroid端末が接続されている場合:
 
@@ -101,8 +101,6 @@ Field-test bundleが既にある場合は、USB回収を繰り返さず解析だ
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\scripts\analyze-latest-field-test.ps1"
 ```
 
-既定では`artifacts\device-bundles`配下にある最新の`pem-field-test-*`ディレクトリを選ぶ。
-
 明示的なbundleを指定する場合:
 
 ```powershell
@@ -118,31 +116,18 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\scripts\analyze-lates
   -ExplorationIndex 1
 ```
 
-`coordinate-free-diagnostics.txt`自体を指定することもできる。
+S0固有のbackground復帰・marker・継続時間条件を外し、一般的な長時間sessionとして解析する場合:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\scripts\analyze-latest-field-test.ps1" `
-  -BundlePath "artifacts\device-bundles\pem-field-test-20260809T123456Z\coordinate-free-diagnostics.txt"
-```
-
-別の出力先を使う場合:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\scripts\analyze-latest-field-test.ps1" `
-  -OutputDirectory "artifacts\field-test-analysis\latest"
-```
-
-S0固有のbackground復帰・marker・継続時間条件を外し、一般的なsessionとして解析する場合:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\scripts\analyze-latest-field-test.ps1" -Mode generic
+  -Mode generic
 ```
 
 ## 終了状態
 
 ### PASS
 
-同一ExplorationSessionで、定義済みの客観S0条件にblocking failureも警告もない。
+定義済みの客観条件にblocking failureも警告もない。
 
 PASSでも次は未判定である。
 
@@ -154,9 +139,13 @@ PASSでも次は未判定である。
 
 ### WARN
 
-S0実行自体は成立しているが、次のような条件を確認する必要がある。
+試験とcanonical evidence保存は成立しているが、確認が必要な条件がある。
+
+例:
 
 - 30秒または60秒以上のcallback delivery gap
+- generic modeで確認された遅延一括配送
+- live map / marker位置の鮮度低下
 - acceptance rate低下
 - battery saver
 - battery optimization対象
@@ -164,7 +153,7 @@ S0実行自体は成立しているが、次のような条件を確認する必
 - 5〜10分のtargetから軽度に外れる
 - cached / stale observation timestampの疑い
 
-警告理由と主観レビューを合わせ、S1へ進むか判断する。
+警告理由と主観レビューを合わせ、次の試験または開発へ進む条件を判断する。
 
 ### INCONCLUSIVE
 
@@ -182,14 +171,17 @@ INCONCLUSIVEではraw bundleを保持し、不足した手順を一つの継続s
 
 ### FAIL
 
-次のようなblocking evidenceがある。
+blocking evidenceがある。
 
 - required environment snapshotなし
 - 必要な位置・通知権限なし
 - rawまたはaccepted sampleが0
-- callbackの未計上またはfailed batch
+- callback sampleの未計上
+- failed callback batch
 - operational error
-- callback delivery gapがblocking thresholdを超える
+- S0のblocking callback gap
+- generic modeでもcatch-up deliveryを裏付けられない120秒超callback gap
+- observation stream自体のoutage
 - provider / environment lifecycle欠落
 - critical thermal
 - checksum不一致
@@ -206,16 +198,48 @@ protocol不足とhard failureが同時にある場合はFAILを優先する。
 ```text
 observation timestamp gap
   = Location.timestamp同士の差
+  = post-hoc routeを再生成できる観測列の連続性
   = cached / stale fixやsession外timestampの影響を受ける
 
 callback delivery gap
   = callback.received eventの実受信時刻同士の差
-  = background callback継続性の主要指標
+  = live map / marker位置の鮮度とbackground deliveryの指標
 ```
 
 observation gapがsession durationを超えても、それだけでcallback停止とは判定しない。cached / staleまたはsession-window外sampleの疑いとしてWARNにし、raw evidenceは削除しない。
 
-新しい診断formatではcallback gapと、session開始前・終了後sample件数を出す。古いbundleにcallback gapがない場合はsample gapを補助的に読むが、時刻整合性が疑わしい場合はhard outageへ昇格させない。
+診断format 3ではcallback gapに加え、callback到着時のoldest / newest observation age、largest batch、session開始前・終了後sample件数を出す。古いbundleにcallback gapがない場合はsample gapを補助的に読むが、時刻整合性が疑わしい場合はhard outageへ昇格させない。
+
+## Generic modeの遅延一括配送
+
+120秒以上のcallback gapを一律にraw-data lossと扱わない。`generic` modeでは、次を**すべて**満たした時だけ、hard FAILの`callback_gap_120s`を次のWARNへ置換する。
+
+```text
+callback_delivery_batched
+live_freshness_degraded
+```
+
+必要条件:
+
+1. received sampleが`persisted + duplicate`で完全にaccounted
+2. failed callback batchが0
+3. operational errorなし
+4. observation gapが30秒未満で連続
+5. largest callback batchが2件以上
+6. oldest-observation age最大値がcallback gap最大値と概ね整合
+7. future observation batchが0
+8. observation timestamp欠損batchが0
+
+意味:
+
+- `callback_delivery_batched`: OS/providerが観測を一時的にbufferし、後からまとめて配送した証拠
+- `live_freshness_degraded`: 遅延中のlive mapとmarker attachmentは古かった可能性
+
+この分類は、保存できていないsampleや実観測outageをWARNへ弱めない。条件のどれかを満たさない場合、120秒超callback gapはFAILのままである。
+
+### S0 mode
+
+短いwalking-only S0では、live freshness自体が製品要件である。そのため、catch-up deliveryが後から全件保存していても、120秒超callback gapを自動的にWARNへ下げない。S0では`callback_gap_120s`をFAILとして維持する。
 
 ## 解析する情報
 
@@ -246,6 +270,9 @@ observation gapがsession durationを超えても、それだけでcallback停�
 - session開始・終了・経過時間
 - battery / power / thermal / permission
 - sample / accuracy / observation gap / callback gap集計
+- callback largest batch
+- callback oldest / newest observation age distribution
+- future / missing observation timestamp batch count
 - session-window外sampleの件数と最大ずれ
 - lifecycle
 - marker完了数
@@ -268,20 +295,20 @@ observation gapがsession durationを超えても、それだけでcallback停�
 
 ## 判定規則の扱い
 
-初期S0規則は、最初の実機dataを得る前に異常を見逃さないため保守的に設定していた。最初の実機bundleで、必要操作が複数sessionへ分かれた場合とcached/stale GNSS timestampの可能性が観測されたため、Issue #114で次を修正した。
+初期S0規則は、最初の実機dataを得る前に異常を見逃さないため保守的に設定していた。実機証拠を得た後、次の区別を追加した。
 
-- protocol不完了を製品FAILから分離
-- evidenceを単一sessionに限定
-- latest-only選択をreportで明示
-- retrospectiveなsession選択を追加
-- observation gapとcallback gapを分離
+- protocol不完了と製品FAIL
+- evidenceの単一session単位
+- observation gapとcallback gap
+- raw observation lossと遅延一括配送
+- post-hoc completenessとlive freshness
 
-これは結果を都合よくPASSへ変更するものではない。最初のbundleはPASSへ昇格せず、INCONCLUSIVEとして保持する。
+これは結果を都合よくPASSへ変更するものではない。generic modeのbuffered deliveryもWARNであり、live freshness低下を明示する。S0のlive-freshness gateは維持する。
 
 次を混同しない。
 
 ```text
-objective S0 analyzer
+objective analyzer
   = 記録・環境・integrity・protocol completenessの自動技術ゲート
 
 Issue #3 Go / Narrow / Stop
