@@ -40,6 +40,7 @@ function placeholders(count: number): string {
 class SqlitePersonalMapBundleSnapshotReader
   implements PersonalMapBundleReadSnapshotPort
 {
+  private readonly database: AsyncSqliteExecutor;
   private readonly maps = new Map<string, StoredPersonalMap | null>();
   private readonly explorations = new Map<
     string,
@@ -55,7 +56,9 @@ class SqlitePersonalMapBundleSnapshotReader
   >();
   private readonly frames = new Map<string, MapFrame>();
 
-  constructor(private readonly database: AsyncSqliteExecutor) {}
+  constructor(database: AsyncSqliteExecutor) {
+    this.database = database;
+  }
 
   async loadPersonalMapRecord(
     personalMapId: string,
@@ -239,7 +242,11 @@ export function createSqlitePersonalMapBundleReadRepository(
   getDatabase: AsyncSqliteDatabaseProvider,
 ): PersonalMapBundleReadRepositoryPort {
   return {
-    async withConsistentRead<Result>(operation): Promise<Result> {
+    async withConsistentRead<Result>(
+      operation: (
+        reader: PersonalMapBundleReadSnapshotPort,
+      ) => Promise<Result>,
+    ): Promise<Result> {
       const database = await getDatabase();
       let completed = false;
       let result: Result | undefined;
