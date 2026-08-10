@@ -87,7 +87,7 @@ $arguments = @(
     "-T",
     "shell",
     "node",
-    "scripts/analyze-field-test-summary.mjs",
+    "scripts/analyze-field-test-evidence.mjs",
     $containerBundle,
     "--mode",
     $Mode
@@ -118,10 +118,10 @@ else {
 }
 
 if ($exitCode -eq 2) {
-    throw "Objective S0 status is FAIL. Do not repeat the walk. Keep the bundle and return the failure to code/emulator analysis."
+    throw "Objective status is FAIL. Do not repeat the walk. Keep the bundle and return the failure to code/emulator analysis."
 }
 if ($exitCode -eq 3) {
-    Write-Warning "Objective S0 status is INCONCLUSIVE. This is not a product failure. Keep the bundle and complete the missing S0 steps in one continuous exploration before drawing a product conclusion."
+    Write-Warning "Objective status is INCONCLUSIVE. This is not a product failure. Keep the bundle and complete the missing S0 steps in one continuous exploration before drawing a product conclusion."
     return
 }
 if ($exitCode -ne 0) {
