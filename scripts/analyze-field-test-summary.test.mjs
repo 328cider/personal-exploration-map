@@ -222,7 +222,7 @@ function codes(findings) {
   return new Set(findings.map((item) => item.code));
 }
 
-function firstRealDeviceLikeValues() {
+function firstRealDeviceLikeValues(overrides = {}) {
   return baseValues({
     session_started_at_ms: 1_000,
     session_started_at_iso_utc: "2026-08-10T00:00:00.000Z",
@@ -261,10 +261,11 @@ function firstRealDeviceLikeValues() {
     lifecycle_6_offset_ms: 74_665,
     lifecycle_7_offset_ms: 74_676,
     lifecycle_8_offset_ms: 74_677,
+    ...overrides,
   });
 }
 
-function secondRealDeviceLikeValues() {
+function secondRealDeviceLikeValues(overrides = {}) {
   return baseValues({
     session_started_at_ms: 100_000,
     session_started_at_iso_utc: "2026-08-10T00:03:00.000Z",
@@ -311,6 +312,7 @@ function secondRealDeviceLikeValues() {
     lifecycle_6_offset_ms: 29_285,
     lifecycle_6_kind: "environment.session.ended",
     lifecycle_6_detail: "none",
+    ...overrides,
   });
 }
 
