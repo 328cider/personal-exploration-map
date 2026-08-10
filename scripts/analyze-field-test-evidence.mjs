@@ -12,7 +12,7 @@ import {
 const REPORT_SCHEMA_VERSION = 3;
 const SEVERITY_RANK = { INFO: 0, WARN: 1, INCONCLUSIVE: 2, FAIL: 3 };
 
-const CALLBACK_SAFE_FIELDS = [
+const ADDITIONAL_SAFE_FIELDS = [
   "callback_largest_batch",
   "callback_oldest_observation_age_ms_count",
   "callback_oldest_observation_age_ms_min",
@@ -26,6 +26,13 @@ const CALLBACK_SAFE_FIELDS = [
   "callback_newest_observation_age_ms_max",
   "callback_future_observation_batches",
   "callback_missing_observation_timestamp_batches",
+  "marker_latest_observation_age_ms_count",
+  "marker_latest_observation_age_ms_min",
+  "marker_latest_observation_age_ms_median",
+  "marker_latest_observation_age_ms_p95",
+  "marker_latest_observation_age_ms_max",
+  "marker_latest_observation_missing_count",
+  "marker_latest_observation_future_count",
 ];
 
 function numberValue(value) {
@@ -73,8 +80,8 @@ function formatMinutes(values) {
   return duration === null ? "—" : (duration / 60_000).toFixed(1);
 }
 
-function copyCallbackEvidence(source, target) {
-  for (const field of CALLBACK_SAFE_FIELDS) {
+function copyAdditionalEvidence(source, target) {
+  for (const field of ADDITIONAL_SAFE_FIELDS) {
     if (Object.hasOwn(source, field)) {
       target[field] = source[field];
     }
@@ -149,7 +156,7 @@ function bufferedDeliveryEvidence(values) {
 
 function reclassifyExploration(evaluation, rawValues, mode) {
   const values = { ...evaluation.values };
-  copyCallbackEvidence(rawValues, values);
+  copyAdditionalEvidence(rawValues, values);
   let findings = [...evaluation.findings];
 
   if (mode === "generic") {
@@ -218,8 +225,9 @@ function renderMarkdown(report) {
     `| Observation gap | p95 ${markdownCell(evaluated.sample_gap_ms_p95)} ms / max ${markdownCell(evaluated.sample_gap_ms_max)} ms / >=30s ${markdownCell(evaluated.sample_gap_at_least_30s)} |`,
     `| Callback gap | p95 ${markdownCell(evaluated.callback_gap_ms_p95)} ms / max ${markdownCell(evaluated.callback_gap_ms_max)} ms / >=120s ${markdownCell(evaluated.callback_gap_at_least_120s)} |`,
     `| Catch-up evidence | largest batch ${markdownCell(evaluated.callback_largest_batch)} / oldest age max ${markdownCell(evaluated.callback_oldest_observation_age_ms_max)} ms / newest age max ${markdownCell(evaluated.callback_newest_observation_age_ms_max)} ms |`,
-    `| Battery | ${markdownCell(evaluated.start_battery_percent)}% → ${markdownCell(evaluated.end_battery_percent)}% / consumed ${markdownCell(evaluated.battery_consumed_percentage_points)} pt |`,
     `| Marker | completed ${markdownCell(evaluated.marker_input_completed)} / cancelled ${markdownCell(evaluated.marker_input_cancelled)} |`,
+    `| Marker attachment freshness | age p95 ${markdownCell(evaluated.marker_latest_observation_age_ms_p95)} ms / max ${markdownCell(evaluated.marker_latest_observation_age_ms_max)} ms / missing ${markdownCell(evaluated.marker_latest_observation_missing_count)} / future ${markdownCell(evaluated.marker_latest_observation_future_count)} |`,
+    `| Battery | ${markdownCell(evaluated.start_battery_percent)}% → ${markdownCell(evaluated.end_battery_percent)}% / consumed ${markdownCell(evaluated.battery_consumed_percentage_points)} pt |`,
     `| Last error | ${markdownCell(evaluated.last_error_kind)} / ${markdownCell(evaluated.last_error_message)} |`,
     "",
     "## Findings",
@@ -243,6 +251,7 @@ function renderMarkdown(report) {
     "",
     "- Observation continuity and eventual persistence describe post-hoc raw-evidence completeness.",
     "- Callback delivery gaps describe live freshness and may delay the map or marker attachment without losing stored observations.",
+    "- Marker attachment freshness measures marker-save time against the latest accepted observation available to the derived route.",
     "- Generic mode may classify confirmed catch-up delivery as WARN; S0 keeps its stricter live-freshness gate.",
     "",
     "## Privacy boundary",
