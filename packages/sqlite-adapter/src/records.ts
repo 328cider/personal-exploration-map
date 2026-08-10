@@ -88,6 +88,7 @@ export interface MarkerRow {
 export type SqliteRawEvidenceErrorCode =
   | "exact-payload-missing"
   | "exact-payload-identity-mismatch"
+  | "invalid-row-provenance"
   | "legacy-normalized-evidence";
 
 export class SqliteRawEvidenceError extends Error {
@@ -121,7 +122,21 @@ export function rowToStoredExploration(row: ExplorationRow): StoredExploration {
   };
 }
 
+function assertLegacyRowProvenance(row: PositionRow): void {
+  if (
+    row.ordinal_provenance !== "legacy-recorded-at-id-v1" ||
+    row.sample_ordinal !== null ||
+    row.raw_payload_json !== null
+  ) {
+    throw new SqliteRawEvidenceError(
+      "invalid-row-provenance",
+      "A legacy raw observation row has inconsistent provenance metadata.",
+    );
+  }
+}
+
 function legacyRowToSample(row: PositionRow): RawPositionSample | null {
+  assertLegacyRowProvenance(row);
   if (row.recorded_at === null || row.confidence === null) {
     return null;
   }
@@ -180,6 +195,15 @@ function legacyRowToSample(row: PositionRow): RawPositionSample | null {
 }
 
 function exactRowToSample(row: PositionRow): RawPositionSample {
+  if (
+    row.ordinal_provenance !== "ingest-sequence-v1" ||
+    row.sample_ordinal === null
+  ) {
+    throw new SqliteRawEvidenceError(
+      "invalid-row-provenance",
+      "An exact raw observation row has inconsistent ordinal provenance.",
+    );
+  }
   if (row.raw_payload_json === null) {
     throw new SqliteRawEvidenceError(
       "exact-payload-missing",
