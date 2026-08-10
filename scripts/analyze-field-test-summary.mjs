@@ -7,8 +7,8 @@ import { pathToFileURL } from "node:url";
 
 const EXPECTED_PACKAGE = "com.cider328.personalexplorationmap.fieldtest";
 const DEFAULT_INPUT = "artifacts/device-bundles";
-const REPORT_SCHEMA_VERSION = 1;
-const SEVERITY_RANK = { INFO: 0, WARN: 1, FAIL: 2 };
+const REPORT_SCHEMA_VERSION = 2;
+const SEVERITY_RANK = { INFO: 0, WARN: 1, INCONCLUSIVE: 2, FAIL: 3 };
 
 const PROHIBITED_KEY_PATTERNS = [
   /(^|_)(latitude|longitude|coordinate)(_|$)/i,
@@ -75,6 +75,18 @@ const SAFE_REPORT_FIELDS = [
   "sample_gap_at_least_30s",
   "sample_gap_at_least_60s",
   "sample_gap_at_least_120s",
+  "sample_before_start_count",
+  "sample_before_start_max_ms",
+  "sample_after_end_count",
+  "sample_after_end_max_ms",
+  "callback_gap_ms_count",
+  "callback_gap_ms_min",
+  "callback_gap_ms_median",
+  "callback_gap_ms_p95",
+  "callback_gap_ms_max",
+  "callback_gap_at_least_30s",
+  "callback_gap_at_least_60s",
+  "callback_gap_at_least_120s",
   "callback_received_batches",
   "callback_received_samples",
   "callback_persisted_batches",
@@ -137,8 +149,8 @@ export function parseCoordinateFreeSummary(text) {
   return { title, metadata, explorations, duplicateKeys };
 }
 
-function finding(severity, code, message) {
-  return { severity, code, message };
+function finding(severity, code, message, category = "objective") {
+  return { severity, code, message, category };
 }
 
 function numberValue(value) {
@@ -170,19 +182,13 @@ function lifecycleFrom(values) {
   });
 }
 
-function sanitizeExploration(exploration) {
+function sanitizeValues(values) {
   const safeValues = {};
   for (const field of SAFE_REPORT_FIELDS) {
-    if (Object.hasOwn(exploration.values, field)) {
-      safeValues[field] = exploration.values[field];
-    }
+    if (Object.hasOwn(values, field)) safeValues[field] = values[field];
   }
-  safeValues.lifecycle_count = lifecycleFrom(exploration.values).length;
-  return {
-    index: exploration.index,
-    values: safeValues,
-    lifecycle: lifecycleFrom(exploration.values),
-  };
+  safeValues.lifecycle_count = lifecycleFrom(values).length;
+  return safeValues;
 }
 
 function evaluatePrivacy(parsed) {
@@ -203,6 +209,7 @@ function evaluatePrivacy(parsed) {
             "FAIL",
             "coordinate_key_present",
             `${section.name} contains prohibited key '${key}'.`,
+            "privacy",
           ),
         );
       }
@@ -218,6 +225,7 @@ function evaluatePrivacy(parsed) {
         "WARN",
         "privacy_header_unexpected",
         "The coordinate-free privacy declaration is missing or changed.",
+        "privacy",
       ),
     );
   }
@@ -228,10 +236,84 @@ function requireFields(values, fields, findings) {
   for (const field of fields) {
     if (!Object.hasOwn(values, field) || values[field] === null || values[field] === "") {
       findings.push(
-        finding("FAIL", "required_field_missing", `Required field '${field}' is missing.`),
+        finding(
+          "FAIL",
+          "required_field_missing",
+          `Required field '${field}' is missing.`,
+          "integrity",
+        ),
       );
     }
   }
+}
+
+function gapFinding(values) {
+  const durationMs = numberValue(values.duration_ms);
+  const sampleGapMax = numberValue(values.sample_gap_ms_max);
+  const beforeStartCount = numberValue(values.sample_before_start_count) ?? 0;
+  const afterEndCount = numberValue(values.sample_after_end_count) ?? 0;
+  const callbackGapAvailable = Object.hasOwn(values, "callback_gap_ms_count");
+
+  const sampleWindowSuspicious =
+    beforeStartCount > 0 ||
+    afterEndCount > 0 ||
+    (durationMs !== null && sampleGapMax !== null && sampleGapMax > durationMs + 15_000);
+
+  const findings = [];
+  if (sampleWindowSuspicious) {
+    const details = [];
+    if (beforeStartCount > 0) details.push(`${beforeStartCount} sample(s) before session start`);
+    if (afterEndCount > 0) details.push(`${afterEndCount} sample(s) after session end`);
+    if (details.length === 0 && sampleGapMax !== null && durationMs !== null) {
+      details.push(`observation gap ${sampleGapMax} ms exceeds session duration ${durationMs} ms`);
+    }
+    findings.push(
+      finding(
+        "WARN",
+        "sample_timestamp_outside_session_suspected",
+        `Observation timestamps may include cached/stale or out-of-window samples: ${details.join(", ")}. This is not treated as a callback outage.`,
+        "data-quality",
+      ),
+    );
+  }
+
+  const prefix = callbackGapAvailable ? "callback_gap" : "sample_gap";
+  const gaps120 = numberValue(values[`${prefix}_at_least_120s`]) ?? 0;
+  const gaps60 = numberValue(values[`${prefix}_at_least_60s`]) ?? 0;
+  const gaps30 = numberValue(values[`${prefix}_at_least_30s`]) ?? 0;
+
+  if (!callbackGapAvailable && sampleWindowSuspicious) return findings;
+
+  const label = callbackGapAvailable ? "callback delivery" : "sample observation";
+  if (gaps120 > 0) {
+    findings.push(
+      finding(
+        "FAIL",
+        `${prefix}_120s`,
+        `${gaps120} ${label} gap(s) were at least 120 seconds.`,
+        "runtime",
+      ),
+    );
+  } else if (gaps60 > 0) {
+    findings.push(
+      finding(
+        "WARN",
+        `${prefix}_60s`,
+        `${gaps60} ${label} gap(s) were at least 60 seconds.`,
+        "runtime",
+      ),
+    );
+  } else if (gaps30 > 0) {
+    findings.push(
+      finding(
+        "WARN",
+        `${prefix}_30s`,
+        `${gaps30} ${label} gap(s) were at least 30 seconds.`,
+        "runtime",
+      ),
+    );
+  }
+  return findings;
 }
 
 export function evaluateExploration(values, { mode = "s0" } = {}) {
@@ -264,7 +346,12 @@ export function evaluateExploration(values, { mode = "s0" } = {}) {
 
   if (values.app_package !== EXPECTED_PACKAGE) {
     findings.push(
-      finding("FAIL", "unexpected_package", `Expected ${EXPECTED_PACKAGE}; got ${values.app_package}.`),
+      finding(
+        "FAIL",
+        "unexpected_package",
+        `Expected ${EXPECTED_PACKAGE}; got ${values.app_package}.`,
+        "integrity",
+      ),
     );
   }
   if (booleanValue(values.app_debuggable) !== true) {
@@ -273,12 +360,18 @@ export function evaluateExploration(values, { mode = "s0" } = {}) {
         "FAIL",
         "field_test_not_debuggable",
         "The collected package is not the USB-debuggable Field-test build.",
+        "integrity",
       ),
     );
   }
   if (values.provider !== "gnss-background") {
     findings.push(
-      finding("WARN", "unexpected_provider", `Expected gnss-background; got ${values.provider}.`),
+      finding(
+        "WARN",
+        "unexpected_provider",
+        `Expected gnss-background; got ${values.provider}.`,
+        "protocol",
+      ),
     );
   }
 
@@ -291,18 +384,27 @@ export function evaluateExploration(values, { mode = "s0" } = {}) {
     "end_notification_granted",
   ]) {
     if (booleanValue(values[key]) !== true) {
-      findings.push(finding("FAIL", "required_permission_missing", `${key} is not true.`));
+      findings.push(
+        finding("FAIL", "required_permission_missing", `${key} is not true.`, "runtime"),
+      );
     }
   }
 
   const rawSamples = numberValue(values.raw_samples);
   const acceptedSamples = numberValue(values.accepted_samples);
   if (rawSamples === null || rawSamples <= 0) {
-    findings.push(finding("FAIL", "no_raw_samples", "No raw location samples were recorded."));
+    findings.push(
+      finding("FAIL", "no_raw_samples", "No raw location samples were recorded.", "runtime"),
+    );
   }
   if (acceptedSamples === null || acceptedSamples <= 0) {
     findings.push(
-      finding("FAIL", "no_accepted_samples", "No samples were accepted into the derived route."),
+      finding(
+        "FAIL",
+        "no_accepted_samples",
+        "No samples were accepted into the derived route.",
+        "runtime",
+      ),
     );
   }
 
@@ -315,6 +417,7 @@ export function evaluateExploration(values, { mode = "s0" } = {}) {
         "FAIL",
         "callback_samples_unaccounted",
         `Received ${received}, persisted ${persisted}, duplicate ${duplicates}; some samples are unaccounted for.`,
+        "runtime",
       ),
     );
   } else if (received !== null && persisted !== null && persisted + duplicates > received) {
@@ -323,6 +426,7 @@ export function evaluateExploration(values, { mode = "s0" } = {}) {
         "WARN",
         "callback_accounting_inconsistent",
         `Persisted plus duplicate samples (${persisted + duplicates}) exceed received samples (${received}).`,
+        "runtime",
       ),
     );
   }
@@ -330,7 +434,12 @@ export function evaluateExploration(values, { mode = "s0" } = {}) {
   const failedBatches = numberValue(values.callback_failed_batches);
   if (failedBatches !== null && failedBatches > 0) {
     findings.push(
-      finding("FAIL", "callback_batch_failed", `${failedBatches} callback batch(es) failed.`),
+      finding(
+        "FAIL",
+        "callback_batch_failed",
+        `${failedBatches} callback batch(es) failed.`,
+        "runtime",
+      ),
     );
   }
 
@@ -341,26 +450,12 @@ export function evaluateExploration(values, { mode = "s0" } = {}) {
         "FAIL",
         "operational_error",
         `${lastError}: ${stringValue(values.last_error_message) ?? "no message"}`,
+        "runtime",
       ),
     );
   }
 
-  const gaps120 = numberValue(values.sample_gap_at_least_120s) ?? 0;
-  const gaps60 = numberValue(values.sample_gap_at_least_60s) ?? 0;
-  const gaps30 = numberValue(values.sample_gap_at_least_30s) ?? 0;
-  if (gaps120 > 0) {
-    findings.push(
-      finding("FAIL", "sample_gap_120s", `${gaps120} sample gap(s) were at least 120 seconds.`),
-    );
-  } else if (gaps60 > 0) {
-    findings.push(
-      finding("WARN", "sample_gap_60s", `${gaps60} sample gap(s) were at least 60 seconds.`),
-    );
-  } else if (gaps30 > 0) {
-    findings.push(
-      finding("WARN", "sample_gap_30s", `${gaps30} sample gap(s) were at least 30 seconds.`),
-    );
-  }
+  findings.push(...gapFinding(values));
 
   const acceptanceRate = numberValue(values.acceptance_rate);
   if (acceptanceRate !== null && acceptanceRate < 0.5) {
@@ -369,6 +464,7 @@ export function evaluateExploration(values, { mode = "s0" } = {}) {
         "WARN",
         "low_acceptance_rate",
         `Acceptance rate is ${(acceptanceRate * 100).toFixed(1)}%.`,
+        "map-quality",
       ),
     );
   }
@@ -385,7 +481,12 @@ export function evaluateExploration(values, { mode = "s0" } = {}) {
   ]) {
     if (!eventKinds.has(required)) {
       findings.push(
-        finding("FAIL", "lifecycle_event_missing", `Lifecycle event '${required}' is missing.`),
+        finding(
+          "FAIL",
+          "lifecycle_event_missing",
+          `Lifecycle event '${required}' is missing.`,
+          "runtime",
+        ),
       );
     }
   }
@@ -399,35 +500,59 @@ export function evaluateExploration(values, { mode = "s0" } = {}) {
     if (!appStates.has("background") || !appStates.has("active")) {
       findings.push(
         finding(
-          "FAIL",
+          "INCONCLUSIVE",
           "background_recovery_missing",
-          "S0 did not contain both background and active app-state evidence.",
+          "This exploration does not contain both background and active app-state evidence. The S0 protocol is incomplete; this alone is not a product failure.",
+          "protocol",
         ),
       );
     }
     if ((numberValue(values.marker_input_completed) ?? 0) < 1) {
-      findings.push(finding("FAIL", "marker_not_completed", "S0 requires one completed marker input."));
+      findings.push(
+        finding(
+          "INCONCLUSIVE",
+          "marker_not_completed",
+          "This exploration does not contain one completed marker input. The S0 protocol is incomplete.",
+          "protocol",
+        ),
+      );
     }
   }
 
   const minutes = durationMinutes(values);
-  if (mode === "s0" && minutes !== null && (minutes < 4 || minutes > 15)) {
-    findings.push(
-      finding(
-        "WARN",
-        "s0_duration_outside_target",
-        `S0 duration is ${minutes.toFixed(1)} minutes; target is 5–10 minutes.`,
-      ),
-    );
+  if (mode === "s0" && minutes !== null) {
+    if (minutes < 4) {
+      findings.push(
+        finding(
+          "INCONCLUSIVE",
+          "s0_duration_too_short",
+          `S0 duration is ${minutes.toFixed(1)} minutes; at least 4 minutes of one continuous exploration are required to interpret the run.`,
+          "protocol",
+        ),
+      );
+    } else if (minutes < 5 || minutes > 10) {
+      findings.push(
+        finding(
+          "WARN",
+          "s0_duration_outside_target",
+          `S0 duration is ${minutes.toFixed(1)} minutes; target is 5–10 minutes.`,
+          "protocol",
+        ),
+      );
+    }
   }
 
   for (const key of ["start_battery_percent", "end_battery_percent"]) {
     if (numberValue(values[key]) === null) {
-      findings.push(finding("WARN", "battery_value_missing", `${key} was not provided.`));
+      findings.push(
+        finding("WARN", "battery_value_missing", `${key} was not provided.`, "environment"),
+      );
     }
   }
   if (booleanValue(values.start_power_save_mode) === true) {
-    findings.push(finding("WARN", "power_save_enabled", "Battery saver was enabled at start."));
+    findings.push(
+      finding("WARN", "power_save_enabled", "Battery saver was enabled at start.", "environment"),
+    );
   }
   if (booleanValue(values.start_battery_optimization_enabled) === true) {
     findings.push(
@@ -435,17 +560,24 @@ export function evaluateExploration(values, { mode = "s0" } = {}) {
         "WARN",
         "battery_optimization_enabled",
         "The app was subject to battery optimization at start.",
+        "environment",
       ),
     );
   }
 
   const thermal = numberValue(values.end_thermal_status);
   if (thermal === null) {
-    findings.push(finding("WARN", "thermal_value_missing", "Thermal status was not provided."));
+    findings.push(
+      finding("WARN", "thermal_value_missing", "Thermal status was not provided.", "environment"),
+    );
   } else if (thermal >= 4) {
-    findings.push(finding("FAIL", "thermal_critical", `End thermal status was ${thermal}.`));
+    findings.push(
+      finding("FAIL", "thermal_critical", `End thermal status was ${thermal}.`, "environment"),
+    );
   } else if (thermal >= 2) {
-    findings.push(finding("WARN", "thermal_elevated", `End thermal status was ${thermal}.`));
+    findings.push(
+      finding("WARN", "thermal_elevated", `End thermal status was ${thermal}.`, "environment"),
+    );
   }
 
   const durationMs = numberValue(values.duration_ms);
@@ -460,11 +592,12 @@ export function evaluateExploration(values, { mode = "s0" } = {}) {
         "WARN",
         "snapshot_duration_mismatch",
         `Session and snapshot durations differ by ${Math.round(Math.abs(durationMs - snapshotDurationMs) / 1000)} seconds.`,
+        "environment",
       ),
     );
   }
 
-  return { findings, lifecycle: events };
+  return { findings, lifecycle: events, status: statusFor(findings) };
 }
 
 function statusFor(findings) {
@@ -473,6 +606,7 @@ function statusFor(findings) {
     0,
   );
   if (rank >= SEVERITY_RANK.FAIL) return "FAIL";
+  if (rank >= SEVERITY_RANK.INCONCLUSIVE) return "INCONCLUSIVE";
   if (rank >= SEVERITY_RANK.WARN) return "WARN";
   return "PASS";
 }
@@ -506,7 +640,9 @@ async function verifyChecksums(bundleDirectory) {
     return {
       valid: false,
       checkedFiles: 0,
-      findings: [finding("FAIL", "checksums_missing", "SHA256SUMS.txt is missing.")],
+      findings: [
+        finding("FAIL", "checksums_missing", "SHA256SUMS.txt is missing.", "integrity"),
+      ],
     };
   }
 
@@ -514,14 +650,19 @@ async function verifyChecksums(bundleDirectory) {
   const root = path.resolve(bundleDirectory);
   for (const entry of entries) {
     if (entry.error) {
-      findings.push(finding("FAIL", "checksum_line_invalid", entry.error));
+      findings.push(finding("FAIL", "checksum_line_invalid", entry.error, "integrity"));
       continue;
     }
     const resolved = path.resolve(root, entry.relativePath);
     const relative = path.relative(root, resolved);
     if (relative.startsWith("..") || path.isAbsolute(relative)) {
       findings.push(
-        finding("FAIL", "checksum_path_escape", `Checksum path escapes bundle: ${entry.relativePath}`),
+        finding(
+          "FAIL",
+          "checksum_path_escape",
+          `Checksum path escapes bundle: ${entry.relativePath}`,
+          "integrity",
+        ),
       );
       continue;
     }
@@ -530,17 +671,29 @@ async function verifyChecksums(bundleDirectory) {
       checkedFiles += 1;
       if (actual !== entry.expected) {
         findings.push(
-          finding("FAIL", "checksum_mismatch", `Checksum mismatch: ${entry.relativePath}`),
+          finding(
+            "FAIL",
+            "checksum_mismatch",
+            `Checksum mismatch: ${entry.relativePath}`,
+            "integrity",
+          ),
         );
       }
     } catch {
       findings.push(
-        finding("FAIL", "checksum_file_missing", `Checksummed file is missing: ${entry.relativePath}`),
+        finding(
+          "FAIL",
+          "checksum_file_missing",
+          `Checksummed file is missing: ${entry.relativePath}`,
+          "integrity",
+        ),
       );
     }
   }
   if (entries.length === 0) {
-    findings.push(finding("FAIL", "checksums_empty", "SHA256SUMS.txt contains no entries."));
+    findings.push(
+      finding("FAIL", "checksums_empty", "SHA256SUMS.txt contains no entries.", "integrity"),
+    );
   }
   return {
     valid: !findings.some((item) => item.severity === "FAIL"),
@@ -578,12 +731,22 @@ function evaluateManifest(manifest) {
   const findings = [];
   if (manifest.packageName !== EXPECTED_PACKAGE) {
     findings.push(
-      finding("FAIL", "manifest_package_invalid", `Unexpected package: ${manifest.packageName}`),
+      finding(
+        "FAIL",
+        "manifest_package_invalid",
+        `Unexpected package: ${manifest.packageName}`,
+        "integrity",
+      ),
     );
   }
   if (manifest.autoUpload !== false) {
     findings.push(
-      finding("FAIL", "automatic_upload_not_disabled", "Manifest must declare autoUpload=false."),
+      finding(
+        "FAIL",
+        "automatic_upload_not_disabled",
+        "Manifest must declare autoUpload=false.",
+        "privacy",
+      ),
     );
   }
   if (manifest.containsRawLocation !== true) {
@@ -592,11 +755,14 @@ function evaluateManifest(manifest) {
         "FAIL",
         "raw_location_warning_missing",
         "Manifest must explicitly declare containsRawLocation=true.",
+        "privacy",
       ),
     );
   }
   if (!stringValue(manifest.warning)) {
-    findings.push(finding("WARN", "manifest_warning_missing", "Privacy warning is missing."));
+    findings.push(
+      finding("WARN", "manifest_warning_missing", "Privacy warning is missing.", "privacy"),
+    );
   }
   return findings;
 }
@@ -614,6 +780,9 @@ function nextAction(status) {
   if (status === "FAIL") {
     return "同じ条件を再度歩かず、USB bundleを保持したままコード・エミュレータ側へ戻す。";
   }
+  if (status === "INCONCLUSIVE") {
+    return "製品FAILとは判定しない。bundleを保持し、指摘されたS0手順を1つの探索で満たして再実施する。";
+  }
   if (status === "WARN") {
     return "主観レビューと警告理由を確認し、S1へ進む条件を個別に判断する。";
   }
@@ -621,7 +790,7 @@ function nextAction(status) {
 }
 
 function renderMarkdown(report) {
-  const latest = report.latestExploration?.values ?? {};
+  const evaluated = report.evaluatedExploration?.values ?? {};
   const findings = report.findings.length
     ? report.findings
     : [finding("INFO", "all_objective_checks_passed", "All objective S0 checks passed.")];
@@ -631,41 +800,45 @@ function renderMarkdown(report) {
     `- Objective status: **${report.status}**`,
     `- Bundle: \`${markdownCell(report.bundleName)}\``,
     `- Mode: \`${report.mode}\``,
+    `- Evaluated exploration: ${markdownCell(report.evaluatedExplorationIndex)}`,
+    `- Selection: ${markdownCell(report.selectionReason)}`,
     "- Subjective review required: **yes**",
     `- Next action: ${report.nextAction}`,
     "",
     "> This report is not the product Go / Narrow / Stop decision. Map recognizability, pocket UX, safety, and differentiation from Timeline remain human judgments.",
     "",
-    "## Latest exploration",
+    "## Evaluated exploration",
     "",
     "| Item | Value |",
     "|---|---|",
-    `| Device | ${markdownCell(latest.device_manufacturer)} ${markdownCell(latest.device_model)} / Android ${markdownCell(latest.android_version)} |`,
-    `| App | ${markdownCell(latest.app_version_name)} / ${markdownCell(latest.app_package)} |`,
-    `| Start | ${markdownCell(latest.session_started_at_iso_utc)} |`,
-    `| End | ${markdownCell(latest.session_ended_at_iso_utc)} |`,
-    `| Duration | ${formatMinutes(latest)} min |`,
-    `| Samples | raw ${markdownCell(latest.raw_samples)} / accepted ${markdownCell(latest.accepted_samples)} / rejected ${markdownCell(latest.rejected_samples)} |`,
-    `| Accuracy | median ${markdownCell(latest.accuracy_m_median)} m / p95 ${markdownCell(latest.accuracy_m_p95)} m / max ${markdownCell(latest.accuracy_m_max)} m |`,
-    `| Gap | p95 ${markdownCell(latest.sample_gap_ms_p95)} ms / max ${markdownCell(latest.sample_gap_ms_max)} ms |`,
-    `| Battery | ${markdownCell(latest.start_battery_percent)}% → ${markdownCell(latest.end_battery_percent)}% / consumed ${markdownCell(latest.battery_consumed_percentage_points)} pt |`,
-    `| Marker | completed ${markdownCell(latest.marker_input_completed)} / cancelled ${markdownCell(latest.marker_input_cancelled)} |`,
-    `| Last error | ${markdownCell(latest.last_error_kind)} / ${markdownCell(latest.last_error_message)} |`,
+    `| Device | ${markdownCell(evaluated.device_manufacturer)} ${markdownCell(evaluated.device_model)} / Android ${markdownCell(evaluated.android_version)} |`,
+    `| App | ${markdownCell(evaluated.app_version_name)} / ${markdownCell(evaluated.app_package)} |`,
+    `| Start | ${markdownCell(evaluated.session_started_at_iso_utc)} |`,
+    `| End | ${markdownCell(evaluated.session_ended_at_iso_utc)} |`,
+    `| Duration | ${formatMinutes(evaluated)} min |`,
+    `| Samples | raw ${markdownCell(evaluated.raw_samples)} / accepted ${markdownCell(evaluated.accepted_samples)} / rejected ${markdownCell(evaluated.rejected_samples)} |`,
+    `| Accuracy | median ${markdownCell(evaluated.accuracy_m_median)} m / p95 ${markdownCell(evaluated.accuracy_m_p95)} m / max ${markdownCell(evaluated.accuracy_m_max)} m |`,
+    `| Observation gap | p95 ${markdownCell(evaluated.sample_gap_ms_p95)} ms / max ${markdownCell(evaluated.sample_gap_ms_max)} ms |`,
+    `| Callback gap | p95 ${markdownCell(evaluated.callback_gap_ms_p95)} ms / max ${markdownCell(evaluated.callback_gap_ms_max)} ms |`,
+    `| Battery | ${markdownCell(evaluated.start_battery_percent)}% → ${markdownCell(evaluated.end_battery_percent)}% / consumed ${markdownCell(evaluated.battery_consumed_percentage_points)} pt |`,
+    `| Marker | completed ${markdownCell(evaluated.marker_input_completed)} / cancelled ${markdownCell(evaluated.marker_input_cancelled)} |`,
+    `| Last error | ${markdownCell(evaluated.last_error_kind)} / ${markdownCell(evaluated.last_error_message)} |`,
     "",
     "## Findings",
     "",
-    "| Severity | Code | Detail |",
-    "|---|---|---|",
+    "| Severity | Category | Code | Detail |",
+    "|---|---|---|---|",
     ...findings.map(
-      (item) => `| ${item.severity} | \`${markdownCell(item.code)}\` | ${markdownCell(item.message)} |`,
+      (item) =>
+        `| ${item.severity} | ${markdownCell(item.category)} | \`${markdownCell(item.code)}\` | ${markdownCell(item.message)} |`,
     ),
     "",
     "## All explorations in the coordinate-free summary",
     "",
-    "| # | Start | Duration min | Raw | Accepted | p95 gap ms | Marker |",
-    "|---:|---|---:|---:|---:|---:|---:|",
-    ...report.explorations.map(({ index, values }) =>
-      `| ${index} | ${markdownCell(values.session_started_at_iso_utc)} | ${formatMinutes(values)} | ${markdownCell(values.raw_samples)} | ${markdownCell(values.accepted_samples)} | ${markdownCell(values.sample_gap_ms_p95)} | ${markdownCell(values.marker_input_completed)} |`,
+    "| # | Status | Start | Duration min | Raw | Accepted | p95 observation gap ms | Marker |",
+    "|---:|---|---|---:|---:|---:|---:|---:|",
+    ...report.explorations.map(({ index, values, objectiveStatus }) =>
+      `| ${index} | ${objectiveStatus} | ${markdownCell(values.session_started_at_iso_utc)} | ${formatMinutes(values)} | ${markdownCell(values.raw_samples)} | ${markdownCell(values.accepted_samples)} | ${markdownCell(values.sample_gap_ms_p95)} | ${markdownCell(values.marker_input_completed)} |`,
     ),
     "",
     "## Privacy boundary",
@@ -678,9 +851,34 @@ function renderMarkdown(report) {
   ].join("\n");
 }
 
+function selectExploration(parsed, explorationIndex) {
+  if (parsed.explorations.length === 0) {
+    return { selected: null, reason: "no-exploration" };
+  }
+  if (explorationIndex !== null) {
+    return {
+      selected:
+        parsed.explorations.find((item) => item.index === explorationIndex) ?? null,
+      reason: "explicit-exploration-index",
+    };
+  }
+  return {
+    selected: parsed.explorations.at(-1) ?? null,
+    reason:
+      parsed.explorations.length === 1
+        ? "only-exploration"
+        : "latest-exploration-default; use --exploration-index for retrospective selection",
+  };
+}
+
 export async function analyzeFieldTestBundle(
   inputPath = DEFAULT_INPUT,
-  { outputDirectory = null, mode = "s0", generatedAt = new Date().toISOString() } = {},
+  {
+    outputDirectory = null,
+    mode = "s0",
+    generatedAt = new Date().toISOString(),
+    explorationIndex = null,
+  } = {},
 ) {
   const bundleDirectory = await resolveBundleDirectory(inputPath);
   const [summaryText, manifestText, checksumResult] = await Promise.all([
@@ -690,43 +888,87 @@ export async function analyzeFieldTestBundle(
   ]);
   const parsed = parseCoordinateFreeSummary(summaryText);
   const manifest = JSON.parse(manifestText);
-  const findings = [
+  const globalFindings = [
     ...checksumResult.findings,
     ...evaluateManifest(manifest),
     ...evaluatePrivacy(parsed),
   ];
 
   for (const duplicate of parsed.duplicateKeys) {
-    findings.push(
+    globalFindings.push(
       finding(
         "FAIL",
         "duplicate_summary_key",
         `Duplicate key '${duplicate.key}' in section ${duplicate.section}.`,
+        "integrity",
       ),
     );
   }
   if (parsed.explorations.length === 0) {
-    findings.push(
-      finding("FAIL", "exploration_missing", "The summary contains no exploration section."),
+    globalFindings.push(
+      finding(
+        "FAIL",
+        "exploration_missing",
+        "The summary contains no exploration section.",
+        "integrity",
+      ),
     );
   }
   const declaredCount = numberValue(parsed.metadata.exploration_count);
   if (declaredCount !== null && declaredCount !== parsed.explorations.length) {
-    findings.push(
+    globalFindings.push(
       finding(
         "WARN",
         "exploration_count_mismatch",
         `Header declares ${declaredCount}; parsed ${parsed.explorations.length}.`,
+        "integrity",
       ),
     );
   }
 
-  const latestRaw = parsed.explorations.at(-1) ?? null;
-  if (latestRaw) findings.push(...evaluateExploration(latestRaw.values, { mode }).findings);
+  const evaluated = parsed.explorations.map((item) => {
+    const evaluation = evaluateExploration(item.values, { mode });
+    return {
+      index: item.index,
+      values: sanitizeValues(item.values),
+      lifecycle: evaluation.lifecycle,
+      objectiveStatus: evaluation.status,
+      findings: evaluation.findings,
+    };
+  });
 
-  const explorations = parsed.explorations.map(sanitizeExploration);
-  const latestExploration = explorations.at(-1) ?? null;
+  const selection = selectExploration(parsed, explorationIndex);
+  if (explorationIndex !== null && selection.selected === null) {
+    globalFindings.push(
+      finding(
+        "FAIL",
+        "requested_exploration_missing",
+        `Requested exploration index ${explorationIndex} is not present.`,
+        "integrity",
+      ),
+    );
+  }
+  const selectedEvaluation =
+    selection.selected === null
+      ? null
+      : evaluated.find((item) => item.index === selection.selected.index) ?? null;
+  const findings = [
+    ...globalFindings,
+    ...(selectedEvaluation?.findings ?? []),
+  ];
+  if (parsed.explorations.length > 1) {
+    findings.push(
+      finding(
+        "INFO",
+        "multiple_explorations_present",
+        `${parsed.explorations.length} explorations are present. Objective requirements are never combined across sessions.`,
+        "protocol",
+      ),
+    );
+  }
+
   const status = statusFor(findings);
+  const latestExploration = evaluated.at(-1) ?? null;
   const report = {
     schemaVersion: REPORT_SCHEMA_VERSION,
     generatedAt,
@@ -744,13 +986,18 @@ export async function analyzeFieldTestBundle(
       containsRawLocation: manifest.containsRawLocation ?? null,
       autoUpload: manifest.autoUpload ?? null,
     },
-    explorations,
+    explorations: evaluated,
     latestExploration,
+    evaluatedExplorationIndex: selectedEvaluation?.index ?? null,
+    evaluatedExploration: selectedEvaluation,
+    selectionReason: selection.reason,
     findings,
     nextAction: nextAction(status),
   };
 
-  const reportDirectory = path.resolve(outputDirectory ?? path.join(bundleDirectory, "analysis"));
+  const reportDirectory = path.resolve(
+    outputDirectory ?? path.join(bundleDirectory, "analysis"),
+  );
   await fs.mkdir(reportDirectory, { recursive: true });
   const jsonPath = path.join(reportDirectory, "objective-s0-report.json");
   const markdownPath = path.join(reportDirectory, "objective-s0-report.md");
@@ -766,6 +1013,7 @@ function parseArguments(argv) {
   let outputDirectory = null;
   let mode = "s0";
   let failExit = true;
+  let explorationIndex = null;
   let positionalSeen = false;
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -774,6 +1022,12 @@ function parseArguments(argv) {
       outputDirectory = argv[++index];
     } else if (argument === "--mode") {
       mode = argv[++index];
+    } else if (argument === "--exploration-index") {
+      const value = argv[++index];
+      explorationIndex = Number(value);
+      if (!Number.isInteger(explorationIndex) || explorationIndex < 1) {
+        throw new Error("--exploration-index must be a positive integer.");
+      }
     } else if (argument === "--no-fail-exit") {
       failExit = false;
     } else if (argument.startsWith("--")) {
@@ -794,20 +1048,27 @@ function parseArguments(argv) {
   if (!["s0", "generic"].includes(mode)) {
     throw new Error("--mode must be s0 or generic.");
   }
-  return { inputPath, outputDirectory, mode, failExit };
+  return { inputPath, outputDirectory, mode, failExit, explorationIndex };
 }
 
-async function main() {
-  const options = parseArguments(process.argv.slice(2));
+export async function main(argv = process.argv.slice(2)) {
+  const options = parseArguments(argv);
   const result = await analyzeFieldTestBundle(options.inputPath, options);
   console.log(`Objective S0 status: ${result.report.status}`);
+  console.log(`Evaluated exploration: ${result.report.evaluatedExplorationIndex ?? "none"}`);
+  console.log(`Selection: ${result.report.selectionReason}`);
   console.log(`Markdown: ${result.markdownPath}`);
   console.log(`JSON: ${result.jsonPath}`);
   console.log(`Next action: ${result.report.nextAction}`);
   if (options.failExit && result.report.status === "FAIL") process.exitCode = 2;
+  if (options.failExit && result.report.status === "INCONCLUSIVE") process.exitCode = 3;
+  return result;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
+) {
   main().catch((error) => {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;

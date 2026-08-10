@@ -145,17 +145,26 @@ function scalar(value) {
 }
 
 function summary(values = baseValues(), extraLines = []) {
-  return [
+  return summaryWithExplorations([values], extraLines);
+}
+
+function summaryWithExplorations(explorations, extraLines = []) {
+  const lines = [
     "Personal Exploration Map / USB field-test diagnostics",
     "privacy=no_coordinates_no_map_names_no_ids_no_marker_text_no_map_images",
     "contains=device_time_battery_permissions_and_aggregate_tracking_metrics",
-    "exploration_count=1",
+    `exploration_count=${explorations.length}`,
     "",
-    "[exploration_1]",
-    ...Object.entries(values).map(([key, value]) => `${key}=${scalar(value)}`),
-    ...extraLines,
-    "",
-  ].join("\n");
+  ];
+  for (const [offset, values] of explorations.entries()) {
+    lines.push(
+      `[exploration_${offset + 1}]`,
+      ...Object.entries(values).map(([key, value]) => `${key}=${scalar(value)}`),
+      ...(offset === explorations.length - 1 ? extraLines : []),
+      "",
+    );
+  }
+  return lines.join("\n");
 }
 
 async function sha256(filePath) {
@@ -209,6 +218,104 @@ async function withTempDirectory(callback) {
   }
 }
 
+function codes(findings) {
+  return new Set(findings.map((item) => item.code));
+}
+
+function firstRealDeviceLikeValues(overrides = {}) {
+  return baseValues({
+    session_started_at_ms: 1_000,
+    session_started_at_iso_utc: "2026-08-10T00:00:00.000Z",
+    session_ended_at_ms: 75_622,
+    session_ended_at_iso_utc: "2026-08-10T00:01:14.622Z",
+    duration_ms: 74_622,
+    snapshot_elapsed_duration_ms: 74_377,
+    raw_samples: 8,
+    accepted_samples: 8,
+    rejected_samples: 0,
+    acceptance_rate: 1,
+    sample_gap_ms_count: 7,
+    sample_gap_ms_min: 5_478,
+    sample_gap_ms_median: 10_754,
+    sample_gap_ms_p95: 385_188,
+    sample_gap_ms_max: 385_188,
+    sample_gap_at_least_30s: 1,
+    sample_gap_at_least_60s: 1,
+    sample_gap_at_least_120s: 1,
+    callback_received_batches: 6,
+    callback_received_samples: 8,
+    callback_persisted_batches: 6,
+    callback_persisted_samples: 8,
+    callback_accepted_samples: 8,
+    callback_rejected_samples: 0,
+    marker_input_ms_count: 0,
+    marker_input_ms_min: null,
+    marker_input_ms_median: null,
+    marker_input_ms_p95: null,
+    marker_input_ms_max: null,
+    marker_input_completed: 0,
+    marker_input_cancelled: 0,
+    start_battery_optimization_enabled: true,
+    lifecycle_4_offset_ms: 21_753,
+    lifecycle_5_offset_ms: 66_146,
+    lifecycle_6_offset_ms: 74_665,
+    lifecycle_7_offset_ms: 74_676,
+    lifecycle_8_offset_ms: 74_677,
+    ...overrides,
+  });
+}
+
+function secondRealDeviceLikeValues(overrides = {}) {
+  return baseValues({
+    session_started_at_ms: 100_000,
+    session_started_at_iso_utc: "2026-08-10T00:03:00.000Z",
+    session_ended_at_ms: 129_232,
+    session_ended_at_iso_utc: "2026-08-10T00:03:29.232Z",
+    duration_ms: 29_232,
+    snapshot_elapsed_duration_ms: 28_993,
+    raw_samples: 7,
+    accepted_samples: 7,
+    rejected_samples: 0,
+    acceptance_rate: 1,
+    sample_gap_ms_count: 6,
+    sample_gap_ms_min: 1_096,
+    sample_gap_ms_median: 2_386,
+    sample_gap_ms_p95: 114_594,
+    sample_gap_ms_max: 114_594,
+    sample_gap_at_least_30s: 1,
+    sample_gap_at_least_60s: 1,
+    sample_gap_at_least_120s: 0,
+    callback_received_batches: 7,
+    callback_received_samples: 7,
+    callback_persisted_batches: 7,
+    callback_persisted_samples: 7,
+    callback_accepted_samples: 7,
+    callback_rejected_samples: 0,
+    marker_input_ms_count: 1,
+    marker_input_ms_min: 4_053,
+    marker_input_ms_median: 4_053,
+    marker_input_ms_p95: 4_053,
+    marker_input_ms_max: 4_053,
+    marker_input_completed: 1,
+    marker_input_cancelled: 1,
+    start_battery_optimization_enabled: true,
+    lifecycle_count: 6,
+    lifecycle_1_offset_ms: 126,
+    lifecycle_2_offset_ms: 267,
+    lifecycle_3_offset_ms: 289,
+    lifecycle_4_offset_ms: 29_272,
+    lifecycle_4_kind: "provider.stop.requested",
+    lifecycle_4_detail: "none",
+    lifecycle_5_offset_ms: 29_285,
+    lifecycle_5_kind: "provider.stopped",
+    lifecycle_5_detail: "none",
+    lifecycle_6_offset_ms: 29_285,
+    lifecycle_6_kind: "environment.session.ended",
+    lifecycle_6_detail: "none",
+    ...overrides,
+  });
+}
+
 test("parser keeps metadata and exploration sections separate", () => {
   const parsed = parseCoordinateFreeSummary(summary());
   assert.equal(parsed.metadata.exploration_count, 1);
@@ -224,11 +331,16 @@ test("valid S0 bundle produces PASS reports", async () => {
       generatedAt: "2026-08-09T00:10:00.000Z",
     });
     assert.equal(result.report.status, "PASS");
+    assert.equal(result.report.schemaVersion, 2);
     assert.equal(result.report.integrity.valid, true);
     assert.equal(result.report.subjectiveReviewRequired, true);
     assert.equal(result.report.productDecisionAutomated, false);
+    assert.equal(result.report.evaluatedExplorationIndex, 1);
     assert.equal(result.report.findings.length, 0);
-    assert.match(await fs.readFile(result.markdownPath, "utf8"), /Objective status: \*\*PASS\*\*/);
+    assert.match(
+      await fs.readFile(result.markdownPath, "utf8"),
+      /Objective status: \*\*PASS\*\*/,
+    );
   });
 });
 
@@ -277,18 +389,21 @@ test("blocking S0 conditions produce FAIL and no-rewalk next action", async () =
     const result = await analyzeFieldTestBundle(bundle);
     assert.equal(result.report.status, "FAIL");
     assert.match(result.report.nextAction, /再度歩かず/);
-    const codes = new Set(result.report.findings.map((item) => item.code));
-    assert.ok(codes.has("no_raw_samples"));
-    assert.ok(codes.has("sample_gap_120s"));
-    assert.ok(codes.has("marker_not_completed"));
-    assert.ok(codes.has("operational_error"));
+    const resultCodes = codes(result.report.findings);
+    assert.ok(resultCodes.has("no_raw_samples"));
+    assert.ok(resultCodes.has("sample_gap_120s"));
+    assert.ok(resultCodes.has("marker_not_completed"));
+    assert.ok(resultCodes.has("operational_error"));
   });
 });
 
 test("checksum mismatch is a hard failure", async () => {
   await withTempDirectory(async (root) => {
     const bundle = await createBundle(root, "pem-field-test-20260809T040000Z");
-    await fs.appendFile(path.join(bundle, "coordinate-free-diagnostics.txt"), "tampered=true\n");
+    await fs.appendFile(
+      path.join(bundle, "coordinate-free-diagnostics.txt"),
+      "tampered=true\n",
+    );
     const result = await analyzeFieldTestBundle(bundle);
     assert.equal(result.report.status, "FAIL");
     assert.ok(result.report.findings.some((item) => item.code === "checksum_mismatch"));
@@ -302,7 +417,9 @@ test("coordinate-bearing keys are rejected from the coordinate-free report", asy
     });
     const result = await analyzeFieldTestBundle(bundle);
     assert.equal(result.report.status, "FAIL");
-    assert.ok(result.report.findings.some((item) => item.code === "coordinate_key_present"));
+    assert.ok(
+      result.report.findings.some((item) => item.code === "coordinate_key_present"),
+    );
   });
 });
 
@@ -313,8 +430,106 @@ test("manifest cannot enable upload or hide raw-location presence", async () => 
     });
     const result = await analyzeFieldTestBundle(bundle);
     assert.equal(result.report.status, "FAIL");
-    const codes = new Set(result.report.findings.map((item) => item.code));
-    assert.ok(codes.has("automatic_upload_not_disabled"));
-    assert.ok(codes.has("raw_location_warning_missing"));
+    const resultCodes = codes(result.report.findings);
+    assert.ok(resultCodes.has("automatic_upload_not_disabled"));
+    assert.ok(resultCodes.has("raw_location_warning_missing"));
+  });
+});
+
+test("split short S0 evidence remains INCONCLUSIVE and is never combined across sessions", async () => {
+  await withTempDirectory(async (root) => {
+    const bundle = await createBundle(root, "pem-field-test-20260810T000000Z", {
+      summary: summaryWithExplorations([
+        firstRealDeviceLikeValues(),
+        secondRealDeviceLikeValues(),
+      ]),
+    });
+    const result = await analyzeFieldTestBundle(bundle);
+
+    assert.equal(result.report.status, "INCONCLUSIVE");
+    assert.equal(result.report.evaluatedExplorationIndex, 2);
+    assert.match(result.report.selectionReason, /latest-exploration-default/u);
+    assert.deepEqual(
+      result.report.explorations.map((item) => item.objectiveStatus),
+      ["INCONCLUSIVE", "INCONCLUSIVE"],
+    );
+    const resultCodes = codes(result.report.findings);
+    assert.ok(resultCodes.has("background_recovery_missing"));
+    assert.ok(resultCodes.has("s0_duration_too_short"));
+    assert.ok(resultCodes.has("sample_timestamp_outside_session_suspected"));
+    assert.ok(resultCodes.has("multiple_explorations_present"));
+    assert.equal(
+      result.report.findings.some((item) => item.severity === "FAIL"),
+      false,
+    );
+    assert.match(result.report.nextAction, /製品FAILとは判定しない/u);
+  });
+});
+
+test("an explicit exploration index supports retrospective inspection without evidence mixing", async () => {
+  await withTempDirectory(async (root) => {
+    const bundle = await createBundle(root, "pem-field-test-20260810T010000Z", {
+      summary: summaryWithExplorations([
+        firstRealDeviceLikeValues(),
+        secondRealDeviceLikeValues(),
+      ]),
+    });
+    const result = await analyzeFieldTestBundle(bundle, {
+      explorationIndex: 1,
+    });
+
+    assert.equal(result.report.status, "INCONCLUSIVE");
+    assert.equal(result.report.evaluatedExplorationIndex, 1);
+    assert.equal(result.report.selectionReason, "explicit-exploration-index");
+    const resultCodes = codes(result.report.findings);
+    assert.ok(resultCodes.has("marker_not_completed"));
+    assert.equal(resultCodes.has("background_recovery_missing"), false);
+  });
+});
+
+test("a runtime failure overrides protocol incompleteness", async () => {
+  await withTempDirectory(async (root) => {
+    const bundle = await createBundle(root, "pem-field-test-20260810T020000Z", {
+      values: secondRealDeviceLikeValues({
+        callback_failed_batches: 1,
+        last_error_kind: "callback.failed",
+        last_error_message: "persistence failed",
+      }),
+    });
+    const result = await analyzeFieldTestBundle(bundle);
+
+    assert.equal(result.report.status, "FAIL");
+    const resultCodes = codes(result.report.findings);
+    assert.ok(resultCodes.has("callback_batch_failed"));
+    assert.ok(resultCodes.has("operational_error"));
+    assert.ok(resultCodes.has("s0_duration_too_short"));
+    assert.match(result.report.nextAction, /再度歩かず/u);
+  });
+});
+
+test("callback gaps take precedence over suspicious observation timestamps", async () => {
+  await withTempDirectory(async (root) => {
+    const bundle = await createBundle(root, "pem-field-test-20260810T030000Z", {
+      values: baseValues({
+        sample_gap_ms_p95: 400_000,
+        sample_gap_ms_max: 400_000,
+        sample_gap_at_least_120s: 1,
+        callback_gap_ms_count: 9,
+        callback_gap_ms_min: 5_000,
+        callback_gap_ms_median: 8_000,
+        callback_gap_ms_p95: 12_000,
+        callback_gap_ms_max: 15_000,
+        callback_gap_at_least_30s: 0,
+        callback_gap_at_least_60s: 0,
+        callback_gap_at_least_120s: 0,
+      }),
+    });
+    const result = await analyzeFieldTestBundle(bundle);
+
+    assert.equal(result.report.status, "WARN");
+    const resultCodes = codes(result.report.findings);
+    assert.ok(resultCodes.has("sample_timestamp_outside_session_suspected"));
+    assert.equal(resultCodes.has("sample_gap_120s"), false);
+    assert.equal(resultCodes.has("callback_gap_120s"), false);
   });
 });
