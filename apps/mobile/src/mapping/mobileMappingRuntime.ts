@@ -1,8 +1,9 @@
 import type * as Location from "expo-location";
-import type {
-  MarkerCategory,
-  PersonalMapSnapshot,
-  RawPositionSample,
+import {
+  replayExploration,
+  type MarkerCategory,
+  type PersonalMapSnapshot,
+  type RawPositionSample,
 } from "@exploration-map/mapping-core";
 import {
   createMappingEngine,
@@ -265,6 +266,57 @@ export async function addConfirmedMarker(
   });
 }
 
+async function markerObservationFreshness(
+  context: StartedExploration,
+  occurredAtMs: number,
+): Promise<{
+  readonly latestObservationAgeMs: number | null;
+  readonly latestObservationMissing: boolean;
+  readonly latestObservationFuture: boolean;
+}> {
+  try {
+    const loaded = await sqliteMappingRepository.loadExploration(
+      context.personalMapId,
+      context.explorationId,
+    );
+    const latestAcceptedAtMs =
+      loaded === null
+        ? undefined
+        : replayExploration(loaded.replay).track.at(-1)?.recordedAtMs;
+    if (
+      latestAcceptedAtMs === undefined ||
+      !Number.isFinite(latestAcceptedAtMs)
+    ) {
+      return {
+        latestObservationAgeMs: null,
+        latestObservationMissing: true,
+        latestObservationFuture: false,
+      };
+    }
+    const ageMs = occurredAtMs - latestAcceptedAtMs;
+    if (ageMs < 0) {
+      return {
+        latestObservationAgeMs: null,
+        latestObservationMissing: false,
+        latestObservationFuture: true,
+      };
+    }
+    return {
+      latestObservationAgeMs: ageMs,
+      latestObservationMissing: false,
+      latestObservationFuture: false,
+    };
+  } catch {
+    // Diagnostics are non-canonical. A read failure must not block marker save
+    // or expose private repository details through an operational message.
+    return {
+      latestObservationAgeMs: null,
+      latestObservationMissing: true,
+      latestObservationFuture: false,
+    };
+  }
+}
+
 export async function recordMarkerInputTiming(
   context: StartedExploration,
   outcome: "completed" | "cancelled",
@@ -278,14 +330,22 @@ export async function recordMarkerInputTiming(
   ) {
     return;
   }
+
+  const occurredAtMs = Date.now();
+  const freshness =
+    outcome === "completed"
+      ? await markerObservationFreshness(context, occurredAtMs)
+      : null;
   await recordTrackingDiagnosticBestEffort({
     context: active,
     kind:
       outcome === "completed"
         ? "marker.input.completed"
         : "marker.input.cancelled",
+    occurredAtMs,
     payload: {
       durationMs: Math.max(0, durationMs),
+      ...(freshness === null ? {} : freshness),
     },
   });
 }
