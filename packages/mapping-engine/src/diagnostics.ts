@@ -1,5 +1,6 @@
 import {
   replayExploration,
+  type RawPositionSample,
   type RejectionReason,
   type ReplayExplorationInput,
 } from "../../mapping-core/src/index.ts";
@@ -58,6 +59,13 @@ export interface SampleGapSummary extends NumericDistributionSummary {
   readonly atLeast120Seconds: number;
 }
 
+export interface SampleWindowSummary {
+  readonly beforeStartCount: number;
+  readonly beforeStartMaximumMs: number | null;
+  readonly afterEndCount: number;
+  readonly afterEndMaximumMs: number | null;
+}
+
 export interface RejectionReasonCount {
   readonly reason: RejectionReason;
   readonly count: number;
@@ -73,6 +81,14 @@ export interface CallbackDiagnosticSummary {
   readonly rejectedSampleCount: number;
   readonly failedBatchCount: number;
   readonly largestBatchSize: number;
+  /** Real callback delivery intervals, independent of Location.timestamp. */
+  readonly deliveryGapsMs: SampleGapSummary;
+  /** callback receive time minus the oldest observation timestamp in a batch. */
+  readonly oldestObservationAgeMs: NumericDistributionSummary;
+  /** callback receive time minus the newest observation timestamp in a batch. */
+  readonly newestObservationAgeMs: NumericDistributionSummary;
+  readonly futureObservationBatchCount: number;
+  readonly missingObservationTimestampBatchCount: number;
 }
 
 export interface TrackingDiagnosticError {
@@ -135,7 +151,7 @@ export interface TrackingEnvironmentSummary {
 }
 
 export interface ExplorationTrackingDiagnostics {
-  readonly version: 2;
+  readonly version: 3;
   readonly explorationId: string;
   readonly providerId: string;
   readonly startedAtMs: number;
@@ -146,7 +162,9 @@ export interface ExplorationTrackingDiagnostics {
   readonly rejectedSampleCount: number;
   readonly acceptanceRate: number | null;
   readonly rejectionReasons: readonly RejectionReasonCount[];
+  /** Gaps between finite Location.timestamp values. */
   readonly sampleGapsMs: SampleGapSummary;
+  readonly sampleWindow: SampleWindowSummary;
   readonly horizontalAccuracyMeters: NumericDistributionSummary;
   readonly callbacks: CallbackDiagnosticSummary;
   readonly markerInputMs: MarkerInputSummary;
@@ -238,7 +256,7 @@ export function summarizeNumericDistribution(
   };
 }
 
-function summarizeSampleGaps(gapsMs: readonly number[]): SampleGapSummary {
+function summarizeGaps(gapsMs: readonly number[]): SampleGapSummary {
   const distribution = summarizeNumericDistribution(gapsMs);
   return {
     ...distribution,
@@ -261,6 +279,13 @@ function createRejectionSummary(
   });
 }
 
+function callbackReceiveTime(event: TrackingDiagnosticEvent): number | null {
+  return (
+    finiteNonNegative(event.payload?.callbackReceivedAtMs) ??
+    finiteNonNegative(event.occurredAtMs)
+  );
+}
+
 function createCallbackSummary(
   events: readonly TrackingDiagnosticEvent[],
 ): CallbackDiagnosticSummary {
@@ -273,6 +298,11 @@ function createCallbackSummary(
   let rejectedSampleCount = 0;
   let failedBatchCount = 0;
   let largestBatchSize = 0;
+  let futureObservationBatchCount = 0;
+  let missingObservationTimestampBatchCount = 0;
+  const callbackTimes: number[] = [];
+  const oldestObservationAges: number[] = [];
+  const newestObservationAges: number[] = [];
 
   for (const event of events) {
     if (event.kind === "callback.received") {
@@ -280,6 +310,32 @@ function createCallbackSummary(
       receivedBatchCount += 1;
       receivedSampleCount += sampleCount;
       largestBatchSize = Math.max(largestBatchSize, sampleCount);
+
+      const receivedAtMs = callbackReceiveTime(event);
+      if (receivedAtMs !== null) {
+        callbackTimes.push(receivedAtMs);
+      }
+      const firstSampleAtMs = payloadNullableNumber(event, "firstSampleAtMs");
+      const lastSampleAtMs = payloadNullableNumber(event, "lastSampleAtMs");
+      if (
+        receivedAtMs === null ||
+        firstSampleAtMs === null ||
+        lastSampleAtMs === null
+      ) {
+        missingObservationTimestampBatchCount += 1;
+      } else {
+        const oldestAge = receivedAtMs - firstSampleAtMs;
+        const newestAge = receivedAtMs - lastSampleAtMs;
+        if (oldestAge < 0 || newestAge < 0) {
+          futureObservationBatchCount += 1;
+        }
+        if (oldestAge >= 0) {
+          oldestObservationAges.push(oldestAge);
+        }
+        if (newestAge >= 0) {
+          newestObservationAges.push(newestAge);
+        }
+      }
     } else if (event.kind === "callback.persisted") {
       persistedBatchCount += 1;
       persistedSampleCount += payloadNumber(event, "persistedSampleCount");
@@ -288,6 +344,16 @@ function createCallbackSummary(
       rejectedSampleCount += payloadNumber(event, "rejectedSampleCount");
     } else if (event.kind === "callback.failed") {
       failedBatchCount += 1;
+    }
+  }
+
+  callbackTimes.sort((first, second) => first - second);
+  const deliveryGaps: number[] = [];
+  for (let index = 1; index < callbackTimes.length; index += 1) {
+    const previous = callbackTimes[index - 1];
+    const current = callbackTimes[index];
+    if (previous !== undefined && current !== undefined) {
+      deliveryGaps.push(Math.max(0, current - previous));
     }
   }
 
@@ -301,6 +367,13 @@ function createCallbackSummary(
     rejectedSampleCount,
     failedBatchCount,
     largestBatchSize,
+    deliveryGapsMs: summarizeGaps(deliveryGaps),
+    oldestObservationAgeMs:
+      summarizeNumericDistribution(oldestObservationAges),
+    newestObservationAgeMs:
+      summarizeNumericDistribution(newestObservationAges),
+    futureObservationBatchCount,
+    missingObservationTimestampBatchCount,
   };
 }
 
@@ -474,39 +547,71 @@ function findLastError(
   };
 }
 
+function createSampleWindowSummary(
+  samples: readonly RawPositionSample[],
+  startedAtMs: number,
+  endedAtMs: number | null,
+): SampleWindowSummary {
+  const beforeStartOffsets: number[] = [];
+  const afterEndOffsets: number[] = [];
+  for (const sample of samples) {
+    const timestamp = finiteNumber(sample.recordedAtMs);
+    if (timestamp === null) {
+      continue;
+    }
+    if (timestamp < startedAtMs) {
+      beforeStartOffsets.push(startedAtMs - timestamp);
+    }
+    if (endedAtMs !== null && timestamp > endedAtMs) {
+      afterEndOffsets.push(timestamp - endedAtMs);
+    }
+  }
+  return {
+    beforeStartCount: beforeStartOffsets.length,
+    beforeStartMaximumMs:
+      beforeStartOffsets.length === 0 ? null : Math.max(...beforeStartOffsets),
+    afterEndCount: afterEndOffsets.length,
+    afterEndMaximumMs:
+      afterEndOffsets.length === 0 ? null : Math.max(...afterEndOffsets),
+  };
+}
+
 export function createExplorationTrackingDiagnostics(input: {
   readonly exploration: ReplayExplorationInput;
   readonly providerId: string;
   readonly events: readonly TrackingDiagnosticEvent[];
 }): ExplorationTrackingDiagnostics {
   const session = replayExploration(input.exploration);
-  const samples = [...input.exploration.samples].sort(
-    (first, second) => first.recordedAtMs - second.recordedAtMs,
-  );
+  const finiteTimestampSamples = input.exploration.samples
+    .filter((sample) => Number.isFinite(sample.recordedAtMs))
+    .sort((first, second) => first.recordedAtMs - second.recordedAtMs);
   const gapsMs: number[] = [];
-  for (let index = 1; index < samples.length; index += 1) {
-    const previous = samples[index - 1];
-    const current = samples[index];
-    if (previous === undefined || current === undefined) {
-      continue;
+  for (let index = 1; index < finiteTimestampSamples.length; index += 1) {
+    const previous = finiteTimestampSamples[index - 1];
+    const current = finiteTimestampSamples[index];
+    if (previous !== undefined && current !== undefined) {
+      gapsMs.push(Math.max(0, current.recordedAtMs - previous.recordedAtMs));
     }
-    gapsMs.push(Math.max(0, current.recordedAtMs - previous.recordedAtMs));
   }
 
-  const horizontalAccuracyMeters = samples.flatMap((sample) => {
-    const accuracy = finiteNonNegative(sample.horizontalAccuracyMeters);
-    return accuracy === null ? [] : [accuracy];
-  });
+  const horizontalAccuracyMeters = input.exploration.samples.flatMap(
+    (sample) => {
+      const accuracy = finiteNonNegative(sample.horizontalAccuracyMeters);
+      return accuracy === null ? [] : [accuracy];
+    },
+  );
 
   const events = input.events
     .filter((event) => event.explorationId === input.exploration.id)
     .sort((first, second) => first.occurredAtMs - second.occurredAtMs);
   const endedAtMs = input.exploration.endedAtMs ?? null;
   const effectiveEndMs =
-    endedAtMs ?? samples.at(-1)?.recordedAtMs ?? input.exploration.startedAtMs;
+    endedAtMs ??
+    finiteTimestampSamples.at(-1)?.recordedAtMs ??
+    input.exploration.startedAtMs;
 
   return {
-    version: 2,
+    version: 3,
     explorationId: input.exploration.id,
     providerId: input.providerId,
     startedAtMs: input.exploration.startedAtMs,
@@ -520,7 +625,12 @@ export function createExplorationTrackingDiagnostics(input: {
         ? null
         : session.track.length / session.rawSamples.length,
     rejectionReasons: createRejectionSummary(session.rejectedSamples),
-    sampleGapsMs: summarizeSampleGaps(gapsMs),
+    sampleGapsMs: summarizeGaps(gapsMs),
+    sampleWindow: createSampleWindowSummary(
+      input.exploration.samples,
+      input.exploration.startedAtMs,
+      endedAtMs,
+    ),
     horizontalAccuracyMeters:
       summarizeNumericDistribution(horizontalAccuracyMeters),
     callbacks: createCallbackSummary(events),
