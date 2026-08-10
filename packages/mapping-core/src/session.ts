@@ -179,21 +179,33 @@ export function appendPositionSample(
 ): SessionMutation {
   const rawSamples = [...session.rawSamples, sample];
 
-  if (session.status !== "recording") {
-    return rejectPositionSample(
-      session,
-      rawSamples,
-      sample,
-      "session-not-recording",
-    );
-  }
-
   if (!Number.isFinite(sample.recordedAtMs)) {
     return rejectPositionSample(
       session,
       rawSamples,
       sample,
       "invalid-timestamp",
+    );
+  }
+
+  if (
+    session.endedAtMs !== undefined &&
+    sample.recordedAtMs > session.endedAtMs
+  ) {
+    return rejectPositionSample(
+      session,
+      rawSamples,
+      sample,
+      "sample-after-session-end",
+    );
+  }
+
+  if (session.status !== "recording") {
+    return rejectPositionSample(
+      session,
+      rawSamples,
+      sample,
+      "session-not-recording",
     );
   }
 
