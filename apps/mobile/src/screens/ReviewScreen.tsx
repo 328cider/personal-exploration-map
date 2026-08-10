@@ -40,7 +40,7 @@ export function ReviewScreen({
       </Text>
 
       <View style={styles.canvasWrapper}>
-        <TrackCanvas snapshot={snapshot} />
+        <TrackCanvas interactive snapshot={snapshot} />
       </View>
 
       <View style={styles.legend}>
