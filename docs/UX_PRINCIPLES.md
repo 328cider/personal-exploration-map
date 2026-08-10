@@ -98,6 +98,18 @@ Home → 探索開始 → ポケット → 必要時だけ発見 → 探索終�
 
 Fog、探索率、実績、収集物を使わなくても、地図アプリとして完成していること。ゲームのために記録開始や発見入力が複雑にならないこと。
 
+## 11. 広域地図でも局所を読める
+
+PersonalMapは複数sessionや長距離移動から育つため、全体fitだけでは徒歩・建物周辺・発見地点が数pxへ潰れることがある。
+
+- Reviewは最初に全体像を表示する
+- Reviewでは拡大・縮小・移動と全体fitへの復帰を提供する
+- 交通機関や遠距離区間をraw evidenceから削除して見かけの縮尺を合わせない
+- 拡大はrenderer-only stateとし、PersonalMap bounds、segment、marker、accepted/rejectedを変更しない
+- 高倍率でもmarker、開始・終了point、線幅を操作不能な大きさへ拡大しない
+- ボタン操作と倍率表示を用意し、pinchだけへ依存しない
+- 記録中live previewはPassive-firstを優先し、既定では閲覧操作を増やさない
+
 ## 主要画面
 
 ### Home
@@ -125,6 +137,8 @@ Fog、探索率、実績、収集物を使わなくても、地図アプリと�
 ### PersonalMapレビュー
 
 - 白紙キャンバス上の複数track segments
+- 初期表示はPersonalMap全体fit
+- 最大32倍の局所拡大、pan、倍率表示、全体fitへの復帰
 - 各sessionの開始・終了
 - 発見
 - 合計距離、探索回数、時間
