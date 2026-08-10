@@ -385,7 +385,7 @@ test("sample-window and future timing remain coordinate-free and fail closed", (
   });
   assert.deepEqual(report.rejectionReasons, [
     { reason: "sample-before-session-start", count: 1 },
-    { reason: "session-not-recording", count: 1 },
+    { reason: "sample-after-session-end", count: 1 },
   ]);
   assert.equal(report.acceptedSampleCount, 1);
   assert.equal(report.callbacks.futureObservationBatchCount, 1);
