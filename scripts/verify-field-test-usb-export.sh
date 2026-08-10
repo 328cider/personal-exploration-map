@@ -23,10 +23,18 @@ test -s "$bundle_dir/manifest.json"
 test -s "$bundle_dir/SHA256SUMS.txt"
 test -s "$bundle_zip"
 
-grep -q '^device_model=' "$bundle_dir/coordinate-free-diagnostics.txt"
-grep -q '^session_started_at_iso_utc=' "$bundle_dir/coordinate-free-diagnostics.txt"
-grep -q '^start_battery_percent=' "$bundle_dir/coordinate-free-diagnostics.txt"
-if grep -Eiq '(^|_)(latitude|longitude)(_|=)' "$bundle_dir/coordinate-free-diagnostics.txt"; then
+summary="$bundle_dir/coordinate-free-diagnostics.txt"
+grep -q '^personal_exploration_map_diagnostics_format=3$' "$summary"
+grep -q '^report_version=3$' "$summary"
+grep -q '^device_model=' "$summary"
+grep -q '^session_started_at_iso_utc=' "$summary"
+grep -q '^start_battery_percent=' "$summary"
+grep -q '^sample_before_start_count=' "$summary"
+grep -q '^sample_after_end_count=' "$summary"
+grep -q '^callback_gap_ms_count=' "$summary"
+grep -q '^callback_newest_observation_age_ms_count=' "$summary"
+grep -q '^callback_future_observation_batches=' "$summary"
+if grep -Eiq '(^|_)(latitude|longitude)(_|=)' "$summary"; then
   echo "Coordinate-free summary unexpectedly contains coordinate field names." >&2
   exit 1
 fi
@@ -61,6 +69,10 @@ try:
         "SELECT kind, payload_json FROM tracking_diagnostic_events "
         "WHERE kind IN ('environment.session.started','environment.session.ended') "
         "ORDER BY occurred_at"
+    ).fetchall()
+    callback_rows = connection.execute(
+        "SELECT payload_json FROM tracking_diagnostic_events "
+        "WHERE kind = 'callback.received' ORDER BY occurred_at"
     ).fetchall()
     if user_version >= 4:
         raw_rows = connection.execute(
@@ -99,6 +111,14 @@ required = {
 assert payloads, "environment payloads are missing"
 assert required.issubset(payloads[0]), sorted(payloads[0])
 assert payloads[0]["isDebuggable"] is True, payloads[0]
+
+callback_payloads = [json.loads(row[0]) for row in callback_rows if row[0]]
+assert callback_payloads, "callback.received diagnostics are missing"
+for payload in callback_payloads:
+    assert isinstance(payload.get("sampleCount"), (int, float)), payload
+    assert isinstance(payload.get("callbackReceivedAtMs"), (int, float)), payload
+    assert isinstance(payload.get("firstSampleAtMs"), (int, float)), payload
+    assert isinstance(payload.get("lastSampleAtMs"), (int, float)), payload
 
 ordinals_by_exploration = {}
 if user_version >= 4:
@@ -159,6 +179,9 @@ assert manifest["autoUpload"] is False
             "database": str(database),
             "databaseUserVersion": user_version,
             "expectedDatabaseVersion": expected_database_version,
+            "diagnosticsFormat": 3,
+            "callbackReceivedBatchCount": len(callback_payloads),
+            "callbackObservationTimingStatus": "verified",
             "exactRawEvidenceStatus": (
                 "verified" if user_version >= 4 else "not-available-schema-v3"
             ),

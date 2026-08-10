@@ -47,11 +47,30 @@ function environmentSnapshot(
   };
 }
 
+function emptyDistribution() {
+  return {
+    count: 0,
+    minimum: null,
+    median: null,
+    p95: null,
+    maximum: null,
+  } as const;
+}
+
+function emptyGaps() {
+  return {
+    ...emptyDistribution(),
+    atLeast30Seconds: 0,
+    atLeast60Seconds: 0,
+    atLeast120Seconds: 0,
+  } as const;
+}
+
 function report(
   overrides: Partial<ExplorationTrackingDiagnostics> = {},
 ): ExplorationTrackingDiagnostics {
   return {
-    version: 2,
+    version: 3,
     explorationId: "private-exploration-id",
     providerId: "gnss-background",
     startedAtMs: 1_700_000_000_000,
@@ -74,6 +93,12 @@ function report(
       atLeast60Seconds: 1,
       atLeast120Seconds: 0,
     },
+    sampleWindow: {
+      beforeStartCount: 1,
+      beforeStartMaximumMs: 120_000,
+      afterEndCount: 0,
+      afterEndMaximumMs: null,
+    },
     horizontalAccuracyMeters: {
       count: 10,
       minimum: 3,
@@ -91,6 +116,32 @@ function report(
       rejectedSampleCount: 2,
       failedBatchCount: 0,
       largestBatchSize: 4,
+      deliveryGapsMs: {
+        count: 3,
+        minimum: 4_000,
+        median: 8_000,
+        p95: 31_000,
+        maximum: 31_000,
+        atLeast30Seconds: 1,
+        atLeast60Seconds: 0,
+        atLeast120Seconds: 0,
+      },
+      oldestObservationAgeMs: {
+        count: 4,
+        minimum: 500,
+        median: 1_000,
+        p95: 120_000,
+        maximum: 120_000,
+      },
+      newestObservationAgeMs: {
+        count: 4,
+        minimum: 100,
+        median: 500,
+        p95: 5_000,
+        maximum: 5_000,
+      },
+      futureObservationBatchCount: 0,
+      missingObservationTimestampBatchCount: 0,
     },
     markerInputMs: {
       count: 1,
@@ -127,9 +178,11 @@ function report(
   };
 }
 
-test("coordinate-free text includes automatic environment metadata but excludes private ids", () => {
+test("coordinate-free text separates callback delivery and observation timing", () => {
   const formatted = formatTrackingDiagnosticsSummary(report());
 
+  assert.match(formatted, /personal_exploration_map_diagnostics_format=3/u);
+  assert.match(formatted, /report_version=3/u);
   assert.match(formatted, /provider=gnss-background/u);
   assert.match(formatted, /session_started_at_iso_utc=/u);
   assert.match(formatted, /device_model=Pixel Test/u);
@@ -140,7 +193,19 @@ test("coordinate-free text includes automatic environment metadata but excludes 
   assert.match(formatted, /acceptance_rate=0.8/u);
   assert.match(formatted, /accuracy_m_p95=40/u);
   assert.match(formatted, /sample_gap_at_least_60s=1/u);
+  assert.match(formatted, /sample_before_start_count=1/u);
+  assert.match(formatted, /sample_before_start_max_ms=120000/u);
+  assert.match(formatted, /sample_after_end_count=0/u);
   assert.match(formatted, /callback_duplicate_samples=1/u);
+  assert.match(formatted, /callback_gap_ms_p95=31000/u);
+  assert.match(formatted, /callback_gap_at_least_30s=1/u);
+  assert.match(formatted, /callback_oldest_observation_age_ms_max=120000/u);
+  assert.match(formatted, /callback_newest_observation_age_ms_p95=5000/u);
+  assert.match(formatted, /callback_future_observation_batches=0/u);
+  assert.match(
+    formatted,
+    /callback_missing_observation_timestamp_batches=0/u,
+  );
   assert.match(formatted, /marker_input_ms_median=4500/u);
   assert.match(formatted, /last_error_message=database busy retry scheduled/u);
   assert.match(formatted, /lifecycle_1_offset_ms=1000/u);
@@ -158,23 +223,14 @@ test("empty diagnostics remain explicit and stable", () => {
       rejectedSampleCount: 0,
       acceptanceRate: null,
       rejectionReasons: [],
-      sampleGapsMs: {
-        count: 0,
-        minimum: null,
-        median: null,
-        p95: null,
-        maximum: null,
-        atLeast30Seconds: 0,
-        atLeast60Seconds: 0,
-        atLeast120Seconds: 0,
+      sampleGapsMs: emptyGaps(),
+      sampleWindow: {
+        beforeStartCount: 0,
+        beforeStartMaximumMs: null,
+        afterEndCount: 0,
+        afterEndMaximumMs: null,
       },
-      horizontalAccuracyMeters: {
-        count: 0,
-        minimum: null,
-        median: null,
-        p95: null,
-        maximum: null,
-      },
+      horizontalAccuracyMeters: emptyDistribution(),
       callbacks: {
         receivedBatchCount: 0,
         receivedSampleCount: 0,
@@ -185,13 +241,14 @@ test("empty diagnostics remain explicit and stable", () => {
         rejectedSampleCount: 0,
         failedBatchCount: 0,
         largestBatchSize: 0,
+        deliveryGapsMs: emptyGaps(),
+        oldestObservationAgeMs: emptyDistribution(),
+        newestObservationAgeMs: emptyDistribution(),
+        futureObservationBatchCount: 0,
+        missingObservationTimestampBatchCount: 0,
       },
       markerInputMs: {
-        count: 0,
-        minimum: null,
-        median: null,
-        p95: null,
-        maximum: null,
+        ...emptyDistribution(),
         completedCount: 0,
         cancelledCount: 0,
       },
@@ -209,6 +266,9 @@ test("empty diagnostics remain explicit and stable", () => {
   assert.match(formatted, /acceptance_rate=null/u);
   assert.match(formatted, /rejection_reasons=none/u);
   assert.match(formatted, /accuracy_m_median=null/u);
+  assert.match(formatted, /sample_before_start_max_ms=null/u);
+  assert.match(formatted, /callback_gap_ms_median=null/u);
+  assert.match(formatted, /callback_newest_observation_age_ms_max=null/u);
   assert.match(formatted, /device_model=null/u);
   assert.match(formatted, /start_battery_percent=null/u);
   assert.match(formatted, /last_error_kind=none/u);

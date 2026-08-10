@@ -88,7 +88,7 @@ export function formatTrackingDiagnosticsSummary(
 ): string {
   const device = report.environment.start ?? report.environment.end;
   const lines = [
-    "personal_exploration_map_diagnostics_format=2",
+    "personal_exploration_map_diagnostics_format=3",
     `report_version=${report.version}`,
     `provider=${oneLine(report.providerId)}`,
     `session_started_at_ms=${report.startedAtMs}`,
@@ -136,6 +136,14 @@ export function formatTrackingDiagnosticsSummary(
     `sample_gap_at_least_30s=${report.sampleGapsMs.atLeast30Seconds}`,
     `sample_gap_at_least_60s=${report.sampleGapsMs.atLeast60Seconds}`,
     `sample_gap_at_least_120s=${report.sampleGapsMs.atLeast120Seconds}`,
+    `sample_before_start_count=${report.sampleWindow.beforeStartCount}`,
+    `sample_before_start_max_ms=${scalar(
+      report.sampleWindow.beforeStartMaximumMs,
+    )}`,
+    `sample_after_end_count=${report.sampleWindow.afterEndCount}`,
+    `sample_after_end_max_ms=${scalar(
+      report.sampleWindow.afterEndMaximumMs,
+    )}`,
     `callback_received_batches=${report.callbacks.receivedBatchCount}`,
     `callback_received_samples=${report.callbacks.receivedSampleCount}`,
     `callback_persisted_batches=${report.callbacks.persistedBatchCount}`,
@@ -145,6 +153,30 @@ export function formatTrackingDiagnosticsSummary(
     `callback_rejected_samples=${report.callbacks.rejectedSampleCount}`,
     `callback_failed_batches=${report.callbacks.failedBatchCount}`,
     `callback_largest_batch=${report.callbacks.largestBatchSize}`,
+    ...distribution("callback_gap_ms", report.callbacks.deliveryGapsMs),
+    `callback_gap_at_least_30s=${
+      report.callbacks.deliveryGapsMs.atLeast30Seconds
+    }`,
+    `callback_gap_at_least_60s=${
+      report.callbacks.deliveryGapsMs.atLeast60Seconds
+    }`,
+    `callback_gap_at_least_120s=${
+      report.callbacks.deliveryGapsMs.atLeast120Seconds
+    }`,
+    ...distribution(
+      "callback_oldest_observation_age_ms",
+      report.callbacks.oldestObservationAgeMs,
+    ),
+    ...distribution(
+      "callback_newest_observation_age_ms",
+      report.callbacks.newestObservationAgeMs,
+    ),
+    `callback_future_observation_batches=${
+      report.callbacks.futureObservationBatchCount
+    }`,
+    `callback_missing_observation_timestamp_batches=${
+      report.callbacks.missingObservationTimestampBatchCount
+    }`,
     ...distribution("marker_input_ms", report.markerInputMs),
     `marker_input_completed=${report.markerInputMs.completedCount}`,
     `marker_input_cancelled=${report.markerInputMs.cancelledCount}`,

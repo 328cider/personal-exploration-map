@@ -109,7 +109,7 @@ test("numeric summaries use deterministic nearest-rank percentiles", () => {
   );
 });
 
-test("tracking diagnostics replay map truth and summarize operational evidence separately", () => {
+test("tracking diagnostics separate callback delivery from observation timing", () => {
   const report = createExplorationTrackingDiagnostics({
     providerId: "gnss-background",
     exploration: {
@@ -143,21 +143,27 @@ test("tracking diagnostics replay map truth and summarize operational evidence s
       event("event-3", "app.state.changed", 1_200, {
         state: "background",
       }),
-      event("event-4", "callback.received", 2_100, {
+      event("event-4", "callback.received", 8_000, {
         sampleCount: 3,
         delivery: "background",
+        firstSampleAtMs: 2_000,
+        lastSampleAtMs: 7_000,
+        callbackReceivedAtMs: 8_000,
       }),
-      event("event-5", "callback.persisted", 2_200, {
+      event("event-5", "callback.persisted", 8_100, {
         persistedSampleCount: 2,
         duplicateSampleCount: 1,
         acceptedSampleCount: 2,
         rejectedSampleCount: 0,
       }),
-      event("event-6", "callback.received", 42_100, {
+      event("event-6", "callback.received", 43_000, {
         sampleCount: 2,
         delivery: "background",
+        firstSampleAtMs: 42_000,
+        lastSampleAtMs: 42_000,
+        callbackReceivedAtMs: 43_000,
       }),
-      event("event-7", "callback.persisted", 42_200, {
+      event("event-7", "callback.persisted", 43_100, {
         persistedSampleCount: 2,
         duplicateSampleCount: 0,
         acceptedSampleCount: 1,
@@ -197,7 +203,7 @@ test("tracking diagnostics replay map truth and summarize operational evidence s
     ],
   });
 
-  assert.equal(report.version, 2);
+  assert.equal(report.version, 3);
   assert.equal(report.durationMs, 200_000);
   assert.equal(report.rawSampleCount, 5);
   assert.equal(report.acceptedSampleCount, 4);
@@ -217,6 +223,12 @@ test("tracking diagnostics replay map truth and summarize operational evidence s
     atLeast60Seconds: 2,
     atLeast120Seconds: 0,
   });
+  assert.deepEqual(report.sampleWindow, {
+    beforeStartCount: 0,
+    beforeStartMaximumMs: null,
+    afterEndCount: 0,
+    afterEndMaximumMs: null,
+  });
   assert.deepEqual(report.horizontalAccuracyMeters, {
     count: 5,
     minimum: 4,
@@ -234,6 +246,32 @@ test("tracking diagnostics replay map truth and summarize operational evidence s
     rejectedSampleCount: 1,
     failedBatchCount: 1,
     largestBatchSize: 3,
+    deliveryGapsMs: {
+      count: 1,
+      minimum: 35_000,
+      median: 35_000,
+      p95: 35_000,
+      maximum: 35_000,
+      atLeast30Seconds: 1,
+      atLeast60Seconds: 0,
+      atLeast120Seconds: 0,
+    },
+    oldestObservationAgeMs: {
+      count: 2,
+      minimum: 1_000,
+      median: 1_000,
+      p95: 6_000,
+      maximum: 6_000,
+    },
+    newestObservationAgeMs: {
+      count: 2,
+      minimum: 1_000,
+      median: 1_000,
+      p95: 1_000,
+      maximum: 1_000,
+    },
+    futureObservationBatchCount: 0,
+    missingObservationTimestampBatchCount: 0,
   });
   assert.deepEqual(report.markerInputMs, {
     count: 2,
@@ -269,12 +307,63 @@ test("tracking diagnostics replay map truth and summarize operational evidence s
   );
 
   const formatted = formatTrackingDiagnosticsSummary(report);
-  assert.match(formatted, /personal_exploration_map_diagnostics_format=2/u);
+  assert.match(formatted, /personal_exploration_map_diagnostics_format=3/u);
   assert.match(formatted, /device_model=Pixel Test/u);
   assert.match(formatted, /android_version=15/u);
   assert.match(formatted, /start_battery_percent=96/u);
   assert.match(formatted, /end_battery_percent=93/u);
   assert.match(formatted, /battery_consumed_percentage_points=3/u);
   assert.match(formatted, /background_location_granted=true/u);
+  assert.match(formatted, /callback_gap_ms_max=35000/u);
+  assert.match(formatted, /callback_newest_observation_age_ms_p95=1000/u);
+  assert.match(formatted, /sample_before_start_count=0/u);
   assert.doesNotMatch(formatted, /latitude|longitude/u);
+});
+
+test("sample-window and future callback timing remain coordinate-free", () => {
+  const report = createExplorationTrackingDiagnostics({
+    providerId: "gnss-background",
+    exploration: {
+      id: "exploration-1",
+      name: "Pocket walk",
+      startedAtMs: 100_000,
+      endedAtMs: 200_000,
+      samples: [
+        sample("cached", 40_000, 35, 10),
+        sample("inside", 150_000, 35.00001, 8),
+        sample("late", 215_000, 35.00002, 7),
+      ],
+      markers: [],
+    },
+    events: [
+      event("callback-1", "callback.received", 100_500, {
+        sampleCount: 1,
+        firstSampleAtMs: 101_000,
+        lastSampleAtMs: 101_000,
+        callbackReceivedAtMs: 100_500,
+      }),
+      event("callback-2", "callback.received", 130_500, {
+        sampleCount: 1,
+      }),
+    ],
+  });
+
+  assert.deepEqual(report.sampleWindow, {
+    beforeStartCount: 1,
+    beforeStartMaximumMs: 60_000,
+    afterEndCount: 1,
+    afterEndMaximumMs: 15_000,
+  });
+  assert.equal(report.callbacks.futureObservationBatchCount, 1);
+  assert.equal(report.callbacks.missingObservationTimestampBatchCount, 1);
+  assert.deepEqual(report.callbacks.deliveryGapsMs, {
+    count: 1,
+    minimum: 30_000,
+    median: 30_000,
+    p95: 30_000,
+    maximum: 30_000,
+    atLeast30Seconds: 1,
+    atLeast60Seconds: 0,
+    atLeast120Seconds: 0,
+  });
 });
