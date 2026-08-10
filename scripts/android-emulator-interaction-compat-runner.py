@@ -84,8 +84,30 @@ def save_debug_state(artifacts: Path, prefix: str) -> None:
         )
 
 
+def restore_review_top() -> None:
+    """Remove scroll-position coupling between sequential Review test suites."""
+
+    width, height = smoke.parse_screen_size()
+    x = width // 2
+    start_y = max(120, height // 4)
+    end_y = min(height - 120, (height * 9) // 10)
+    for _ in range(5):
+        smoke.adb_shell(
+            "input",
+            "touchscreen",
+            "swipe",
+            str(x),
+            str(start_y),
+            str(x),
+            str(end_y),
+            "350",
+        )
+        time.sleep(0.25)
+
+
 smoke.inject_route = inject_route
 smoke.save_debug_state = save_debug_state
 
 if __name__ == "__main__":
+    restore_review_top()
     sys.exit(interaction.main())
