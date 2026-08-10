@@ -120,6 +120,20 @@ export function zoomMapViewportAt(
   );
 }
 
+export function transformMapViewportPoint(
+  point: MapViewportPoint,
+  viewport: MapViewport,
+  size: MapViewportSize,
+): MapViewportPoint {
+  const current = clampMapViewport(viewport, size);
+  const centerX = size.width / 2;
+  const centerY = size.height / 2;
+  return {
+    x: centerX + (point.x - centerX) * current.zoom + current.panX,
+    y: centerY + (point.y - centerY) * current.zoom + current.panY,
+  };
+}
+
 /**
  * Applies the read-only screen viewport to a fit-to-all map projection.
  * Marker and line thickness remain controlled by the renderer rather than
