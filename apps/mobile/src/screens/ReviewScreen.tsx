@@ -40,7 +40,7 @@ export function ReviewScreen({
       </Text>
 
       <View style={styles.canvasWrapper}>
-        <TrackCanvas snapshot={snapshot} />
+        <TrackCanvas interactive snapshot={snapshot} />
       </View>
 
       <View style={styles.legend}>
@@ -58,6 +58,9 @@ export function ReviewScreen({
         </View>
       </View>
 
+      <Text style={styles.segmentNote}>
+        全体表示で広い移動を確認し、徒歩部分などの詳細は拡大して見られます。表示を拡大してもraw evidenceや地図の判定は変わりません。
+      </Text>
       <Text style={styles.segmentNote}>
         探索ごとの経路は別々に保持し、実際に歩いていない区間を直線でつないでいません。
       </Text>
