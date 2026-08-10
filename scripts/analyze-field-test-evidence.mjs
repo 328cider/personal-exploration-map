@@ -10,6 +10,7 @@ import {
 } from "./analyze-field-test-summary.mjs";
 
 const REPORT_SCHEMA_VERSION = 3;
+const MARKER_STALE_WARNING_MS = 30_000;
 const SEVERITY_RANK = { INFO: 0, WARN: 1, INCONCLUSIVE: 2, FAIL: 3 };
 
 const ADDITIONAL_SAFE_FIELDS = [
@@ -92,6 +93,10 @@ function callbackGapFindingIndex(findings) {
   return findings.findIndex((item) => item.code === "callback_gap_120s");
 }
 
+function hasFinding(findings, code) {
+  return findings.some((item) => item.code === code);
+}
+
 function bufferedDeliveryEvidence(values) {
   const gapCount = numberValue(values.callback_gap_at_least_120s) ?? 0;
   const callbackGapMaximumMs = numberValue(values.callback_gap_ms_max);
@@ -154,10 +159,82 @@ function bufferedDeliveryEvidence(values) {
   };
 }
 
+function addTimingFindings(findings, values) {
+  const result = [...findings];
+  const futureCallbackBatches =
+    numberValue(values.callback_future_observation_batches) ?? 0;
+  const markerFutureCount =
+    numberValue(values.marker_latest_observation_future_count) ?? 0;
+  const markerMissingCount =
+    numberValue(values.marker_latest_observation_missing_count) ?? 0;
+  const markerAgeMaximumMs = numberValue(
+    values.marker_latest_observation_age_ms_max,
+  );
+
+  if (
+    futureCallbackBatches > 0 &&
+    !hasFinding(result, "future_observation_timestamp")
+  ) {
+    result.push(
+      finding(
+        "FAIL",
+        "future_observation_timestamp",
+        `${futureCallbackBatches} callback batch(es) contained an observation timestamp after the callback receive time. Raw evidence is preserved, but this run cannot qualify until the clock/provenance mismatch is understood.`,
+        "data-quality",
+      ),
+    );
+  }
+
+  if (
+    markerFutureCount > 0 &&
+    !hasFinding(result, "marker_observation_from_future")
+  ) {
+    result.push(
+      finding(
+        "FAIL",
+        "marker_observation_from_future",
+        `${markerFutureCount} completed marker input(s) resolved against an accepted observation timestamp later than the marker diagnostic time.`,
+        "data-quality",
+      ),
+    );
+  }
+
+  if (
+    markerMissingCount > 0 &&
+    !hasFinding(result, "marker_observation_missing")
+  ) {
+    result.push(
+      finding(
+        "WARN",
+        "marker_observation_missing",
+        `${markerMissingCount} completed marker input(s) had no accepted observation available for attachment-freshness measurement.`,
+        "data-quality",
+      ),
+    );
+  }
+
+  if (
+    markerAgeMaximumMs !== null &&
+    markerAgeMaximumMs >= MARKER_STALE_WARNING_MS &&
+    !hasFinding(result, "marker_attachment_stale")
+  ) {
+    result.push(
+      finding(
+        "WARN",
+        "marker_attachment_stale",
+        `At least one completed marker input may have attached to a stale accepted observation; maximum measured age was ${markerAgeMaximumMs} ms.`,
+        "data-quality",
+      ),
+    );
+  }
+
+  return result;
+}
+
 function reclassifyExploration(evaluation, rawValues, mode) {
   const values = { ...evaluation.values };
   copyAdditionalEvidence(rawValues, values);
-  let findings = [...evaluation.findings];
+  let findings = addTimingFindings(evaluation.findings, rawValues);
 
   if (mode === "generic") {
     const gapIndex = callbackGapFindingIndex(findings);
