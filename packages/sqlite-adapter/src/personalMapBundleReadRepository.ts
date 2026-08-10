@@ -1,9 +1,9 @@
-import {
-  createPersonalMapSnapshot,
-  type MapFrame,
-  type MapMarker,
-  type RawPositionSample,
-  type ReplayExplorationInput,
+import { createPersonalMapSnapshot } from "../../mapping-core/src/index.ts";
+import type {
+  MapFrame,
+  MapMarker,
+  RawPositionSample,
+  ReplayExplorationInput,
 } from "@exploration-map/mapping-core";
 import type {
   PersonalMapBundleMarkerGroup,
