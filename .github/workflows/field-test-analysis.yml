@@ -8,6 +8,8 @@ on:
       - "scripts/analyze-field-test-summary.mjs"
       - "scripts/analyze-field-test-summary.test.mjs"
       - "scripts/analyze-field-test-summary-safety.test.mjs"
+      - "scripts/analyze-field-test-evidence.mjs"
+      - "scripts/analyze-field-test-evidence.test.mjs"
       - "scripts/analyze-latest-field-test.ps1"
       - "scripts/collect-and-analyze-field-test.ps1"
       - "docs/FIELD_TEST_OBJECTIVE_ANALYSIS.md"
@@ -21,7 +23,10 @@ concurrency:
 
 jobs:
   objective-analyzer:
-    name: Coordinate-free objective S0 analyzer
+    name: Coordinate-free objective evidence analyzer
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -34,6 +39,7 @@ jobs:
           node --test
           scripts/analyze-field-test-summary.test.mjs
           scripts/analyze-field-test-summary-safety.test.mjs
+          scripts/analyze-field-test-evidence.test.mjs
       - name: Parse Windows wrappers with PowerShell
         shell: pwsh
         run: |
@@ -75,7 +81,7 @@ jobs:
             "-T",
             "shell",
             "node",
-            "scripts/analyze-field-test-summary.mjs",
+            "scripts/analyze-field-test-evidence.mjs",
             "/workspace/artifacts/device-bundles",
             "--mode",
             "s0",
@@ -99,17 +105,21 @@ jobs:
               throw
             }
           }
-      - name: Assert the analyzer has no runtime dependencies
+      - name: Assert the analyzer has no external runtime dependencies
         run: |
           set -euo pipefail
           node --check scripts/analyze-field-test-summary.mjs
+          node --check scripts/analyze-field-test-evidence.mjs
           unexpected="$(
-            grep -E '^import .* from ' scripts/analyze-field-test-summary.mjs \
+            grep -E '^import .* from ' \
+              scripts/analyze-field-test-summary.mjs \
+              scripts/analyze-field-test-evidence.mjs \
               | grep -Ev ' from "node:' \
+              | grep -Ev ' from "\./analyze-field-test-summary\.mjs"' \
               || true
           )"
           if [ -n "$unexpected" ]; then
-            echo "Objective analyzer must use Node standard-library imports only:" >&2
+            echo "Objective analyzer may use only Node standard-library imports and its local base analyzer:" >&2
             echo "$unexpected" >&2
             exit 1
           fi
