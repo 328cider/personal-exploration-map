@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Black-box comparison of location uncertainty, passage cells, and centerline.
+"""Black-box comparison of explored-space modes and Review map viewport controls.
 
 This script runs after android-emulator-smoke.py in the same emulator session.
 The first script leaves the app on a persisted PersonalMap Review. Here we only
@@ -98,6 +98,27 @@ def tap_node(node: ET.Element) -> None:
     time.sleep(1)
 
 
+def swipe_inside(node: ET.Element) -> None:
+    left, top, right, bottom = parse_bounds(node)
+    width = right - left
+    height = bottom - top
+    start_x = left + (width * 3) // 5
+    start_y = top + height // 2
+    end_x = left + width // 3
+    end_y = top + height // 2
+    adb_shell(
+        "input",
+        "touchscreen",
+        "swipe",
+        str(start_x),
+        str(start_y),
+        str(end_x),
+        str(end_y),
+        "450",
+    )
+    time.sleep(1)
+
+
 def wait_for_node(
     artifacts: Path,
     needle: str,
@@ -154,6 +175,53 @@ def select_mode(
     screenshot(artifacts, screenshot_name)
 
 
+def exercise_viewport(artifacts: Path) -> None:
+    zoom_button = wait_for_node(
+        artifacts,
+        "地図を拡大",
+        prefix="viewport-zoom-button",
+    )
+    tap_node(zoom_button)
+    zoom_button = wait_for_node(
+        artifacts,
+        "地図を拡大",
+        prefix="viewport-zoom-button-second",
+    )
+    tap_node(zoom_button)
+    wait_for_node(
+        artifacts,
+        "地図の倍率 4×",
+        prefix="viewport-zoom-readout",
+    )
+    screenshot(artifacts, "09a-review-map-zoom-4x")
+
+    canvas = wait_for_node(
+        artifacts,
+        "探索地図。2本指で拡大し、拡大中は1本指で移動できます。",
+        prefix="viewport-canvas",
+    )
+    swipe_inside(canvas)
+    wait_for_node(
+        artifacts,
+        "地図の倍率 4×",
+        prefix="viewport-pan-retains-zoom",
+    )
+    screenshot(artifacts, "09b-review-map-panned")
+
+    fit_button = wait_for_node(
+        artifacts,
+        "地図を全体表示",
+        prefix="viewport-fit-button",
+    )
+    tap_node(fit_button)
+    wait_for_node(
+        artifacts,
+        "地図の倍率 1×",
+        prefix="viewport-fit-readout",
+    )
+    screenshot(artifacts, "09c-review-map-fit-restored")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--artifacts", type=Path, required=True)
@@ -173,6 +241,7 @@ def main() -> int:
             prefix="coverage-default",
         )
         screenshot(artifacts, "09-location-uncertainty")
+        exercise_viewport(artifacts)
 
         select_mode(
             artifacts,
@@ -194,7 +263,8 @@ def main() -> int:
         )
         (artifacts / "coverage-modes-result.json").write_text(
             '{"status":"passed","semantics":"uncertainty-separated-from-coverage",'
-            '"modes":["uncertainty","cells","track"]}\n',
+            '"modes":["uncertainty","cells","track"],'
+            '"viewport":["zoom-4x","pan","fit-reset"]}\n',
             encoding="utf-8",
         )
         print("[coverage-modes] passed", flush=True)
