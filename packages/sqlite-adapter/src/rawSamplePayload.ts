@@ -2,9 +2,9 @@ import type {
   PositionSource,
   RawPositionSample,
 } from "@exploration-map/mapping-core";
+import { encodePersonalMapBundleNumber } from "../../mapping-engine/src/personalMapBundle.ts";
 import {
   decodePersonalMapBundleNumber,
-  encodePersonalMapBundleNumber,
   PersonalMapBundleNumberDecodeError,
 } from "../../mapping-engine/src/personalMapBundleNumber.ts";
 
