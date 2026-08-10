@@ -117,7 +117,7 @@ function coordinateFreeSummary(
   return [
     "Personal Exploration Map / USB field-test diagnostics",
     "privacy=no_coordinates_no_map_names_no_ids_no_marker_text_no_map_images",
-    "contains=device_time_battery_permissions_and_aggregate_tracking_metrics",
+    "contains=device_time_battery_permissions_callback_delivery_gaps_observation_freshness_and_aggregate_tracking_metrics",
     `exploration_count=${reports.length}`,
     ...reports.map(
       ({ report }, index) =>
