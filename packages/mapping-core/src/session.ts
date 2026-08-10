@@ -6,6 +6,7 @@ import type {
   MapSnapshot,
   MapStats,
   RawPositionSample,
+  RejectionReason,
   TrackPoint,
 } from "./model.ts";
 import {
@@ -144,6 +145,33 @@ function frameMatchesSample(
   return sample.position.kind === "local";
 }
 
+function rejectPositionSample(
+  session: ExplorationSession,
+  rawSamples: readonly RawPositionSample[],
+  sample: RawPositionSample,
+  reason: RejectionReason,
+): SessionMutation {
+  return {
+    session: {
+      ...session,
+      rawSamples,
+      rejectedSamples: [...session.rejectedSamples, { sampleId: sample.id, reason }],
+      revision: session.revision + 1,
+    },
+    events: [
+      {
+        type: "position.rejected",
+        explorationId: session.id,
+        occurredAtMs: Number.isFinite(sample.recordedAtMs)
+          ? sample.recordedAtMs
+          : session.startedAtMs,
+        sample,
+        reason,
+      },
+    ],
+  };
+}
+
 export function appendPositionSample(
   session: ExplorationSession,
   sample: RawPositionSample,
@@ -152,70 +180,54 @@ export function appendPositionSample(
   const rawSamples = [...session.rawSamples, sample];
 
   if (session.status !== "recording") {
-    const reason = "session-not-recording" as const;
-    return {
-      session: {
-        ...session,
-        rawSamples,
-        rejectedSamples: [...session.rejectedSamples, { sampleId: sample.id, reason }],
-        revision: session.revision + 1,
-      },
-      events: [
-        {
-          type: "position.rejected",
-          explorationId: session.id,
-          occurredAtMs: sample.recordedAtMs,
-          sample,
-          reason,
-        },
-      ],
-    };
+    return rejectPositionSample(
+      session,
+      rawSamples,
+      sample,
+      "session-not-recording",
+    );
+  }
+
+  if (!Number.isFinite(sample.recordedAtMs)) {
+    return rejectPositionSample(
+      session,
+      rawSamples,
+      sample,
+      "invalid-timestamp",
+    );
+  }
+
+  // Location providers can return a cached fix immediately after tracking
+  // starts. Preserve it as user-owned raw evidence, but do not let an
+  // observation from before the explicit exploration boundary establish the
+  // derived route or geographic frame origin.
+  if (sample.recordedAtMs < session.startedAtMs) {
+    return rejectPositionSample(
+      session,
+      rawSamples,
+      sample,
+      "sample-before-session-start",
+    );
   }
 
   if (!frameMatchesSample(session, sample)) {
-    const reason = "coordinate-frame-mismatch" as const;
-    return {
-      session: {
-        ...session,
-        rawSamples,
-        rejectedSamples: [...session.rejectedSamples, { sampleId: sample.id, reason }],
-        revision: session.revision + 1,
-      },
-      events: [
-        {
-          type: "position.rejected",
-          explorationId: session.id,
-          occurredAtMs: sample.recordedAtMs,
-          sample,
-          reason,
-        },
-      ],
-    };
+    return rejectPositionSample(
+      session,
+      rawSamples,
+      sample,
+      "coordinate-frame-mismatch",
+    );
   }
 
   const previousAccepted = session.track.at(-1);
   const assessment = assessSampleQuality(previousAccepted, sample, policy);
   if (!assessment.accepted && assessment.reason !== undefined) {
-    return {
-      session: {
-        ...session,
-        rawSamples,
-        rejectedSamples: [
-          ...session.rejectedSamples,
-          { sampleId: sample.id, reason: assessment.reason },
-        ],
-        revision: session.revision + 1,
-      },
-      events: [
-        {
-          type: "position.rejected",
-          explorationId: session.id,
-          occurredAtMs: sample.recordedAtMs,
-          sample,
-          reason: assessment.reason,
-        },
-      ],
-    };
+    return rejectPositionSample(
+      session,
+      rawSamples,
+      sample,
+      assessment.reason,
+    );
   }
 
   const { frame, point } = projectSample(session, sample);
