@@ -3,6 +3,11 @@ name: field-test-analysis
 on:
   workflow_dispatch:
   pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
     paths:
       - ".github/workflows/field-test-analysis.yml"
       - "scripts/analyze-field-test-summary.mjs"
