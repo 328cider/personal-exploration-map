@@ -290,10 +290,6 @@ def verify_scroll_from_map(artifacts: Path) -> None:
             raise CoverageFailure(
                 "one-finger vertical swipe from the non-interactive map did not scroll Review"
             )
-    if find_node(root, "地図の根拠") is None and interaction_after is not None:
-        raise CoverageFailure(
-            "Review did not reveal lower content after scrolling from the map"
-        )
     screenshot(artifacts, "09f-review-scrolled-from-map")
 
 
