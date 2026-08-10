@@ -109,6 +109,13 @@ function values(overrides = {}) {
     marker_input_ms_max: 20_723,
     marker_input_completed: 5,
     marker_input_cancelled: 0,
+    marker_latest_observation_age_ms_count: 5,
+    marker_latest_observation_age_ms_min: 300,
+    marker_latest_observation_age_ms_median: 2_000,
+    marker_latest_observation_age_ms_p95: 753_000,
+    marker_latest_observation_age_ms_max: 753_000,
+    marker_latest_observation_missing_count: 0,
+    marker_latest_observation_future_count: 0,
     last_error_kind: "none",
     last_error_message: "none",
     lifecycle_count: 8,
@@ -229,8 +236,14 @@ test("generic catch-up delivery is WARN rather than raw-loss FAIL", async () => 
         .callback_oldest_observation_age_ms_max,
       753_019,
     );
+    assert.equal(
+      result.report.evaluatedExploration.values
+        .marker_latest_observation_age_ms_max,
+      753_000,
+    );
     const markdown = await fs.readFile(result.markdownPath, "utf8");
     assert.match(markdown, /delayed buffered delivery/u);
+    assert.match(markdown, /Marker attachment freshness/u);
     assert.doesNotMatch(markdown, /latitude|longitude|personal_map_id/u);
   });
 });
