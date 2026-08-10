@@ -22,6 +22,8 @@ param(
     [string]$Serial = "",
     [ValidateSet("s0", "generic")]
     [string]$Mode = "s0",
+    [ValidateRange(0, [int]::MaxValue)]
+    [int]$ExplorationIndex = 0,
     [switch]$NoFailExit,
     [switch]$DoNotRestartApp
 )
@@ -75,6 +77,9 @@ Write-Host "Step 1/2: collecting the USB Field-test bundle..."
 $analysisArguments = @{
     BundlePath = $resolvedOutputRoot
     Mode = $Mode
+}
+if ($ExplorationIndex -gt 0) {
+    $analysisArguments.ExplorationIndex = $ExplorationIndex
 }
 if ($NoFailExit) {
     $analysisArguments.NoFailExit = $true
