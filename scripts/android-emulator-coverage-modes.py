@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Black-box comparison of location uncertainty, passage cells, and centerline.
+"""Black-box comparison of map viewport and explored-space display modes.
 
 This script runs after android-emulator-smoke.py in the same emulator session.
 The first script leaves the app on a persisted PersonalMap Review. Here we only
@@ -154,6 +154,66 @@ def select_mode(
     screenshot(artifacts, screenshot_name)
 
 
+def verify_interactive_viewport(artifacts: Path) -> None:
+    zoom_button = wait_for_node(
+        artifacts,
+        "地図を拡大",
+        prefix="viewport-zoom-button",
+    )
+    tap_node(zoom_button)
+    zoom_button = wait_for_node(
+        artifacts,
+        "地図を拡大",
+        prefix="viewport-zoom-button-second",
+    )
+    tap_node(zoom_button)
+    wait_for_node(
+        artifacts,
+        "地図倍率 4倍",
+        prefix="viewport-scale-4x",
+    )
+    screenshot(artifacts, "09a-map-zoom-4x")
+
+    canvas = wait_for_node(
+        artifacts,
+        "探索地図。現在4倍",
+        prefix="viewport-canvas",
+    )
+    left, top, right, bottom = parse_bounds(canvas)
+    start_x = (left + right) // 2
+    start_y = (top + bottom) // 2
+    end_x = max(left + 24, start_x - max(40, (right - left) // 4))
+    adb_shell(
+        "input",
+        "swipe",
+        str(start_x),
+        str(start_y),
+        str(end_x),
+        str(start_y),
+        "500",
+    )
+    time.sleep(1)
+    wait_for_node(
+        artifacts,
+        "探索地図。現在4倍",
+        prefix="viewport-pan-stable",
+    )
+    screenshot(artifacts, "09b-map-pan-4x")
+
+    reset_button = wait_for_node(
+        artifacts,
+        "地図を全体表示",
+        prefix="viewport-reset-button",
+    )
+    tap_node(reset_button)
+    wait_for_node(
+        artifacts,
+        "地図倍率 1倍",
+        prefix="viewport-scale-reset",
+    )
+    screenshot(artifacts, "09c-map-fit-restored")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--artifacts", type=Path, required=True)
@@ -172,7 +232,14 @@ def main() -> int:
             "位置の不確実性",
             prefix="coverage-default",
         )
+        wait_for_node(
+            artifacts,
+            "地図倍率 1倍",
+            prefix="viewport-default",
+        )
         screenshot(artifacts, "09-location-uncertainty")
+
+        verify_interactive_viewport(artifacts)
 
         select_mode(
             artifacts,
@@ -194,6 +261,7 @@ def main() -> int:
         )
         (artifacts / "coverage-modes-result.json").write_text(
             '{"status":"passed","semantics":"uncertainty-separated-from-coverage",'
+            '"viewport":{"zoom":"4x","pan":true,"fitReset":true},'
             '"modes":["uncertainty","cells","track"]}\n',
             encoding="utf-8",
         )
