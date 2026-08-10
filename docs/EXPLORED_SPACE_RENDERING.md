@@ -1,6 +1,6 @@
 # Explored-space rendering
 
-更新日: 2026-08-08
+更新日: 2026-08-10
 
 ## 目的
 
@@ -29,6 +29,8 @@ raw observation
 accepted TrackPoint
   ↓ read-only renderer derivation
 uncertainty band / passage cells / centerline
+  ↓ read-only viewport
+zoom / pan / fit-to-all
 ```
 
 次を変更しない。
@@ -40,7 +42,7 @@ uncertainty band / passage cells / centerline
 - marker
 - session間の接続
 
-renderer、game、experienceは、これらの表示を根拠にcanonical mapを書き換えない。
+renderer、game、experienceは、これらの表示やviewportを根拠にcanonical mapを書き換えない。
 
 ## 1. 位置の不確実性
 
@@ -88,6 +90,56 @@ accepted point-estimate pathの近くを、保守的なcellへ集約する。
 - sessionごとに独立したlineとする
 - renderer上のdecimationだけを行い、raw evidenceとcanonical routeを削除しない
 
+## 4. Review viewport
+
+### 実機で判明した問題
+
+2026-08-10の66.1分runでは、徒歩・電車・屋内滞在・復路を一つのExplorationSessionとして記録した。raw observationは662件保存できたが、電車移動の距離がfit-to-all boundsを支配し、徒歩区間が数px以下に潰れて肉眼で評価できなかった。
+
+これは位置取得やmap truthの失敗ではなく、Review viewportの欠陥である。広域区間や外れ値を削除して縮尺を直してはならない。
+
+### 操作
+
+Reviewの`TrackCanvas`だけをinteractiveにする。
+
+- 2本指pinchで1〜64倍へ拡大縮小
+- 拡大中は1本指dragでpan
+- `−` / `＋`ボタンで中心を保持した段階zoom
+- `全体`でfit-to-allへreset
+- 現在倍率を表示
+- snapshotが変わった場合はfitへreset
+
+1倍ではone-finger panを取得しない。親`ScrollView`の通常の縦scrollを維持する。拡大後は地図内のdragをpanとして扱い、Reviewの残りは地図外からscrollできる。
+
+### Projection semantics
+
+viewportはfit projectionへuniform scaleとscreen-space panを適用する。
+
+```text
+fit projection
+  → zoom around canvas center or pinch focal point
+  → bounded pan
+  → project read-only primitives
+```
+
+- world pointをpinch focal pointの下に保持する
+- panしてもfit map全体を完全に画面外へ失わない
+- line thickness、start/end、marker iconはbitmap全体のscaleに巻き込まず一定サイズ
+- cellsとuncertainty geometryはworld-space表示として拡大する
+- screen gridとcompassはviewportとは独立した表示補助
+- modeを切り替えても同じviewportを維持する
+
+### 現時点の範囲
+
+- Reviewへ適用
+- LiveMapPreviewは非interactiveのまま
+- transport modeを推定しない
+- 電車区間を自動非表示にしない
+- markerや経路を編集しない
+- basemap、network、cloudを追加しない
+
+長時間混合移動を確認した後、marker focus、時間範囲、transport candidate、walking-only derived viewが必要かを別Issueで判断する。
+
 ## 表示文言
 
 | Internal mode | UI | 意味 |
@@ -105,6 +157,9 @@ M0では正式なpolygon、union、面積計算、GeoJSON bufferを生成しな�
 - screen-space uncertainty capsule
 - local-frame conservative cell aggregation
 - read-only point-estimate centerline
+- React Native `PanResponder`とpure viewport math
+
+pinch / panのためだけにgesture/map frameworkを追加しない。複雑な慣性、回転、tilt、basemap compositionが製品要件になった時点で既存OSSを再評価する。
 
 将来、正式な面積、polygon export、複数端末間unionが製品要件になった場合は、独自GIS engineを拡張せず、既存OSSを再評価する。
 
@@ -113,6 +168,8 @@ M0では正式なpolygon、union、面積計算、GeoJSON bufferを生成しな�
 - 画面上のcenterlineは概ね1,200点以下へdecimateする
 - uncertainty bandはdecimated edge数にboundedする
 - passage cellは最大1,400個
+- gesture stateは`requestAnimationFrame`単位にcoalesceする
+- zoomは最大64倍、panはcanvas sizeとzoomからboundedする
 - 10,000点fixtureでgeometry生成時間をCIに記録する
 - raw evidence、accepted route、markerは変更しない
 
@@ -126,22 +183,31 @@ Pure TypeScript testで次を固定する。
 - later ExplorationSessionだけが`supportingSessionCount`を増やす
 - separated sessionsをband、cell、lineのいずれでも偽接続しない
 - 一回目からcellが生成される
+- zoom clampとpan bound
+- off-center focal pointを保持したzoom
+- screen point変換とprojection変換の一致
+- 16km bounds内の400m徒歩区間が32倍で180px超になる
 - 10,000点でもprimitive数と時間がboundedする
 
 Android Emulatorでは次を確認する。
 
 - 既定表示が`位置の不確実性`
+- `＋`2回で4倍表示
+- 拡大中に1本指panしても倍率を保持
+- `全体`で1倍へreset
 - `通過セル`と`軌跡`へ切り替えられる
 - foreground live preview、終了、Review、marker、再起動後保持を壊さない
 - screenshotとUI hierarchyをartifact化する
 
 ## 実端末で残る判定
 
-内部fixtureとemulatorは意味上・操作上の明らかな欠陥を減らすが、製品価値は証明しない。一つの短い実routeを一度だけ記録し、同じraw evidenceで三表示を切り替えて次を比較する。
+内部fixtureとemulatorは意味上・操作上の明らかな欠陥を減らすが、製品価値は証明しない。同じraw evidenceで三表示とviewportを使い、次を比較する。
 
+- 電車や広域移動を含んでも徒歩部分のturn / loop / 往復を確認できるか
 - thin centerlineより空間を思い出しやすいか
 - uncertaintyが「探索済み面積」ではなく「位置が曖昧」と理解されるか
 - passage cellが単なるゲーム塗りではなく、探索把握に役立つか
+- zoom/panが通常Review scrollを不必要に妨げないか
 - live previewのための画面注視が増えないか
 - Google Maps Timelineの太線化に留まっていないか
 
@@ -152,7 +218,10 @@ Android Emulatorでは次を確認する。
 - 同一sessionのsample densityを再訪回数と誤認させる
 - passage cellが観測根拠と無関係なゲーム演出になる
 - session間を埋める
+- zoom/panのためにrawやderived routeを削除する
+- viewport gestureがReviewの通常scrollを常時奪う
+- markerやlineが倍率に比例して巨大化する
 - 10,000点規模で操作不能になる
 - background描画pollingを必要とする
 
-この場合は表示を完成扱いにせず、anchor、手動確認、topological representationを含む設計へ戻る。
+この場合は表示を完成扱いにせず、renderer OSS、anchor、手動確認、topological representationを含む設計へ戻る。

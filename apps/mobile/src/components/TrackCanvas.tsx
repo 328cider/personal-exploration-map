@@ -1,10 +1,19 @@
-import { useMemo, useState } from "react";
 import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  PanResponder,
   Pressable,
   StyleSheet,
   Text,
   View,
+  type GestureResponderEvent,
   type LayoutChangeEvent,
+  type NativeTouchEvent,
 } from "react-native";
 import type {
   MapSnapshot,
@@ -18,13 +27,43 @@ import {
   projectExploredPoint,
   type MapDisplayMode,
 } from "./exploredSpaceGeometry";
+import {
+  applyMapViewportToProjection,
+  clampMapViewport,
+  FIT_MAP_VIEWPORT,
+  MAX_MAP_ZOOM,
+  MIN_MAP_ZOOM,
+  panMapViewport,
+  transformMapViewportPoint,
+  zoomMapViewportAt,
+  type MapViewport,
+  type MapViewportPoint,
+  type MapViewportSize,
+} from "./mapViewport";
 
 type RenderableSnapshot = MapSnapshot | PersonalMapSnapshot;
 
 interface TrackCanvasProps {
   readonly snapshot: RenderableSnapshot;
   readonly height?: number;
+  readonly interactive?: boolean;
 }
+
+interface PanGestureSession {
+  readonly kind: "pan";
+  readonly startViewport: MapViewport;
+  readonly startPage: MapViewportPoint;
+}
+
+interface PinchGestureSession {
+  readonly kind: "pinch";
+  readonly startViewport: MapViewport;
+  readonly startDistance: number;
+  readonly startLocalFocal: MapViewportPoint;
+  readonly startPageFocal: MapViewportPoint;
+}
+
+type GestureSession = PanGestureSession | PinchGestureSession;
 
 const DISPLAY_MODES: readonly {
   readonly value: MapDisplayMode;
@@ -34,6 +73,9 @@ const DISPLAY_MODES: readonly {
   { value: "cells", label: "通過セル" },
   { value: "track", label: "軌跡" },
 ];
+
+const MAP_GESTURE_THRESHOLD_PX = 4;
+const MAX_UNCERTAINTY_WIDTH_PX = 96;
 
 function markerGlyph(category: string): string {
   switch (category) {
@@ -83,10 +125,121 @@ function modeDescription(
   }
 }
 
-export function TrackCanvas({ height = 360, snapshot }: TrackCanvasProps) {
+function centroid(
+  touches: readonly NativeTouchEvent[],
+  coordinate: "page" | "local",
+): MapViewportPoint {
+  const count = Math.max(1, touches.length);
+  return touches.reduce(
+    (result, touch) => ({
+      x:
+        result.x +
+        (coordinate === "page" ? touch.pageX : touch.locationX) / count,
+      y:
+        result.y +
+        (coordinate === "page" ? touch.pageY : touch.locationY) / count,
+    }),
+    { x: 0, y: 0 },
+  );
+}
+
+function distanceBetweenTouches(
+  touches: readonly NativeTouchEvent[],
+): number {
+  const first = touches[0];
+  const second = touches[1];
+  if (first === undefined || second === undefined) {
+    return 0;
+  }
+  return Math.hypot(second.pageX - first.pageX, second.pageY - first.pageY);
+}
+
+function formatZoom(zoom: number): string {
+  if (zoom >= 10) {
+    return `${Math.round(zoom)}×`;
+  }
+  return `${zoom.toFixed(1).replace(/\.0$/u, "")}×`;
+}
+
+function copyFitViewport(): MapViewport {
+  return { ...FIT_MAP_VIEWPORT };
+}
+
+export function TrackCanvas({
+  height = 360,
+  interactive = false,
+  snapshot,
+}: TrackCanvasProps) {
   const [width, setWidth] = useState(0);
   const [displayMode, setDisplayMode] =
     useState<MapDisplayMode>("uncertainty");
+  const [viewport, setViewport] = useState<MapViewport>(copyFitViewport);
+  const viewportRef = useRef<MapViewport>(viewport);
+  const pendingViewportRef = useRef<MapViewport | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const gestureSessionRef = useRef<GestureSession | null>(null);
+
+  const viewportSize = useMemo<MapViewportSize>(
+    () => ({ width, height }),
+    [height, width],
+  );
+  const boundedViewport = useMemo(
+    () => clampMapViewport(viewport, viewportSize),
+    [viewport, viewportSize],
+  );
+
+  const commitViewport = useCallback(
+    (nextViewport: MapViewport) => {
+      const bounded = clampMapViewport(nextViewport, {
+        width,
+        height,
+      });
+      viewportRef.current = bounded;
+      pendingViewportRef.current = bounded;
+      if (animationFrameRef.current !== null) {
+        return;
+      }
+      animationFrameRef.current = requestAnimationFrame(() => {
+        animationFrameRef.current = null;
+        const pending = pendingViewportRef.current;
+        pendingViewportRef.current = null;
+        if (pending !== null) {
+          setViewport(pending);
+        }
+      });
+    },
+    [height, width],
+  );
+
+  const resetViewport = useCallback(() => {
+    if (animationFrameRef.current !== null) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    pendingViewportRef.current = null;
+    gestureSessionRef.current = null;
+    const fit = copyFitViewport();
+    viewportRef.current = fit;
+    setViewport(fit);
+  }, []);
+
+  useEffect(() => {
+    viewportRef.current = boundedViewport;
+  }, [boundedViewport]);
+
+  useEffect(() => {
+    resetViewport();
+  }, [resetViewport, snapshot]);
+
+  useEffect(
+    () => () => {
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    },
+    [],
+  );
+
   const sourceSegments = useMemo(() => snapshotSegments(snapshot), [snapshot]);
   const geometry = useMemo(
     () =>
@@ -99,9 +252,76 @@ export function TrackCanvas({ height = 360, snapshot }: TrackCanvasProps) {
     [height, snapshot.bounds, sourceSegments, width],
   );
 
+  const viewportProjection = useMemo(() => {
+    if (geometry.projection === null) {
+      return null;
+    }
+    return applyMapViewportToProjection(
+      geometry.projection,
+      boundedViewport,
+    );
+  }, [boundedViewport, geometry.projection]);
+
+  const renderedSegments = useMemo(() => {
+    if (viewportProjection === null) {
+      return [];
+    }
+    return geometry.segments.map((segment) => ({
+      id: segment.id,
+      points: segment.points.map((point) => ({
+        ...projectExploredPoint(viewportProjection, point.source),
+        source: point.source,
+      })),
+    }));
+  }, [geometry.segments, viewportProjection]);
+
+  const renderedBands = useMemo(
+    () =>
+      geometry.uncertaintyBands.map((band) => {
+        const center = transformMapViewportPoint(
+          {
+            x: band.left + band.length / 2,
+            y: band.top + band.width / 2,
+          },
+          boundedViewport,
+          viewportSize,
+        );
+        const length = band.length * boundedViewport.zoom;
+        const bandWidth = Math.min(
+          MAX_UNCERTAINTY_WIDTH_PX,
+          Math.max(10, band.width * boundedViewport.zoom),
+        );
+        return {
+          ...band,
+          left: center.x - length / 2,
+          top: center.y - bandWidth / 2,
+          length,
+          width: bandWidth,
+        };
+      }),
+    [boundedViewport, geometry.uncertaintyBands, viewportSize],
+  );
+
+  const renderedCells = useMemo(
+    () =>
+      geometry.cells.map((cell) => {
+        const topLeft = transformMapViewportPoint(
+          { x: cell.left, y: cell.top },
+          boundedViewport,
+          viewportSize,
+        );
+        return {
+          ...cell,
+          left: topLeft.x,
+          top: topLeft.y,
+          size: cell.size * boundedViewport.zoom,
+        };
+      }),
+    [boundedViewport, geometry.cells, viewportSize],
+  );
+
   const markerPoints = useMemo(() => {
-    const projection = geometry.projection;
-    if (projection === null) {
+    if (viewportProjection === null) {
       return [];
     }
     return snapshot.markers.flatMap((marker) => {
@@ -111,18 +331,144 @@ export function TrackCanvas({ height = 360, snapshot }: TrackCanvasProps) {
       return [
         {
           marker,
-          ...projectExploredPoint(projection, {
+          ...projectExploredPoint(viewportProjection, {
             xMeters: marker.xMeters,
             yMeters: marker.yMeters,
           }),
         },
       ];
     });
-  }, [geometry.projection, snapshot.markers]);
+  }, [snapshot.markers, viewportProjection]);
+
+  const panResponder = useMemo(() => {
+    function beginGesture(event: GestureResponderEvent) {
+      const touches = event.nativeEvent.touches;
+      if (touches.length >= 2) {
+        const startDistance = distanceBetweenTouches(touches);
+        if (startDistance <= 0) {
+          gestureSessionRef.current = null;
+          return;
+        }
+        gestureSessionRef.current = {
+          kind: "pinch",
+          startViewport: viewportRef.current,
+          startDistance,
+          startLocalFocal: centroid(touches, "local"),
+          startPageFocal: centroid(touches, "page"),
+        };
+        return;
+      }
+      const touch = touches[0];
+      if (touch === undefined || viewportRef.current.zoom <= MIN_MAP_ZOOM) {
+        gestureSessionRef.current = null;
+        return;
+      }
+      gestureSessionRef.current = {
+        kind: "pan",
+        startViewport: viewportRef.current,
+        startPage: { x: touch.pageX, y: touch.pageY },
+      };
+    }
+
+    return PanResponder.create({
+      onStartShouldSetPanResponder: (event) =>
+        interactive && event.nativeEvent.touches.length >= 2,
+      onStartShouldSetPanResponderCapture: (event) =>
+        interactive && event.nativeEvent.touches.length >= 2,
+      onMoveShouldSetPanResponder: (event, gestureState) =>
+        interactive &&
+        (event.nativeEvent.touches.length >= 2 ||
+          (viewportRef.current.zoom > MIN_MAP_ZOOM &&
+            (Math.abs(gestureState.dx) >= MAP_GESTURE_THRESHOLD_PX ||
+              Math.abs(gestureState.dy) >= MAP_GESTURE_THRESHOLD_PX))),
+      onMoveShouldSetPanResponderCapture: (event, gestureState) =>
+        interactive &&
+        (event.nativeEvent.touches.length >= 2 ||
+          (viewportRef.current.zoom > MIN_MAP_ZOOM &&
+            (Math.abs(gestureState.dx) >= MAP_GESTURE_THRESHOLD_PX ||
+              Math.abs(gestureState.dy) >= MAP_GESTURE_THRESHOLD_PX))),
+      onPanResponderGrant: beginGesture,
+      onPanResponderMove: (event) => {
+        const touches = event.nativeEvent.touches;
+        if (touches.length >= 2) {
+          if (gestureSessionRef.current?.kind !== "pinch") {
+            beginGesture(event);
+            return;
+          }
+          const session = gestureSessionRef.current;
+          const currentDistance = distanceBetweenTouches(touches);
+          if (currentDistance <= 0) {
+            return;
+          }
+          const currentPageFocal = centroid(touches, "page");
+          const zoomed = zoomMapViewportAt(
+            session.startViewport,
+            session.startViewport.zoom *
+              (currentDistance / session.startDistance),
+            session.startLocalFocal,
+            viewportSize,
+          );
+          commitViewport(
+            panMapViewport(
+              zoomed,
+              currentPageFocal.x - session.startPageFocal.x,
+              currentPageFocal.y - session.startPageFocal.y,
+              viewportSize,
+            ),
+          );
+          return;
+        }
+
+        const touch = touches[0];
+        if (touch === undefined) {
+          return;
+        }
+        if (gestureSessionRef.current?.kind !== "pan") {
+          beginGesture(event);
+          return;
+        }
+        const session = gestureSessionRef.current;
+        commitViewport(
+          panMapViewport(
+            session.startViewport,
+            touch.pageX - session.startPage.x,
+            touch.pageY - session.startPage.y,
+            viewportSize,
+          ),
+        );
+      },
+      onPanResponderRelease: () => {
+        gestureSessionRef.current = null;
+      },
+      onPanResponderTerminate: () => {
+        gestureSessionRef.current = null;
+      },
+      onPanResponderTerminationRequest: () => false,
+      onShouldBlockNativeResponder: () => true,
+    });
+  }, [commitViewport, interactive, viewportSize]);
 
   function handleLayout(event: LayoutChangeEvent) {
     setWidth(event.nativeEvent.layout.width);
   }
+
+  function zoomBy(factor: number) {
+    if (width <= 0) {
+      return;
+    }
+    commitViewport(
+      zoomMapViewportAt(
+        viewportRef.current,
+        viewportRef.current.zoom * factor,
+        { x: width / 2, y: height / 2 },
+        viewportSize,
+      ),
+    );
+  }
+
+  const canZoomOut = boundedViewport.zoom > MIN_MAP_ZOOM;
+  const canZoomIn = boundedViewport.zoom < MAX_MAP_ZOOM;
+  const atFit = !canZoomOut;
 
   return (
     <View style={styles.wrapper}>
@@ -155,7 +501,78 @@ export function TrackCanvas({ height = 360, snapshot }: TrackCanvasProps) {
         })}
       </View>
 
-      <View style={[styles.canvas, { height }]} onLayout={handleLayout}>
+      {interactive ? (
+        <View style={styles.viewportBar}>
+          <Text style={styles.viewportHint}>
+            2本指で拡大。拡大中は1本指で移動。
+          </Text>
+          <View accessibilityLabel="地図の拡大縮小" style={styles.viewportControls}>
+            <Pressable
+              accessibilityLabel="地図を縮小"
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !canZoomOut }}
+              disabled={!canZoomOut}
+              hitSlop={6}
+              onPress={() => zoomBy(0.5)}
+              style={({ pressed }: { readonly pressed: boolean }) => [
+                styles.viewportButton,
+                !canZoomOut ? styles.viewportButtonDisabled : null,
+                pressed && canZoomOut ? styles.viewportButtonPressed : null,
+              ]}
+            >
+              <Text style={styles.viewportButtonText}>−</Text>
+            </Pressable>
+            <Text
+              accessibilityLabel={`地図の倍率 ${formatZoom(boundedViewport.zoom)}`}
+              accessibilityRole="text"
+              style={styles.zoomReadout}
+            >
+              {formatZoom(boundedViewport.zoom)}
+            </Text>
+            <Pressable
+              accessibilityLabel="地図を拡大"
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !canZoomIn }}
+              disabled={!canZoomIn}
+              hitSlop={6}
+              onPress={() => zoomBy(2)}
+              style={({ pressed }: { readonly pressed: boolean }) => [
+                styles.viewportButton,
+                !canZoomIn ? styles.viewportButtonDisabled : null,
+                pressed && canZoomIn ? styles.viewportButtonPressed : null,
+              ]}
+            >
+              <Text style={styles.viewportButtonText}>＋</Text>
+            </Pressable>
+            <Pressable
+              accessibilityLabel="地図を全体表示"
+              accessibilityRole="button"
+              accessibilityState={{ disabled: atFit }}
+              disabled={atFit}
+              hitSlop={6}
+              onPress={resetViewport}
+              style={({ pressed }: { readonly pressed: boolean }) => [
+                styles.fitButton,
+                atFit ? styles.viewportButtonDisabled : null,
+                pressed && !atFit ? styles.viewportButtonPressed : null,
+              ]}
+            >
+              <Text style={styles.fitButtonText}>全体</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+
+      <View
+        accessibilityLabel={
+          interactive
+            ? "探索地図。2本指で拡大し、拡大中は1本指で移動できます。"
+            : "探索地図"
+        }
+        style={[styles.canvas, { height }]}
+        onLayout={handleLayout}
+        {...(interactive ? panResponder.panHandlers : {})}
+      >
         {[1, 2, 3, 4].map((step) => (
           <View
             key={`vertical-${step}`}
@@ -170,7 +587,7 @@ export function TrackCanvas({ height = 360, snapshot }: TrackCanvasProps) {
         ))}
 
         {displayMode === "cells"
-          ? geometry.cells.map((cell) => (
+          ? renderedCells.map((cell) => (
               <View
                 key={`cell-${cell.id}`}
                 accessibilityElementsHidden
@@ -190,7 +607,7 @@ export function TrackCanvas({ height = 360, snapshot }: TrackCanvasProps) {
           : null}
 
         {displayMode === "uncertainty"
-          ? geometry.uncertaintyBands.map((band) => (
+          ? renderedBands.map((band) => (
               <View
                 key={`uncertainty-${band.id}`}
                 accessibilityElementsHidden
@@ -211,7 +628,7 @@ export function TrackCanvas({ height = 360, snapshot }: TrackCanvasProps) {
             ))
           : null}
 
-        {geometry.segments.flatMap((segment) =>
+        {renderedSegments.flatMap((segment) =>
           segment.points.slice(1).map((point, index) => {
             const previous = segment.points[index];
             if (previous === undefined) {
@@ -252,7 +669,7 @@ export function TrackCanvas({ height = 360, snapshot }: TrackCanvasProps) {
           }),
         )}
 
-        {geometry.segments.map((segment, index) => {
+        {renderedSegments.map((segment, index) => {
           const first = segment.points[0];
           if (first === undefined) {
             return null;
@@ -269,7 +686,7 @@ export function TrackCanvas({ height = 360, snapshot }: TrackCanvasProps) {
           );
         })}
 
-        {geometry.segments.map((segment, index) => {
+        {renderedSegments.map((segment, index) => {
           const last = segment.points.at(-1);
           if (segment.points.length < 2 || last === undefined) {
             return null;
@@ -361,6 +778,71 @@ const styles = StyleSheet.create({
   },
   modeButtonTextSelected: {
     color: palette.white,
+  },
+  viewportBar: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  viewportHint: {
+    flexGrow: 1,
+    flexShrink: 1,
+    color: palette.mutedInk,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  viewportControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  viewportButton: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+    backgroundColor: palette.surface,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  fitButton: {
+    minWidth: 56,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.sm,
+    borderRadius: 12,
+    backgroundColor: palette.surface,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  viewportButtonPressed: {
+    backgroundColor: palette.primarySoft,
+  },
+  viewportButtonDisabled: {
+    opacity: 0.35,
+  },
+  viewportButtonText: {
+    color: palette.primary,
+    fontSize: 23,
+    lineHeight: 26,
+    fontWeight: "700",
+  },
+  fitButtonText: {
+    color: palette.primary,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  zoomReadout: {
+    minWidth: 46,
+    color: palette.ink,
+    fontSize: 12,
+    fontWeight: "800",
+    textAlign: "center",
   },
   canvas: {
     width: "100%",
