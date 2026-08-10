@@ -32,6 +32,7 @@ export type RejectionReason =
   | "invalid-confidence"
   | "invalid-timestamp"
   | "sample-before-session-start"
+  | "sample-after-session-end"
   | "timestamp-not-increasing"
   | "accuracy-too-low"
   | "implausible-jump"
