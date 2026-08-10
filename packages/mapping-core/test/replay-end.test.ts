@@ -40,7 +40,7 @@ test("replay preserves a late platform callback but excludes it after exploratio
   assert.equal(session.rawSamples.length, 2);
   assert.equal(session.track.length, 1);
   assert.deepEqual(session.rejectedSamples, [
-    { sampleId: "after-end", reason: "session-not-recording" },
+    { sampleId: "after-end", reason: "sample-after-session-end" },
   ]);
   assert.equal(snapshot.stats.rawSampleCount, 2);
   assert.equal(snapshot.stats.acceptedSampleCount, 1);

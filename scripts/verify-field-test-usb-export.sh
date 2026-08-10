@@ -34,6 +34,9 @@ grep -q '^sample_after_end_count=' "$summary"
 grep -q '^callback_gap_ms_count=' "$summary"
 grep -q '^callback_newest_observation_age_ms_count=' "$summary"
 grep -q '^callback_future_observation_batches=' "$summary"
+grep -q '^marker_latest_observation_age_ms_count=' "$summary"
+grep -q '^marker_latest_observation_missing_count=' "$summary"
+grep -q '^marker_latest_observation_future_count=' "$summary"
 if grep -Eiq '(^|_)(latitude|longitude)(_|=)' "$summary"; then
   echo "Coordinate-free summary unexpectedly contains coordinate field names." >&2
   exit 1
@@ -73,6 +76,10 @@ try:
     callback_rows = connection.execute(
         "SELECT payload_json FROM tracking_diagnostic_events "
         "WHERE kind = 'callback.received' ORDER BY occurred_at"
+    ).fetchall()
+    marker_rows = connection.execute(
+        "SELECT payload_json FROM tracking_diagnostic_events "
+        "WHERE kind = 'marker.input.completed' ORDER BY occurred_at"
     ).fetchall()
     if user_version >= 4:
         raw_rows = connection.execute(
@@ -119,6 +126,20 @@ for payload in callback_payloads:
     assert isinstance(payload.get("callbackReceivedAtMs"), (int, float)), payload
     assert isinstance(payload.get("firstSampleAtMs"), (int, float)), payload
     assert isinstance(payload.get("lastSampleAtMs"), (int, float)), payload
+
+marker_payloads = [json.loads(row[0]) for row in marker_rows if row[0]]
+assert marker_payloads, "marker.input.completed diagnostics are missing"
+for payload in marker_payloads:
+    assert isinstance(payload.get("durationMs"), (int, float)), payload
+    assert isinstance(payload.get("latestObservationMissing"), bool), payload
+    assert isinstance(payload.get("latestObservationFuture"), bool), payload
+    age = payload.get("latestObservationAgeMs")
+    assert age is None or isinstance(age, (int, float)), payload
+    assert (
+        age is not None
+        or payload["latestObservationMissing"]
+        or payload["latestObservationFuture"]
+    ), payload
 
 ordinals_by_exploration = {}
 if user_version >= 4:
@@ -182,6 +203,8 @@ assert manifest["autoUpload"] is False
             "diagnosticsFormat": 3,
             "callbackReceivedBatchCount": len(callback_payloads),
             "callbackObservationTimingStatus": "verified",
+            "markerCompletedCount": len(marker_payloads),
+            "markerObservationFreshnessStatus": "verified",
             "exactRawEvidenceStatus": (
                 "verified" if user_version >= 4 else "not-available-schema-v3"
             ),

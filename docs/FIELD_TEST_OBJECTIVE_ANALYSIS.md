@@ -1,11 +1,11 @@
 # Field-test客観解析
 
 更新日: 2026-08-10
-対象: Issue #77 / Issue #3 / Issue #114 / Issue #119
+対象: Issue #77 / Issue #3 / Issue #114 / Issue #116 / Issue #119
 
 ## 目的
 
-実探索後にUSBで回収したField-test bundleから、端末・時刻・電池・権限・位置サンプル・欠落・provider lifecycle・エラーを毎回手作業で読み取らず、客観的な技術状態を一定の規則で整理する。
+実探索後にUSBで回収したField-test bundleから、端末・時刻・電池・権限・位置サンプル・欠落・provider lifecycle・marker attachment freshness・エラーを毎回手作業で読み取らず、客観的な技術状態を一定の規則で整理する。
 
 この解析は、製品のGo / Narrow / Stopを自動決定しない。次は端末から判断できないため、`docs/FIELD_EXPLORATION_REVIEW_TEMPLATE.md`で人が評価する。
 
@@ -145,7 +145,9 @@ PASSでも次は未判定である。
 
 - 30秒または60秒以上のcallback delivery gap
 - generic modeで確認された遅延一括配送
-- live map / marker位置の鮮度低下
+- live mapの鮮度低下
+- markerが30秒以上古いaccepted observationへ付いた可能性
+- completed markerにaccepted observationが無い
 - acceptance rate低下
 - battery saver
 - battery optimization対象
@@ -182,6 +184,8 @@ blocking evidenceがある。
 - S0のblocking callback gap
 - generic modeでもcatch-up deliveryを裏付けられない120秒超callback gap
 - observation stream自体のoutage
+- callback receive timeより未来のobservation timestamp
+- marker時刻より未来のaccepted observationへmarkerが付いた
 - provider / environment lifecycle欠落
 - critical thermal
 - checksum不一致
@@ -209,6 +213,57 @@ callback delivery gap
 observation gapがsession durationを超えても、それだけでcallback停止とは判定しない。cached / staleまたはsession-window外sampleの疑いとしてWARNにし、raw evidenceは削除しない。
 
 診断format 3ではcallback gapに加え、callback到着時のoldest / newest observation age、largest batch、session開始前・終了後sample件数を出す。古いbundleにcallback gapがない場合はsample gapを補助的に読むが、時刻整合性が疑わしい場合はhard outageへ昇格させない。
+
+## Session windowとderived route
+
+raw sampleはsession境界外でも削除しない。一方、derived routeは明示的な探索時間窓へ限定する。
+
+```text
+recordedAtMs < startedAtMs
+  → sample-before-session-start
+
+startedAtMs <= recordedAtMs <= endedAtMs
+  → 通常のquality / frame判定
+
+recordedAtMs > endedAtMs
+  → sample-after-session-end
+```
+
+- pre-start cached fixは最初のframe originにしない
+- post-end fixをcompleted routeへ戻さない
+- completed sessionへ後から届いたin-window sampleは`session-not-recording`
+- non-finite timestampは`invalid-timestamp`
+- callback future timestampはraw保持しつつobjective FAILにし、非再現な`Date.now()`判定をcoreへ入れない
+
+正本はADR 0013である。
+
+## Marker attachment freshness
+
+source positionを指定しないmarkerは、marker時刻以前の最新accepted pointへfallbackする。診断も同じauthorityに合わせる。
+
+completed markerごとに次を保存・集計する。
+
+```text
+latestObservationAgeMs
+latestObservationMissing
+latestObservationFuture
+```
+
+coordinate-free summary / JSON / Markdownでは次のaggregateだけを出す。
+
+```text
+marker_latest_observation_age_ms_count/min/median/p95/max
+marker_latest_observation_missing_count
+marker_latest_observation_future_count
+```
+
+判定:
+
+- age最大 >=30秒: `marker_attachment_stale` WARN
+- accepted pointなし: `marker_observation_missing` WARN
+- accepted point timestampがmarker diagnostic時刻より未来: `marker_observation_from_future` FAIL
+
+marker本文、座標、map/session IDは診断にも共有reportにも含めない。diagnostic read failureでmarker保存を止めない。
 
 ## Generic modeの遅延一括配送
 
@@ -274,8 +329,9 @@ live_freshness_degraded
 - callback oldest / newest observation age distribution
 - future / missing observation timestamp batch count
 - session-window外sampleの件数と最大ずれ
+- marker input duration
+- marker attachment freshness aggregate
 - lifecycle
-- marker完了数
 - operational error
 - sessionごとのobjective status
 - evaluated exploration indexとselection reason
@@ -302,8 +358,10 @@ live_freshness_degraded
 - observation gapとcallback gap
 - raw observation lossと遅延一括配送
 - post-hoc completenessとlive freshness
+- raw session-window evidenceとderived route
+- marker入力完了とmarker attachment freshness
 
-これは結果を都合よくPASSへ変更するものではない。generic modeのbuffered deliveryもWARNであり、live freshness低下を明示する。S0のlive-freshness gateは維持する。
+これは結果を都合よくPASSへ変更するものではない。generic modeのbuffered deliveryもWARNであり、live freshness低下を明示する。future timestampはFAILのまま、S0のlive-freshness gateも維持する。
 
 次を混同しない。
 

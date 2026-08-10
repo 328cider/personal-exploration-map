@@ -109,6 +109,13 @@ function values(overrides = {}) {
     marker_input_ms_max: 20_723,
     marker_input_completed: 5,
     marker_input_cancelled: 0,
+    marker_latest_observation_age_ms_count: 5,
+    marker_latest_observation_age_ms_min: 300,
+    marker_latest_observation_age_ms_median: 2_000,
+    marker_latest_observation_age_ms_p95: 753_000,
+    marker_latest_observation_age_ms_max: 753_000,
+    marker_latest_observation_missing_count: 0,
+    marker_latest_observation_future_count: 0,
     last_error_kind: "none",
     last_error_message: "none",
     lifecycle_count: 8,
@@ -220,6 +227,7 @@ test("generic catch-up delivery is WARN rather than raw-loss FAIL", async () => 
     assert.equal(codes(result.report).has("callback_gap_120s"), false);
     assert.equal(codes(result.report).has("callback_delivery_batched"), true);
     assert.equal(codes(result.report).has("live_freshness_degraded"), true);
+    assert.equal(codes(result.report).has("marker_attachment_stale"), true);
     assert.equal(
       result.report.evaluatedExploration.values.callback_largest_batch,
       107,
@@ -229,8 +237,14 @@ test("generic catch-up delivery is WARN rather than raw-loss FAIL", async () => 
         .callback_oldest_observation_age_ms_max,
       753_019,
     );
+    assert.equal(
+      result.report.evaluatedExploration.values
+        .marker_latest_observation_age_ms_max,
+      753_000,
+    );
     const markdown = await fs.readFile(result.markdownPath, "utf8");
     assert.match(markdown, /delayed buffered delivery/u);
+    assert.match(markdown, /Marker attachment freshness/u);
     assert.doesNotMatch(markdown, /latitude|longitude|personal_map_id/u);
   });
 });
@@ -269,6 +283,68 @@ test("generic mode remains FAIL when received samples are unaccounted", async ()
       assert.equal(result.report.status, "FAIL");
       assert.equal(codes(result.report).has("callback_samples_unaccounted"), true);
       assert.equal(codes(result.report).has("callback_gap_120s"), true);
+    },
+  );
+});
+
+test("future callback timestamps remain FAIL and cannot use buffered downgrade", async () => {
+  await withBundle(
+    values({ callback_future_observation_batches: 1 }),
+    async (bundle) => {
+      const result = await analyzeFieldTestEvidence(bundle, { mode: "generic" });
+      assert.equal(result.report.status, "FAIL");
+      assert.equal(codes(result.report).has("future_observation_timestamp"), true);
+      assert.equal(codes(result.report).has("callback_gap_120s"), true);
+      assert.equal(codes(result.report).has("callback_delivery_batched"), false);
+    },
+  );
+});
+
+test("marker freshness missing warns while future attachment fails", async () => {
+  await withBundle(
+    values({
+      callback_gap_at_least_120s: 0,
+      callback_gap_ms_max: 10_000,
+      callback_oldest_observation_age_ms_max: 9_000,
+      marker_latest_observation_age_ms_count: 0,
+      marker_latest_observation_age_ms_min: null,
+      marker_latest_observation_age_ms_median: null,
+      marker_latest_observation_age_ms_p95: null,
+      marker_latest_observation_age_ms_max: null,
+      marker_latest_observation_missing_count: 1,
+      marker_latest_observation_future_count: 0,
+    }),
+    async (bundle) => {
+      const missing = await analyzeFieldTestEvidence(bundle, {
+        mode: "generic",
+      });
+      assert.equal(missing.report.status, "WARN");
+      assert.equal(codes(missing.report).has("marker_observation_missing"), true);
+    },
+  );
+
+  await withBundle(
+    values({
+      callback_gap_at_least_120s: 0,
+      callback_gap_ms_max: 10_000,
+      callback_oldest_observation_age_ms_max: 9_000,
+      marker_latest_observation_age_ms_count: 0,
+      marker_latest_observation_age_ms_min: null,
+      marker_latest_observation_age_ms_median: null,
+      marker_latest_observation_age_ms_p95: null,
+      marker_latest_observation_age_ms_max: null,
+      marker_latest_observation_missing_count: 0,
+      marker_latest_observation_future_count: 1,
+    }),
+    async (bundle) => {
+      const future = await analyzeFieldTestEvidence(bundle, {
+        mode: "generic",
+      });
+      assert.equal(future.report.status, "FAIL");
+      assert.equal(
+        codes(future.report).has("marker_observation_from_future"),
+        true,
+      );
     },
   );
 });

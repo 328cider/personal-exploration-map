@@ -10,9 +10,10 @@ import {
 } from "./analyze-field-test-summary.mjs";
 
 const REPORT_SCHEMA_VERSION = 3;
+const MARKER_STALE_WARNING_MS = 30_000;
 const SEVERITY_RANK = { INFO: 0, WARN: 1, INCONCLUSIVE: 2, FAIL: 3 };
 
-const CALLBACK_SAFE_FIELDS = [
+const ADDITIONAL_SAFE_FIELDS = [
   "callback_largest_batch",
   "callback_oldest_observation_age_ms_count",
   "callback_oldest_observation_age_ms_min",
@@ -26,6 +27,13 @@ const CALLBACK_SAFE_FIELDS = [
   "callback_newest_observation_age_ms_max",
   "callback_future_observation_batches",
   "callback_missing_observation_timestamp_batches",
+  "marker_latest_observation_age_ms_count",
+  "marker_latest_observation_age_ms_min",
+  "marker_latest_observation_age_ms_median",
+  "marker_latest_observation_age_ms_p95",
+  "marker_latest_observation_age_ms_max",
+  "marker_latest_observation_missing_count",
+  "marker_latest_observation_future_count",
 ];
 
 function numberValue(value) {
@@ -73,8 +81,8 @@ function formatMinutes(values) {
   return duration === null ? "—" : (duration / 60_000).toFixed(1);
 }
 
-function copyCallbackEvidence(source, target) {
-  for (const field of CALLBACK_SAFE_FIELDS) {
+function copyAdditionalEvidence(source, target) {
+  for (const field of ADDITIONAL_SAFE_FIELDS) {
     if (Object.hasOwn(source, field)) {
       target[field] = source[field];
     }
@@ -83,6 +91,10 @@ function copyCallbackEvidence(source, target) {
 
 function callbackGapFindingIndex(findings) {
   return findings.findIndex((item) => item.code === "callback_gap_120s");
+}
+
+function hasFinding(findings, code) {
+  return findings.some((item) => item.code === code);
 }
 
 function bufferedDeliveryEvidence(values) {
@@ -147,10 +159,82 @@ function bufferedDeliveryEvidence(values) {
   };
 }
 
+function addTimingFindings(findings, values) {
+  const result = [...findings];
+  const futureCallbackBatches =
+    numberValue(values.callback_future_observation_batches) ?? 0;
+  const markerFutureCount =
+    numberValue(values.marker_latest_observation_future_count) ?? 0;
+  const markerMissingCount =
+    numberValue(values.marker_latest_observation_missing_count) ?? 0;
+  const markerAgeMaximumMs = numberValue(
+    values.marker_latest_observation_age_ms_max,
+  );
+
+  if (
+    futureCallbackBatches > 0 &&
+    !hasFinding(result, "future_observation_timestamp")
+  ) {
+    result.push(
+      finding(
+        "FAIL",
+        "future_observation_timestamp",
+        `${futureCallbackBatches} callback batch(es) contained an observation timestamp after the callback receive time. Raw evidence is preserved, but this run cannot qualify until the clock/provenance mismatch is understood.`,
+        "data-quality",
+      ),
+    );
+  }
+
+  if (
+    markerFutureCount > 0 &&
+    !hasFinding(result, "marker_observation_from_future")
+  ) {
+    result.push(
+      finding(
+        "FAIL",
+        "marker_observation_from_future",
+        `${markerFutureCount} completed marker input(s) resolved against an accepted observation timestamp later than the marker diagnostic time.`,
+        "data-quality",
+      ),
+    );
+  }
+
+  if (
+    markerMissingCount > 0 &&
+    !hasFinding(result, "marker_observation_missing")
+  ) {
+    result.push(
+      finding(
+        "WARN",
+        "marker_observation_missing",
+        `${markerMissingCount} completed marker input(s) had no accepted observation available for attachment-freshness measurement.`,
+        "data-quality",
+      ),
+    );
+  }
+
+  if (
+    markerAgeMaximumMs !== null &&
+    markerAgeMaximumMs >= MARKER_STALE_WARNING_MS &&
+    !hasFinding(result, "marker_attachment_stale")
+  ) {
+    result.push(
+      finding(
+        "WARN",
+        "marker_attachment_stale",
+        `At least one completed marker input may have attached to a stale accepted observation; maximum measured age was ${markerAgeMaximumMs} ms.`,
+        "data-quality",
+      ),
+    );
+  }
+
+  return result;
+}
+
 function reclassifyExploration(evaluation, rawValues, mode) {
   const values = { ...evaluation.values };
-  copyCallbackEvidence(rawValues, values);
-  let findings = [...evaluation.findings];
+  copyAdditionalEvidence(rawValues, values);
+  let findings = addTimingFindings(evaluation.findings, rawValues);
 
   if (mode === "generic") {
     const gapIndex = callbackGapFindingIndex(findings);
@@ -218,8 +302,9 @@ function renderMarkdown(report) {
     `| Observation gap | p95 ${markdownCell(evaluated.sample_gap_ms_p95)} ms / max ${markdownCell(evaluated.sample_gap_ms_max)} ms / >=30s ${markdownCell(evaluated.sample_gap_at_least_30s)} |`,
     `| Callback gap | p95 ${markdownCell(evaluated.callback_gap_ms_p95)} ms / max ${markdownCell(evaluated.callback_gap_ms_max)} ms / >=120s ${markdownCell(evaluated.callback_gap_at_least_120s)} |`,
     `| Catch-up evidence | largest batch ${markdownCell(evaluated.callback_largest_batch)} / oldest age max ${markdownCell(evaluated.callback_oldest_observation_age_ms_max)} ms / newest age max ${markdownCell(evaluated.callback_newest_observation_age_ms_max)} ms |`,
-    `| Battery | ${markdownCell(evaluated.start_battery_percent)}% → ${markdownCell(evaluated.end_battery_percent)}% / consumed ${markdownCell(evaluated.battery_consumed_percentage_points)} pt |`,
     `| Marker | completed ${markdownCell(evaluated.marker_input_completed)} / cancelled ${markdownCell(evaluated.marker_input_cancelled)} |`,
+    `| Marker attachment freshness | age p95 ${markdownCell(evaluated.marker_latest_observation_age_ms_p95)} ms / max ${markdownCell(evaluated.marker_latest_observation_age_ms_max)} ms / missing ${markdownCell(evaluated.marker_latest_observation_missing_count)} / future ${markdownCell(evaluated.marker_latest_observation_future_count)} |`,
+    `| Battery | ${markdownCell(evaluated.start_battery_percent)}% → ${markdownCell(evaluated.end_battery_percent)}% / consumed ${markdownCell(evaluated.battery_consumed_percentage_points)} pt |`,
     `| Last error | ${markdownCell(evaluated.last_error_kind)} / ${markdownCell(evaluated.last_error_message)} |`,
     "",
     "## Findings",
@@ -243,6 +328,7 @@ function renderMarkdown(report) {
     "",
     "- Observation continuity and eventual persistence describe post-hoc raw-evidence completeness.",
     "- Callback delivery gaps describe live freshness and may delay the map or marker attachment without losing stored observations.",
+    "- Marker attachment freshness measures marker-save time against the latest accepted observation available to the derived route.",
     "- Generic mode may classify confirmed catch-up delivery as WARN; S0 keeps its stricter live-freshness gate.",
     "",
     "## Privacy boundary",

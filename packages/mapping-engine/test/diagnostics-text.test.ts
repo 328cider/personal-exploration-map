@@ -151,6 +151,15 @@ function report(
       maximum: 4_500,
       completedCount: 1,
       cancelledCount: 0,
+      latestObservationAgeMs: {
+        count: 1,
+        minimum: 3_000,
+        median: 3_000,
+        p95: 3_000,
+        maximum: 3_000,
+      },
+      missingLatestObservationCount: 0,
+      futureLatestObservationCount: 0,
     },
     environment: {
       start: environmentSnapshot(),
@@ -178,7 +187,7 @@ function report(
   };
 }
 
-test("coordinate-free text separates callback delivery and observation timing", () => {
+test("coordinate-free text separates delivery, observation, and marker freshness", () => {
   const formatted = formatTrackingDiagnosticsSummary(report());
 
   assert.match(formatted, /personal_exploration_map_diagnostics_format=3/u);
@@ -207,6 +216,9 @@ test("coordinate-free text separates callback delivery and observation timing", 
     /callback_missing_observation_timestamp_batches=0/u,
   );
   assert.match(formatted, /marker_input_ms_median=4500/u);
+  assert.match(formatted, /marker_latest_observation_age_ms_max=3000/u);
+  assert.match(formatted, /marker_latest_observation_missing_count=0/u);
+  assert.match(formatted, /marker_latest_observation_future_count=0/u);
   assert.match(formatted, /last_error_message=database busy retry scheduled/u);
   assert.match(formatted, /lifecycle_1_offset_ms=1000/u);
 
@@ -251,6 +263,9 @@ test("empty diagnostics remain explicit and stable", () => {
         ...emptyDistribution(),
         completedCount: 0,
         cancelledCount: 0,
+        latestObservationAgeMs: emptyDistribution(),
+        missingLatestObservationCount: 0,
+        futureLatestObservationCount: 0,
       },
       environment: {
         start: null,
@@ -269,6 +284,8 @@ test("empty diagnostics remain explicit and stable", () => {
   assert.match(formatted, /sample_before_start_max_ms=null/u);
   assert.match(formatted, /callback_gap_ms_median=null/u);
   assert.match(formatted, /callback_newest_observation_age_ms_max=null/u);
+  assert.match(formatted, /marker_latest_observation_age_ms_max=null/u);
+  assert.match(formatted, /marker_latest_observation_missing_count=0/u);
   assert.match(formatted, /device_model=null/u);
   assert.match(formatted, /start_battery_percent=null/u);
   assert.match(formatted, /last_error_kind=none/u);

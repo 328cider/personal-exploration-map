@@ -30,6 +30,9 @@ export interface RawPositionSample {
 export type RejectionReason =
   | "invalid-coordinate"
   | "invalid-confidence"
+  | "invalid-timestamp"
+  | "sample-before-session-start"
+  | "sample-after-session-end"
   | "timestamp-not-increasing"
   | "accuracy-too-low"
   | "implausible-jump"

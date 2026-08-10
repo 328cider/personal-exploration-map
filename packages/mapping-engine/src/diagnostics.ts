@@ -106,6 +106,10 @@ export interface TrackingLifecycleTransition {
 export interface MarkerInputSummary extends NumericDistributionSummary {
   readonly completedCount: number;
   readonly cancelledCount: number;
+  /** Marker-save time minus the latest persisted observation timestamp. */
+  readonly latestObservationAgeMs: NumericDistributionSummary;
+  readonly missingLatestObservationCount: number;
+  readonly futureLatestObservationCount: number;
 }
 
 export interface TrackingEnvironmentSnapshot {
@@ -176,6 +180,9 @@ export interface ExplorationTrackingDiagnostics {
 const REJECTION_REASONS: readonly RejectionReason[] = [
   "invalid-coordinate",
   "invalid-confidence",
+  "invalid-timestamp",
+  "sample-before-session-start",
+  "sample-after-session-end",
   "timestamp-not-increasing",
   "accuracy-too-low",
   "implausible-jump",
@@ -387,11 +394,23 @@ function createMarkerInputSummary(
     const duration = finiteNonNegative(event.payload?.durationMs);
     return duration === null ? [] : [duration];
   });
+  const latestObservationAges = completed.flatMap((event) => {
+    const age = finiteNonNegative(event.payload?.latestObservationAgeMs);
+    return age === null ? [] : [age];
+  });
   return {
     ...summarizeNumericDistribution(durations),
     completedCount: completed.length,
     cancelledCount: events.filter(
       (event) => event.kind === "marker.input.cancelled",
+    ).length,
+    latestObservationAgeMs:
+      summarizeNumericDistribution(latestObservationAges),
+    missingLatestObservationCount: completed.filter(
+      (event) => payloadBoolean(event, "latestObservationMissing") === true,
+    ).length,
+    futureLatestObservationCount: completed.filter(
+      (event) => payloadBoolean(event, "latestObservationFuture") === true,
     ).length,
   };
 }

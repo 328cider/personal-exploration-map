@@ -180,6 +180,16 @@ export function formatTrackingDiagnosticsSummary(
     ...distribution("marker_input_ms", report.markerInputMs),
     `marker_input_completed=${report.markerInputMs.completedCount}`,
     `marker_input_cancelled=${report.markerInputMs.cancelledCount}`,
+    ...distribution(
+      "marker_latest_observation_age_ms",
+      report.markerInputMs.latestObservationAgeMs,
+    ),
+    `marker_latest_observation_missing_count=${
+      report.markerInputMs.missingLatestObservationCount
+    }`,
+    `marker_latest_observation_future_count=${
+      report.markerInputMs.futureLatestObservationCount
+    }`,
     `last_error_kind=${report.lastError?.kind ?? "none"}`,
     `last_error_message=${
       report.lastError === null ? "none" : oneLine(report.lastError.message)

@@ -109,7 +109,7 @@ test("numeric summaries use deterministic nearest-rank percentiles", () => {
   );
 });
 
-test("tracking diagnostics separate callback delivery from observation timing", () => {
+test("tracking diagnostics separate delivery, observation, and marker freshness", () => {
   const report = createExplorationTrackingDiagnostics({
     providerId: "gnss-background",
     exploration: {
@@ -174,9 +174,15 @@ test("tracking diagnostics separate callback delivery from observation timing", 
       }),
       event("event-9", "marker.input.completed", 160_000, {
         durationMs: 4_500,
+        latestObservationAgeMs: 5_000,
+        latestObservationMissing: false,
+        latestObservationFuture: false,
       }),
       event("event-10", "marker.input.completed", 170_000, {
         durationMs: 7_000,
+        latestObservationAgeMs: 20_000,
+        latestObservationMissing: false,
+        latestObservationFuture: false,
       }),
       event("event-11", "marker.input.cancelled", 180_000, {
         durationMs: 2_000,
@@ -281,6 +287,15 @@ test("tracking diagnostics separate callback delivery from observation timing", 
     maximum: 7_000,
     completedCount: 2,
     cancelledCount: 1,
+    latestObservationAgeMs: {
+      count: 2,
+      minimum: 5_000,
+      median: 5_000,
+      p95: 20_000,
+      maximum: 20_000,
+    },
+    missingLatestObservationCount: 0,
+    futureLatestObservationCount: 0,
   });
   assert.equal(report.environment.start?.model, "Pixel Test");
   assert.equal(report.environment.start?.batteryLevelPercent, 96);
@@ -317,10 +332,12 @@ test("tracking diagnostics separate callback delivery from observation timing", 
   assert.match(formatted, /callback_gap_ms_max=35000/u);
   assert.match(formatted, /callback_newest_observation_age_ms_p95=1000/u);
   assert.match(formatted, /sample_before_start_count=0/u);
+  assert.match(formatted, /marker_latest_observation_age_ms_p95=20000/u);
+  assert.match(formatted, /marker_latest_observation_missing_count=0/u);
   assert.doesNotMatch(formatted, /latitude|longitude/u);
 });
 
-test("sample-window and future callback timing remain coordinate-free", () => {
+test("sample-window and future timing remain coordinate-free and fail closed", () => {
   const report = createExplorationTrackingDiagnostics({
     providerId: "gnss-background",
     exploration: {
@@ -345,6 +362,18 @@ test("sample-window and future callback timing remain coordinate-free", () => {
       event("callback-2", "callback.received", 130_500, {
         sampleCount: 1,
       }),
+      event("marker-missing", "marker.input.completed", 180_000, {
+        durationMs: 1_000,
+        latestObservationAgeMs: null,
+        latestObservationMissing: true,
+        latestObservationFuture: false,
+      }),
+      event("marker-future", "marker.input.completed", 190_000, {
+        durationMs: 1_500,
+        latestObservationAgeMs: null,
+        latestObservationMissing: false,
+        latestObservationFuture: true,
+      }),
     ],
   });
 
@@ -354,6 +383,11 @@ test("sample-window and future callback timing remain coordinate-free", () => {
     afterEndCount: 1,
     afterEndMaximumMs: 15_000,
   });
+  assert.deepEqual(report.rejectionReasons, [
+    { reason: "sample-before-session-start", count: 1 },
+    { reason: "sample-after-session-end", count: 1 },
+  ]);
+  assert.equal(report.acceptedSampleCount, 1);
   assert.equal(report.callbacks.futureObservationBatchCount, 1);
   assert.equal(report.callbacks.missingObservationTimestampBatchCount, 1);
   assert.deepEqual(report.callbacks.deliveryGapsMs, {
@@ -365,5 +399,14 @@ test("sample-window and future callback timing remain coordinate-free", () => {
     atLeast30Seconds: 1,
     atLeast60Seconds: 0,
     atLeast120Seconds: 0,
+  });
+  assert.equal(report.markerInputMs.missingLatestObservationCount, 1);
+  assert.equal(report.markerInputMs.futureLatestObservationCount, 1);
+  assert.deepEqual(report.markerInputMs.latestObservationAgeMs, {
+    count: 0,
+    minimum: null,
+    median: null,
+    p95: null,
+    maximum: null,
   });
 });
