@@ -176,10 +176,10 @@ test("v4 migration keeps legacy order explicit without inventing an ordinal or e
       ) VALUES ('legacy', 'Legacy', 'completed', 'background', NULL,
         1000, 4000, 1000, 4000)`,
     );
-    for (const [id, recordedAt] of [
-      ["later-id", 3_000],
-      ["earlier-b", 2_000],
-      ["earlier-a", 2_000],
+    for (const [id, recordedAt, source] of [
+      ["later-id", 3_000, "gnss"],
+      ["earlier-b", 2_000, "pdr"],
+      ["earlier-a", 2_000, "gnss"],
     ] as const) {
       await database.runAsync(
         `INSERT INTO position_samples(
@@ -187,10 +187,11 @@ test("v4 migration keeps legacy order explicit without inventing an ordinal or e
           latitude, longitude, altitude_meters, x_meters, y_meters, floor_level,
           horizontal_accuracy_meters, heading_degrees,
           speed_meters_per_second, confidence
-        ) VALUES (?, 'legacy', ?, 'gnss', 'geographic',
+        ) VALUES (?, 'legacy', ?, ?, 'geographic',
           35, 139, NULL, NULL, NULL, NULL, 5, NULL, NULL, 0.9)`,
         id,
         recordedAt,
+        source,
       );
     }
 
