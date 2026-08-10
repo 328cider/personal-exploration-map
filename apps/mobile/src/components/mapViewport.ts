@@ -36,6 +36,10 @@ function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
+function finiteOrZero(value: number): number {
+  return Number.isFinite(value) ? value : 0;
+}
+
 export function clampMapZoom(zoom: number): number {
   if (!Number.isFinite(zoom)) {
     return MIN_MAP_ZOOM;
@@ -66,8 +70,8 @@ export function clampMapViewport(
     ((zoom - 1) * size.height) / 2 + size.height * RETAINED_MAP_FRACTION;
   return {
     zoom,
-    panX: clamp(viewport.panX, -maximumPanX, maximumPanX),
-    panY: clamp(viewport.panY, -maximumPanY, maximumPanY),
+    panX: clamp(finiteOrZero(viewport.panX), -maximumPanX, maximumPanX),
+    panY: clamp(finiteOrZero(viewport.panY), -maximumPanY, maximumPanY),
   };
 }
 
@@ -80,8 +84,8 @@ export function panMapViewport(
   return clampMapViewport(
     {
       ...viewport,
-      panX: viewport.panX + deltaX,
-      panY: viewport.panY + deltaY,
+      panX: viewport.panX + finiteOrZero(deltaX),
+      panY: viewport.panY + finiteOrZero(deltaY),
     },
     size,
   );
@@ -111,10 +115,10 @@ export function zoomMapViewportAt(
       zoom,
       panX:
         current.panX +
-        (focal.x - centerX - current.panX) * (1 - ratio),
+        (finiteOrZero(focal.x) - centerX - current.panX) * (1 - ratio),
       panY:
         current.panY +
-        (focal.y - centerY - current.panY) * (1 - ratio),
+        (finiteOrZero(focal.y) - centerY - current.panY) * (1 - ratio),
     },
     size,
   );
