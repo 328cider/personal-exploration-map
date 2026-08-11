@@ -30,6 +30,7 @@ SPEC.loader.exec_module(runner)
 smoke = runner.smoke
 _base_dump_ui = smoke.dump_ui
 _base_screenshot = smoke.screenshot
+_base_assert_screen_changed = smoke.assert_screen_changed
 
 # Keep this allow-list deliberately narrow. These are emulator/system
 # components observed to fail transiently on GitHub-hosted API 35 images while
@@ -40,6 +41,10 @@ _TRANSIENT_SYSTEM_PROCESSES = (
     "System UI",
     "com.google.android.googlesdksetup",
 )
+_MAP_VISUAL_LABELS = {
+    "foreground live map",
+    "background recovered live map",
+}
 
 
 def _node_value(node: ET.Element, key: str) -> str:
@@ -176,8 +181,73 @@ def dialog_safe_screenshot(artifacts: Path, name: str) -> Path:
     return _base_screenshot(artifacts, name)
 
 
+def _map_region_changed_pixel_ratio(first: Path, second: Path) -> float | None:
+    identify = smoke.run(
+        ["identify", "-format", "%w %h", str(first)],
+        check=False,
+    )
+    if identify.returncode != 0:
+        return None
+    try:
+        width_text, height_text = identify.stdout.strip().split()
+        width = int(width_text)
+        height = int(height_text)
+    except (ValueError, IndexError):
+        return None
+
+    # Recording keeps fixed controls at the bottom. The actual live-map card is
+    # in the lower-middle 40% of the screen; compare that viewport rather than
+    # diluting real map growth across timer, status, and button pixels.
+    top = int(height * 0.48)
+    crop_height = max(1, int(height * 0.40))
+    geometry = f"{width}x{crop_height}+0+{top}"
+    first_crop = first.with_name(f"{first.stem}-map-region.png")
+    second_crop = second.with_name(f"{second.stem}-map-region.png")
+
+    has_magick = smoke.run(
+        ["bash", "-lc", "command -v magick >/dev/null"],
+        check=False,
+    ).returncode == 0
+    tool = "magick" if has_magick else "convert"
+    for source, target in ((first, first_crop), (second, second_crop)):
+        result = smoke.run(
+            [tool, str(source), "-crop", geometry, "+repage", str(target)],
+            check=False,
+        )
+        if result.returncode != 0:
+            return None
+
+    return smoke.changed_pixel_ratio(first_crop, second_crop)
+
+
+def dialog_safe_assert_screen_changed(
+    before: Path,
+    after: Path,
+    *,
+    minimum_ratio: float,
+    label: str,
+) -> float:
+    if label in _MAP_VISUAL_LABELS:
+        ratio = _map_region_changed_pixel_ratio(before, after)
+        if ratio is not None:
+            smoke.log(f"{label} map-region changed-pixel ratio={ratio:.6f}")
+            if ratio < minimum_ratio:
+                raise smoke.SmokeFailure(
+                    f"{label} map region did not change enough: "
+                    f"ratio={ratio:.6f}, expected >= {minimum_ratio}"
+                )
+            return ratio
+    return _base_assert_screen_changed(
+        before,
+        after,
+        minimum_ratio=minimum_ratio,
+        label=label,
+    )
+
+
 smoke.dump_ui = dialog_safe_dump_ui
 smoke.screenshot = dialog_safe_screenshot
+smoke.assert_screen_changed = dialog_safe_assert_screen_changed
 
 if __name__ == "__main__":
     sys.exit(smoke.main())
