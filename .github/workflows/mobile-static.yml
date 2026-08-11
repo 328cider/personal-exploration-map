@@ -31,7 +31,7 @@ on:
       - ".github/workflows/mobile-static.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
@@ -45,6 +45,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22.23.2
@@ -54,16 +56,21 @@ jobs:
         run: node scripts/check-architecture-boundaries.mjs
       - name: Check mobile canonical write boundary
         run: node scripts/check-mobile-write-boundary.mjs
-      - name: Generate the SDK 57 dependency lock for review
-        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-      - name: Upload the generated dependency lock
-        uses: actions/upload-artifact@v4
-        with:
-          name: issue128-sdk57-package-lock
-          path: package-lock.json
-          if-no-files-found: error
-          retention-days: 1
-      - name: Install generated dependency graph
+      - name: Generate and commit the SDK 57 dependency lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          if git diff --quiet -- package-lock.json; then
+            echo "The committed lockfile is already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "chore(expo): refresh SDK 57 dependency lock"
+          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
+      - name: Install committed dependency graph
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Check Expo dependency compatibility
         working-directory: apps/mobile
