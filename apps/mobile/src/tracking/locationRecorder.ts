@@ -12,6 +12,8 @@ import {
 } from "../storage/activeTrackingState";
 import { BACKGROUND_LOCATION_TASK } from "./taskNames";
 import type {
+  ActiveLocationRefreshReason,
+  ActiveLocationRefreshResult,
   GnssTrackingProviderSet,
   MobileTrackingDelivery,
   MobileTrackingRuntimeStatus,
@@ -23,6 +25,7 @@ export const FOREGROUND_GNSS_PROVIDER_ID = "gnss-foreground";
 
 let foregroundSubscription: Location.LocationSubscription | null = null;
 let foregroundExplorationId: string | null = null;
+let currentLocationRefresh: Promise<ActiveLocationRefreshResult> | null = null;
 
 const locationOptions: Location.LocationOptions = {
   accuracy: Location.Accuracy.High,
@@ -192,8 +195,6 @@ export function createGnssTrackingProviderSet(
           activityType: Location.ActivityType.Fitness,
           pausesUpdatesAutomatically: false,
           showsBackgroundLocationIndicator: true,
-          deferredUpdatesDistance: 10,
-          deferredUpdatesInterval: 15_000,
           foregroundService: {
             notificationTitle: "探索を記録中",
             notificationBody: "スマホをしまったまま移動を地図に残しています。",
@@ -203,6 +204,7 @@ export function createGnssTrackingProviderSet(
         await recordProviderEvent(context, "provider.started", {
           delivery: "background",
           alreadyStarted: false,
+          deferredUpdatesEnabled: false,
         });
       } catch (error) {
         await recordProviderEvent(context, "provider.start.failed", {
@@ -370,6 +372,108 @@ export function createGnssTrackingProviderSet(
     },
   };
 
+  async function performCurrentLocationRefresh(
+    reason: ActiveLocationRefreshReason,
+  ): Promise<ActiveLocationRefreshResult> {
+    const active = await getActiveTrackingContext();
+    if (active === null) {
+      return {
+        status: "inactive",
+        reason,
+        observationAtMs: null,
+        receivedAtMs: null,
+      };
+    }
+
+    const requestedAtMs = Date.now();
+    await recordTrackingDiagnosticBestEffort({
+      context: active,
+      kind: "location.refresh.requested",
+      occurredAtMs: requestedAtMs,
+      payload: { reason },
+    });
+
+    try {
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+      const current = await getActiveTrackingContext();
+      if (
+        current === null ||
+        current.personalMapId !== active.personalMapId ||
+        current.explorationId !== active.explorationId ||
+        current.providerId !== active.providerId
+      ) {
+        return {
+          status: "inactive",
+          reason,
+          observationAtMs: null,
+          receivedAtMs: null,
+        };
+      }
+
+      await ingestLocations([location], "foreground-refresh");
+      const receivedAtMs = Date.now();
+      const observationAtMs = Math.round(location.timestamp);
+      await recordTrackingDiagnosticBestEffort({
+        context: active,
+        kind: "location.refresh.succeeded",
+        occurredAtMs: receivedAtMs,
+        payload: {
+          reason,
+          durationMs: Math.max(0, receivedAtMs - requestedAtMs),
+          observationAgeMs: Math.max(0, receivedAtMs - observationAtMs),
+        },
+      });
+      return {
+        status: "refreshed",
+        reason,
+        observationAtMs,
+        receivedAtMs,
+      };
+    } catch {
+      const failedAtMs = Date.now();
+      await recordTrackingDiagnosticBestEffort({
+        context: active,
+        kind: "location.refresh.failed",
+        occurredAtMs: failedAtMs,
+        payload: {
+          reason,
+          durationMs: Math.max(0, failedAtMs - requestedAtMs),
+        },
+      });
+      return {
+        status: "failed",
+        reason,
+        observationAtMs: null,
+        receivedAtMs: failedAtMs,
+      };
+    }
+  }
+
+  function refreshCurrentLocation(
+    reason: ActiveLocationRefreshReason,
+  ): Promise<ActiveLocationRefreshResult> {
+    if (currentLocationRefresh !== null) {
+      return currentLocationRefresh;
+    }
+    const request = performCurrentLocationRefresh(reason);
+    currentLocationRefresh = request;
+    request.then(
+      () => {
+        if (currentLocationRefresh === request) {
+          currentLocationRefresh = null;
+        }
+      },
+      () => {
+        if (currentLocationRefresh === request) {
+          currentLocationRefresh = null;
+        }
+      },
+    );
+    return request;
+  }
+
   async function status(): Promise<MobileTrackingRuntimeStatus> {
     const [taskManagerAvailable, active, backgroundStarted] = await Promise.all([
       TaskManager.isAvailableAsync(),
@@ -452,6 +556,7 @@ export function createGnssTrackingProviderSet(
 
   return {
     providers: [backgroundProvider, foregroundProvider],
+    refreshCurrentLocation,
     status,
     stopOrphanedTracking,
   };
