@@ -15,6 +15,7 @@ on:
       - "scripts/analyze-field-test-summary-safety.test.mjs"
       - "scripts/analyze-field-test-evidence.mjs"
       - "scripts/analyze-field-test-evidence.test.mjs"
+      - "scripts/analyze-field-test-evidence-policy.test.mjs"
       - "scripts/analyze-latest-field-test.ps1"
       - "scripts/collect-and-analyze-field-test.ps1"
       - "docs/FIELD_TEST_OBJECTIVE_ANALYSIS.md"
@@ -45,6 +46,7 @@ jobs:
           scripts/analyze-field-test-summary.test.mjs
           scripts/analyze-field-test-summary-safety.test.mjs
           scripts/analyze-field-test-evidence.test.mjs
+          scripts/analyze-field-test-evidence-policy.test.mjs
       - name: Parse Windows wrappers with PowerShell
         shell: pwsh
         run: |
