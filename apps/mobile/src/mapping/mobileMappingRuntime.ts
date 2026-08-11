@@ -25,8 +25,13 @@ import {
   createGnssTrackingProviderSet,
   FOREGROUND_GNSS_PROVIDER_ID,
 } from "../tracking/locationRecorder";
+import {
+  classifyLocationFreshness,
+  type LocationFreshness,
+} from "../tracking/locationFreshness";
 import { locationBatchToRawSamples } from "../tracking/locationSamples";
 import type {
+  ActiveLocationRefreshReason,
   GnssTrackingProviderSet,
   MobileTrackingDelivery,
   MobileTrackingMode,
@@ -106,6 +111,73 @@ export async function loadMobilePersonalMap(
   personalMapId: string,
 ): Promise<PersonalMapSnapshot | null> {
   return getMobileMappingEngine().getPersonalMap({ personalMapId });
+}
+
+async function acceptedLocationFreshness(
+  context: StartedExploration,
+  nowMs = Date.now(),
+): Promise<LocationFreshness> {
+  const loaded = await sqliteMappingRepository.loadExploration(
+    context.personalMapId,
+    context.explorationId,
+  );
+  const latestAcceptedAtMs =
+    loaded === null
+      ? null
+      : replayExploration(loaded.replay).track.at(-1)?.recordedAtMs ?? null;
+  return classifyLocationFreshness(latestAcceptedAtMs, nowMs);
+}
+
+async function ensureFreshAcceptedLocation(
+  context: StartedExploration,
+  reason: ActiveLocationRefreshReason,
+): Promise<LocationFreshness> {
+  const before = await acceptedLocationFreshness(context);
+  if (before.state === "fresh") {
+    return before;
+  }
+
+  const refresh = await ensureRuntime().gnss.refreshCurrentLocation(reason);
+  if (refresh.status !== "refreshed") {
+    throw new Error(
+      "現在位置を更新できませんでした。空が見える場所で少し待ってから再試行してください。",
+    );
+  }
+
+  const after = await acceptedLocationFreshness(context);
+  if (after.state !== "fresh") {
+    throw new Error(
+      "新しい位置を地図へ採用できませんでした。位置精度が安定してから再試行してください。",
+    );
+  }
+  return after;
+}
+
+export async function refreshActiveLocationOnResume(
+  context: StartedExploration,
+): Promise<boolean> {
+  try {
+    const refresh = await ensureRuntime().gnss.refreshCurrentLocation(
+      "app-active",
+    );
+    if (refresh.status !== "refreshed") {
+      return false;
+    }
+    return (await acceptedLocationFreshness(context)).state === "fresh";
+  } catch {
+    return false;
+  }
+}
+
+export async function prepareMarkerLocation(
+  context: StartedExploration,
+): Promise<void> {
+  try {
+    await ensureFreshAcceptedLocation(context, "marker-open");
+  } catch {
+    // Opening the modal stays responsive. Marker save performs the same
+    // check and shows a user-facing error if the fix is still unavailable.
+  }
 }
 
 /**
@@ -254,6 +326,8 @@ export async function addConfirmedMarker(
     readonly note?: string;
   },
 ): Promise<void> {
+  await ensureFreshAcceptedLocation(context, "marker-save");
+
   await getMobileMappingEngine().addMarker({
     personalMapId: context.personalMapId,
     explorationId: context.explorationId,
@@ -275,26 +349,15 @@ async function markerObservationFreshness(
   readonly latestObservationFuture: boolean;
 }> {
   try {
-    const loaded = await sqliteMappingRepository.loadExploration(
-      context.personalMapId,
-      context.explorationId,
-    );
-    const latestAcceptedAtMs =
-      loaded === null
-        ? undefined
-        : replayExploration(loaded.replay).track.at(-1)?.recordedAtMs;
-    if (
-      latestAcceptedAtMs === undefined ||
-      !Number.isFinite(latestAcceptedAtMs)
-    ) {
+    const freshness = await acceptedLocationFreshness(context, occurredAtMs);
+    if (freshness.state === "missing") {
       return {
         latestObservationAgeMs: null,
         latestObservationMissing: true,
         latestObservationFuture: false,
       };
     }
-    const ageMs = occurredAtMs - latestAcceptedAtMs;
-    if (ageMs < 0) {
+    if (freshness.state === "future") {
       return {
         latestObservationAgeMs: null,
         latestObservationMissing: false,
@@ -302,7 +365,7 @@ async function markerObservationFreshness(
       };
     }
     return {
-      latestObservationAgeMs: ageMs,
+      latestObservationAgeMs: freshness.ageMs,
       latestObservationMissing: false,
       latestObservationFuture: false,
     };
