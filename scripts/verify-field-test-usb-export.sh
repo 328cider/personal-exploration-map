@@ -81,6 +81,14 @@ try:
         "SELECT payload_json FROM tracking_diagnostic_events "
         "WHERE kind = 'marker.input.completed' ORDER BY occurred_at"
     ).fetchall()
+    refresh_rows = connection.execute(
+        "SELECT kind, payload_json FROM tracking_diagnostic_events "
+        "WHERE kind IN ("
+        "'location.refresh.requested',"
+        "'location.refresh.succeeded',"
+        "'location.refresh.failed'"
+        ") ORDER BY occurred_at"
+    ).fetchall()
     if user_version >= 4:
         raw_rows = connection.execute(
             "SELECT exploration_id, id, sample_ordinal, ordinal_provenance, "
@@ -140,6 +148,22 @@ for payload in marker_payloads:
         or payload["latestObservationMissing"]
         or payload["latestObservationFuture"]
     ), payload
+
+refresh_events = [
+    (kind, json.loads(payload) if payload else {})
+    for kind, payload in refresh_rows
+]
+refresh_kinds = [kind for kind, _ in refresh_events]
+assert "location.refresh.requested" in refresh_kinds, refresh_kinds
+assert "location.refresh.succeeded" in refresh_kinds, refresh_kinds
+allowed_reasons = {"app-active", "marker-open", "marker-save"}
+for kind, payload in refresh_events:
+    assert payload.get("reason") in allowed_reasons, (kind, payload)
+    if kind == "location.refresh.succeeded":
+        assert isinstance(payload.get("durationMs"), (int, float)), payload
+        assert isinstance(payload.get("observationAgeMs"), (int, float)), payload
+    if kind == "location.refresh.failed":
+        assert isinstance(payload.get("durationMs"), (int, float)), payload
 
 ordinals_by_exploration = {}
 if user_version >= 4:
@@ -205,12 +229,22 @@ assert manifest["autoUpload"] is False
             "callbackObservationTimingStatus": "verified",
             "markerCompletedCount": len(marker_payloads),
             "markerObservationFreshnessStatus": "verified",
+            "locationRefreshRequestedCount": refresh_kinds.count(
+                "location.refresh.requested"
+            ),
+            "locationRefreshSucceededCount": refresh_kinds.count(
+                "location.refresh.succeeded"
+            ),
+            "locationRefreshFailedCount": refresh_kinds.count(
+                "location.refresh.failed"
+            ),
+            "locationRefreshEvidenceStatus": "verified",
             "exactRawEvidenceStatus": (
                 "verified" if user_version >= 4 else "not-available-schema-v3"
             ),
             "exactRawSampleCount": len(raw_rows),
             "exactRawExplorationCount": len(ordinals_by_exploration),
-            "eventKinds": kinds,
+            "eventKinds": kinds + refresh_kinds,
             "manifest": manifest,
         },
         indent=2,

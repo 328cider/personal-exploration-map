@@ -1,20 +1,30 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  AppState,
   ScrollView,
   StyleSheet,
   Text,
   View,
+  type AppStateStatus,
 } from "react-native";
 import type { MarkerCategory } from "@exploration-map/mapping-core";
 
 import { AppButton } from "../components/AppButton";
 import { LiveMapPreview } from "../components/LiveMapPreview";
 import { MarkerModal } from "../components/MarkerModal";
+import {
+  prepareMarkerLocation,
+  refreshActiveLocationOnResume,
+} from "../mapping/mobileMappingRuntime";
 import type {
   ExplorationSummary,
   LiveExplorationStats,
 } from "../storage/explorationRepository";
 import { palette, spacing } from "../theme";
+import {
+  classifyLocationFreshness,
+  freshnessMessage,
+} from "../tracking/locationFreshness";
 import { formatElapsedClock } from "../utils/format";
 
 interface RecordingScreenProps {
@@ -52,12 +62,39 @@ export function RecordingScreen({
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    const context = {
+      personalMapId: exploration.personalMapId,
+      explorationId: exploration.id,
+    };
+    void refreshActiveLocationOnResume(context);
+
+    let previousState: AppStateStatus = AppState.currentState;
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active" && previousState !== "active") {
+        void refreshActiveLocationOnResume(context);
+      }
+      previousState = nextState;
+    });
+    return () => subscription.remove();
+  }, [exploration.id, exploration.personalMapId]);
+
   const isBackground = exploration.trackingMode === "background";
   const accuracy = liveStats.latestAccuracyMeters;
+  const freshness = classifyLocationFreshness(
+    liveStats.latestRecordedAtMs,
+    now,
+  );
+  const freshnessWarning =
+    freshness.state === "stale" || freshness.state === "future";
 
   function openMarkerInput() {
     markerOpenedAtMs.current = Date.now();
     setMarkerVisible(true);
+    void prepareMarkerLocation({
+      personalMapId: exploration.personalMapId,
+      explorationId: exploration.id,
+    });
   }
 
   function closeMarkerInput() {
@@ -125,6 +162,37 @@ export function RecordingScreen({
               </Text>
             </View>
           ) : null}
+
+          <View
+            style={[
+              styles.freshnessRow,
+              freshnessWarning ? styles.freshnessRowWarning : null,
+            ]}
+          >
+            <View
+              style={[
+                styles.freshnessDot,
+                freshnessWarning
+                  ? styles.freshnessDotWarning
+                  : styles.freshnessDotActive,
+              ]}
+            />
+            <View style={styles.freshnessCopy}>
+              <Text
+                style={[
+                  styles.freshnessTitle,
+                  freshnessWarning ? styles.freshnessTitleWarning : null,
+                ]}
+              >
+                {freshnessMessage(freshness)}
+              </Text>
+              {freshness.state === "stale" ? (
+                <Text style={styles.freshnessBody}>
+                  後から反映される場合があります。表示中は現在位置への更新を試みます。
+                </Text>
+              ) : null}
+            </View>
+          </View>
 
           <View style={styles.metricGrid}>
             <View style={styles.metricCard}>
@@ -245,10 +313,54 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: spacing.xs,
   },
+  freshnessRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    minHeight: 38,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: 12,
+    backgroundColor: palette.primarySoft,
+  },
+  freshnessRowWarning: {
+    backgroundColor: palette.warningSoft,
+  },
+  freshnessDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    flexShrink: 0,
+  },
+  freshnessDotActive: {
+    backgroundColor: palette.primary,
+  },
+  freshnessDotWarning: {
+    backgroundColor: palette.warning,
+  },
+  freshnessCopy: {
+    flex: 1,
+  },
+  freshnessTitle: {
+    color: palette.primary,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "800",
+  },
+  freshnessTitleWarning: {
+    color: palette.warning,
+  },
+  freshnessBody: {
+    color: palette.mutedInk,
+    fontSize: 10,
+    lineHeight: 14,
+    marginTop: 2,
+  },
   metricGrid: {
     flexDirection: "row",
     gap: spacing.sm,
-    marginTop: spacing.xl,
+    marginTop: spacing.md,
   },
   metricCard: {
     flex: 1,

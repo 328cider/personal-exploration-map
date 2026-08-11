@@ -21,6 +21,9 @@ export type TrackingDiagnosticEventKind =
   | "callback.received"
   | "callback.persisted"
   | "callback.failed"
+  | "location.refresh.requested"
+  | "location.refresh.succeeded"
+  | "location.refresh.failed"
   | "app.state.changed"
   | "app.session.recovered"
   | "marker.input.completed"
@@ -520,6 +523,9 @@ function createLifecycle(
     "provider.stop.requested",
     "provider.stopped",
     "provider.stop.failed",
+    "location.refresh.requested",
+    "location.refresh.succeeded",
+    "location.refresh.failed",
     "app.state.changed",
     "app.session.recovered",
     "environment.session.started",

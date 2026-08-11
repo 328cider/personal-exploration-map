@@ -97,6 +97,23 @@ function hasFinding(findings, code) {
   return findings.some((item) => item.code === code);
 }
 
+export function normalizeBatteryOptimizationFinding(findings, values) {
+  const result = findings.filter(
+    (item) => item.code !== "battery_optimization_enabled",
+  );
+  if (values.start_battery_optimization_enabled === true) {
+    result.push(
+      finding(
+        "INFO",
+        "battery_optimization_observed",
+        "Battery optimization was enabled at start. This is the standard product condition and is recorded for comparison, not treated as a defect by itself.",
+        "environment",
+      ),
+    );
+  }
+  return result;
+}
+
 function bufferedDeliveryEvidence(values) {
   const gapCount = numberValue(values.callback_gap_at_least_120s) ?? 0;
   const callbackGapMaximumMs = numberValue(values.callback_gap_ms_max);
@@ -234,7 +251,10 @@ function addTimingFindings(findings, values) {
 function reclassifyExploration(evaluation, rawValues, mode) {
   const values = { ...evaluation.values };
   copyAdditionalEvidence(rawValues, values);
-  let findings = addTimingFindings(evaluation.findings, rawValues);
+  let findings = normalizeBatteryOptimizationFinding(
+    addTimingFindings(evaluation.findings, rawValues),
+    rawValues,
+  );
 
   if (mode === "generic") {
     const gapIndex = callbackGapFindingIndex(findings);
@@ -329,6 +349,7 @@ function renderMarkdown(report) {
     "- Observation continuity and eventual persistence describe post-hoc raw-evidence completeness.",
     "- Callback delivery gaps describe live freshness and may delay the map or marker attachment without losing stored observations.",
     "- Marker attachment freshness measures marker-save time against the latest accepted observation available to the derived route.",
+    "- Battery optimization ON is the standard product condition and is reported as environment context, not a defect by itself.",
     "- Generic mode may classify confirmed catch-up delivery as WARN; S0 keeps its stricter live-freshness gate.",
     "",
     "## Privacy boundary",
