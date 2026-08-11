@@ -43,17 +43,20 @@ export function MarkerModal({ visible, onClose, onSave }: MarkerModalProps) {
   const [selected, setSelected] = useState<CategoryOption>(OPTIONS[0]!);
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (visible) {
       setSelected(OPTIONS[0]!);
       setNote("");
       setSaving(false);
+      setSaveError(null);
     }
   }, [visible]);
 
   async function handleSave() {
     setSaving(true);
+    setSaveError(null);
     try {
       await onSave({
         category: selected.category,
@@ -61,6 +64,8 @@ export function MarkerModal({ visible, onClose, onSave }: MarkerModalProps) {
         ...(note.trim().length === 0 ? {} : { note: note.trim() }),
       });
       onClose();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : String(error));
     } finally {
       setSaving(false);
     }
@@ -118,6 +123,9 @@ export function MarkerModal({ visible, onClose, onSave }: MarkerModalProps) {
           style={styles.input}
           value={note}
         />
+        {saveError === null ? null : (
+          <Text style={styles.saveError}>{saveError}</Text>
+        )}
         <View style={styles.actions}>
           <AppButton onPress={onClose} variant="ghost" style={styles.actionButton}>
             キャンセル
@@ -222,6 +230,12 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     padding: spacing.md,
     textAlignVertical: "top",
+  },
+  saveError: {
+    color: palette.danger,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: spacing.sm,
   },
   actions: {
     flexDirection: "row",
