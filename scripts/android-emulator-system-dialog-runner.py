@@ -12,9 +12,11 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+import struct
 import sys
 import time
 import xml.etree.ElementTree as ET
+import zlib
 
 
 RUNNER_PATH = Path(__file__).with_name("android-emulator-smoke-runner.py")
@@ -181,43 +183,128 @@ def dialog_safe_screenshot(artifacts: Path, name: str) -> Path:
     return _base_screenshot(artifacts, name)
 
 
+def _decode_png_rows(path: Path) -> tuple[int, int, int, int, list[bytearray]]:
+    data = path.read_bytes()
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise smoke.SmokeFailure(f"not a PNG screenshot: {path}")
+
+    offset = 8
+    width = height = bit_depth = color_type = None
+    compressed = bytearray()
+    while offset < len(data):
+        length = struct.unpack(">I", data[offset : offset + 4])[0]
+        chunk_type = data[offset + 4 : offset + 8]
+        chunk_data = data[offset + 8 : offset + 8 + length]
+        offset += 12 + length
+        if chunk_type == b"IHDR":
+            width, height, bit_depth, color_type = struct.unpack(
+                ">IIBB", chunk_data[:10]
+            )
+        elif chunk_type == b"IDAT":
+            compressed.extend(chunk_data)
+        elif chunk_type == b"IEND":
+            break
+
+    if None in (width, height, bit_depth, color_type) or bit_depth != 8:
+        raise smoke.SmokeFailure(f"unsupported PNG screenshot: {path}")
+    channels = {0: 1, 2: 3, 4: 2, 6: 4}.get(color_type)
+    if channels is None:
+        raise smoke.SmokeFailure(
+            f"unsupported PNG color type {color_type}: {path}"
+        )
+
+    raw = zlib.decompress(bytes(compressed))
+    stride = width * channels
+    previous = bytearray(stride)
+    rows: list[bytearray] = []
+    cursor = 0
+    for _ in range(height):
+        filter_type = raw[cursor]
+        cursor += 1
+        row = bytearray(raw[cursor : cursor + stride])
+        cursor += stride
+        for index in range(stride):
+            left = row[index - channels] if index >= channels else 0
+            up = previous[index]
+            up_left = previous[index - channels] if index >= channels else 0
+            if filter_type == 1:
+                row[index] = (row[index] + left) & 0xFF
+            elif filter_type == 2:
+                row[index] = (row[index] + up) & 0xFF
+            elif filter_type == 3:
+                row[index] = (row[index] + ((left + up) // 2)) & 0xFF
+            elif filter_type == 4:
+                estimate = left + up - up_left
+                distance_left = abs(estimate - left)
+                distance_up = abs(estimate - up)
+                distance_up_left = abs(estimate - up_left)
+                predictor = (
+                    left
+                    if distance_left <= distance_up
+                    and distance_left <= distance_up_left
+                    else up
+                    if distance_up <= distance_up_left
+                    else up_left
+                )
+                row[index] = (row[index] + predictor) & 0xFF
+            elif filter_type != 0:
+                raise smoke.SmokeFailure(
+                    f"unsupported PNG filter {filter_type}: {path}"
+                )
+        rows.append(row)
+        previous = row
+
+    return width, height, color_type, channels, rows
+
+
+def _rgb_at(
+    row: bytearray,
+    pixel_index: int,
+    color_type: int,
+    channels: int,
+) -> tuple[int, int, int]:
+    offset = pixel_index * channels
+    if color_type in (0, 4):
+        value = row[offset]
+        return value, value, value
+    return row[offset], row[offset + 1], row[offset + 2]
+
+
 def _map_region_changed_pixel_ratio(first: Path, second: Path) -> float | None:
-    identify = smoke.run(
-        ["identify", "-format", "%w %h", str(first)],
-        check=False,
-    )
-    if identify.returncode != 0:
-        return None
-    try:
-        width_text, height_text = identify.stdout.strip().split()
-        width = int(width_text)
-        height = int(height_text)
-    except (ValueError, IndexError):
+    first_png = _decode_png_rows(first)
+    second_png = _decode_png_rows(second)
+    if first_png[:4] != second_png[:4]:
         return None
 
+    width, height, color_type, channels, first_rows = first_png
+    second_rows = second_png[4]
     # Recording keeps fixed controls at the bottom. The actual live-map card is
     # in the lower-middle 40% of the screen; compare that viewport rather than
     # diluting real map growth across timer, status, and button pixels.
     top = int(height * 0.48)
-    crop_height = max(1, int(height * 0.40))
-    geometry = f"{width}x{crop_height}+0+{top}"
-    first_crop = first.with_name(f"{first.stem}-map-region.png")
-    second_crop = second.with_name(f"{second.stem}-map-region.png")
+    bottom = min(height, top + max(1, int(height * 0.40)))
+    total = width * max(0, bottom - top)
+    if total <= 0:
+        return None
 
-    has_magick = smoke.run(
-        ["bash", "-lc", "command -v magick >/dev/null"],
-        check=False,
-    ).returncode == 0
-    tool = "magick" if has_magick else "convert"
-    for source, target in ((first, first_crop), (second, second_crop)):
-        result = smoke.run(
-            [tool, str(source), "-crop", geometry, "+repage", str(target)],
-            check=False,
-        )
-        if result.returncode != 0:
-            return None
-
-    return smoke.changed_pixel_ratio(first_crop, second_crop)
+    changed = 0
+    for row_index in range(top, bottom):
+        first_row = first_rows[row_index]
+        second_row = second_rows[row_index]
+        for pixel_index in range(width):
+            if _rgb_at(
+                first_row,
+                pixel_index,
+                color_type,
+                channels,
+            ) != _rgb_at(
+                second_row,
+                pixel_index,
+                color_type,
+                channels,
+            ):
+                changed += 1
+    return changed / total
 
 
 def dialog_safe_assert_screen_changed(
