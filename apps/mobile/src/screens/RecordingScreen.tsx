@@ -1,20 +1,30 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  AppState,
   ScrollView,
   StyleSheet,
   Text,
   View,
+  type AppStateStatus,
 } from "react-native";
 import type { MarkerCategory } from "@exploration-map/mapping-core";
 
 import { AppButton } from "../components/AppButton";
 import { LiveMapPreview } from "../components/LiveMapPreview";
 import { MarkerModal } from "../components/MarkerModal";
+import {
+  prepareMarkerLocation,
+  refreshActiveLocationOnResume,
+} from "../mapping/mobileMappingRuntime";
 import type {
   ExplorationSummary,
   LiveExplorationStats,
 } from "../storage/explorationRepository";
 import { palette, spacing } from "../theme";
+import {
+  classifyLocationFreshness,
+  freshnessMessage,
+} from "../tracking/locationFreshness";
 import { formatElapsedClock } from "../utils/format";
 
 interface RecordingScreenProps {
@@ -52,12 +62,37 @@ export function RecordingScreen({
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    const context = {
+      personalMapId: exploration.personalMapId,
+      explorationId: exploration.id,
+    };
+    void refreshActiveLocationOnResume(context);
+
+    let previousState: AppStateStatus = AppState.currentState;
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active" && previousState !== "active") {
+        void refreshActiveLocationOnResume(context);
+      }
+      previousState = nextState;
+    });
+    return () => subscription.remove();
+  }, [exploration.id, exploration.personalMapId]);
+
   const isBackground = exploration.trackingMode === "background";
   const accuracy = liveStats.latestAccuracyMeters;
+  const freshness = classifyLocationFreshness(
+    liveStats.latestRecordedAtMs,
+    now,
+  );
 
   function openMarkerInput() {
     markerOpenedAtMs.current = Date.now();
     setMarkerVisible(true);
+    void prepareMarkerLocation({
+      personalMapId: exploration.personalMapId,
+      explorationId: exploration.id,
+    });
   }
 
   function closeMarkerInput() {
@@ -125,6 +160,25 @@ export function RecordingScreen({
               </Text>
             </View>
           ) : null}
+
+          <View
+            style={[
+              styles.freshnessCard,
+              freshness.state === "stale" ||
+              freshness.state === "future"
+                ? styles.freshnessCardWarning
+                : null,
+            ]}
+          >
+            <Text style={styles.freshnessTitle}>
+              {freshnessMessage(freshness)}
+            </Text>
+            <Text style={styles.freshnessBody}>
+              {freshness.state === "stale"
+                ? "バックグラウンドで蓄積した位置は後から反映されます。アプリ表示中は現在位置への更新を試みます。"
+                : "この時刻は端末から最後に届いた位置情報です。"}
+            </Text>
+          </View>
 
           <View style={styles.metricGrid}>
             <View style={styles.metricCard}>
@@ -243,6 +297,30 @@ const styles = StyleSheet.create({
     color: palette.mutedInk,
     fontSize: 13,
     lineHeight: 20,
+    marginTop: spacing.xs,
+  },
+  freshnessCard: {
+    marginTop: spacing.lg,
+    padding: spacing.md,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: palette.border,
+    backgroundColor: palette.surface,
+  },
+  freshnessCardWarning: {
+    borderColor: palette.warning,
+    backgroundColor: palette.warningSoft,
+  },
+  freshnessTitle: {
+    color: palette.ink,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "800",
+  },
+  freshnessBody: {
+    color: palette.mutedInk,
+    fontSize: 12,
+    lineHeight: 18,
     marginTop: spacing.xs,
   },
   metricGrid: {
