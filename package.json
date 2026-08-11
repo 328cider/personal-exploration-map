@@ -18,7 +18,7 @@
     "test:engine": "npm run test --workspace @exploration-map/mapping-engine",
     "test:experience": "npm run test --workspace @exploration-map/experience-sdk",
     "test:sqlite": "npm run test --workspace @exploration-map/sqlite-adapter",
-    "test:mobile-renderer": "node --experimental-strip-types --test apps/mobile/src/components/exploredSpaceGeometry.test.ts apps/mobile/src/components/mapViewport.test.ts",
+    "test:mobile-renderer": "node --experimental-strip-types --test apps/mobile/src/components/exploredSpaceGeometry.test.ts apps/mobile/src/components/mapViewport.test.ts apps/mobile/src/tracking/locationFreshness.test.ts",
     "typecheck": "npm run typecheck:core && npm run typecheck:engine && npm run typecheck:experience && npm run typecheck:sqlite",
     "typecheck:core": "npm run typecheck --workspace @exploration-map/mapping-core",
     "typecheck:engine": "npm run typecheck --workspace @exploration-map/mapping-engine",
