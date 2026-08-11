@@ -29,6 +29,7 @@ SPEC.loader.exec_module(runner)
 
 smoke = runner.smoke
 _base_dump_ui = smoke.dump_ui
+_base_screenshot = smoke.screenshot
 
 # Keep this allow-list deliberately narrow. These are emulator/system
 # components observed to fail transiently on GitHub-hosted API 35 images while
@@ -167,7 +168,16 @@ def dialog_safe_dump_ui(
     )
 
 
+def dialog_safe_screenshot(artifacts: Path, name: str) -> Path:
+    # Dismiss an allow-listed system ANR before screencap. The base screenshot
+    # dumps UI only after capturing pixels, which otherwise lets a transient
+    # launcher dialog contaminate the visual-growth comparison.
+    dialog_safe_dump_ui(artifacts, f"{name}-pre")
+    return _base_screenshot(artifacts, name)
+
+
 smoke.dump_ui = dialog_safe_dump_ui
+smoke.screenshot = dialog_safe_screenshot
 
 if __name__ == "__main__":
     sys.exit(smoke.main())
