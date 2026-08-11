@@ -85,6 +85,8 @@ export function RecordingScreen({
     liveStats.latestRecordedAtMs,
     now,
   );
+  const freshnessWarning =
+    freshness.state === "stale" || freshness.state === "future";
 
   function openMarkerInput() {
     markerOpenedAtMs.current = Date.now();
@@ -163,21 +165,33 @@ export function RecordingScreen({
 
           <View
             style={[
-              styles.freshnessCard,
-              freshness.state === "stale" ||
-              freshness.state === "future"
-                ? styles.freshnessCardWarning
-                : null,
+              styles.freshnessRow,
+              freshnessWarning ? styles.freshnessRowWarning : null,
             ]}
           >
-            <Text style={styles.freshnessTitle}>
-              {freshnessMessage(freshness)}
-            </Text>
-            <Text style={styles.freshnessBody}>
-              {freshness.state === "stale"
-                ? "バックグラウンドで蓄積した位置は後から反映されます。アプリ表示中は現在位置への更新を試みます。"
-                : "この時刻は端末から最後に届いた位置情報です。"}
-            </Text>
+            <View
+              style={[
+                styles.freshnessDot,
+                freshnessWarning
+                  ? styles.freshnessDotWarning
+                  : styles.freshnessDotActive,
+              ]}
+            />
+            <View style={styles.freshnessCopy}>
+              <Text
+                style={[
+                  styles.freshnessTitle,
+                  freshnessWarning ? styles.freshnessTitleWarning : null,
+                ]}
+              >
+                {freshnessMessage(freshness)}
+              </Text>
+              {freshness.state === "stale" ? (
+                <Text style={styles.freshnessBody}>
+                  後から反映される場合があります。表示中は現在位置への更新を試みます。
+                </Text>
+              ) : null}
+            </View>
           </View>
 
           <View style={styles.metricGrid}>
@@ -299,34 +313,54 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: spacing.xs,
   },
-  freshnessCard: {
-    marginTop: spacing.lg,
-    padding: spacing.md,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: palette.border,
-    backgroundColor: palette.surface,
+  freshnessRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    minHeight: 38,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: 12,
+    backgroundColor: palette.primarySoft,
   },
-  freshnessCardWarning: {
-    borderColor: palette.warning,
+  freshnessRowWarning: {
     backgroundColor: palette.warningSoft,
   },
+  freshnessDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    flexShrink: 0,
+  },
+  freshnessDotActive: {
+    backgroundColor: palette.primary,
+  },
+  freshnessDotWarning: {
+    backgroundColor: palette.warning,
+  },
+  freshnessCopy: {
+    flex: 1,
+  },
   freshnessTitle: {
-    color: palette.ink,
-    fontSize: 14,
-    lineHeight: 20,
+    color: palette.primary,
+    fontSize: 12,
+    lineHeight: 17,
     fontWeight: "800",
+  },
+  freshnessTitleWarning: {
+    color: palette.warning,
   },
   freshnessBody: {
     color: palette.mutedInk,
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: spacing.xs,
+    fontSize: 10,
+    lineHeight: 14,
+    marginTop: 2,
   },
   metricGrid: {
     flexDirection: "row",
     gap: spacing.sm,
-    marginTop: spacing.xl,
+    marginTop: spacing.md,
   },
   metricCard: {
     flex: 1,
